@@ -39,6 +39,7 @@ MANIFEST
 # Next.js
 .next/
 out/
+*.tsbuildinfo
 
 # Production build
 /build
@@ -87,6 +88,12 @@ Thumbs.db
 *.temp
 temp/
 tmp/
+*.bak
+*.new
+
+# Data directories
+backend/data/
+backend/backend/
 
 # Model cache
 .cache/
