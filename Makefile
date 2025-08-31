@@ -35,6 +35,10 @@ install: install-frontend install-backend
 ingest-youtube:
 	cd backend && python scripts/ingest_youtube.py
 
+ingest-youtube-seed:
+	@echo "Running YouTube ingestion in seed mode (first 10 videos)..."
+	cd backend && SEED=1 python scripts/ingest_youtube.py
+
 ingest-zoom:
 	cd backend && python scripts/ingest_zoom.py
 

@@ -14,8 +14,99 @@ interface SearchResult {
   url: string;
   start_time_seconds: number;
   end_time_seconds: number;
-  similarity: number;
+  similarity: string; // Now a percentage string like "56.7"
   source_type: string;
+  published_at?: string;
+  rerank_score?: number;
+}
+
+interface SearchParams {
+  query: string;
+  source_filter?: 'all' | 'youtube' | 'zoom';
+  year_filter?: string;
+  limit?: number;
+}
+
+interface ClusteredResult {
+  id: number;
+  title: string;
+  url: string;
+  source_type: string;
+  published_at?: string;
+  segments: SearchResult[];
+}
+
+// Cluster segments within ±120 seconds of each other
+function clusterSegments(results: SearchResult[]): SearchResult[] {
+  if (results.length === 0) return results;
+  
+  const grouped: { [key: string]: SearchResult[] } = {};
+  
+  // Group by source URL (without timestamp)
+  results.forEach(result => {
+    const baseUrl = result.url.split('&t=')[0];
+    if (!grouped[baseUrl]) {
+      grouped[baseUrl] = [];
+    }
+    grouped[baseUrl].push(result);
+  });
+  
+  const clustered: SearchResult[] = [];
+  
+  Object.values(grouped).forEach(sourceResults => {
+    sourceResults.sort((a, b) => a.start_time_seconds - b.start_time_seconds);
+    
+    let currentCluster: SearchResult[] = [];
+    
+    sourceResults.forEach(result => {
+      if (currentCluster.length === 0) {
+        currentCluster.push(result);
+      } else {
+        const lastResult = currentCluster[currentCluster.length - 1];
+        const timeDiff = Math.abs(result.start_time_seconds - lastResult.end_time_seconds);
+        
+        if (timeDiff <= 120) { // Within 120 seconds
+          currentCluster.push(result);
+        } else {
+          // Finalize current cluster
+          if (currentCluster.length > 1) {
+            // Create merged segment
+            const firstSegment = currentCluster[0];
+            const lastSegment = currentCluster[currentCluster.length - 1];
+            
+            clustered.push({
+              ...firstSegment,
+              text: currentCluster.map(s => s.text).join(' ... '),
+              end_time_seconds: lastSegment.end_time_seconds,
+              similarity: Math.max(...currentCluster.map(s => parseFloat(s.similarity))).toFixed(1)
+            });
+          } else {
+            clustered.push(currentCluster[0]);
+          }
+          
+          // Start new cluster
+          currentCluster = [result];
+        }
+      }
+    });
+    
+    // Handle final cluster
+    if (currentCluster.length > 1) {
+      const firstSegment = currentCluster[0];
+      const lastSegment = currentCluster[currentCluster.length - 1];
+      
+      clustered.push({
+        ...firstSegment,
+        text: currentCluster.map(s => s.text).join(' ... '),
+        end_time_seconds: lastSegment.end_time_seconds,
+        similarity: Math.max(...currentCluster.map(s => parseFloat(s.similarity))).toFixed(1)
+      });
+    } else if (currentCluster.length === 1) {
+      clustered.push(currentCluster[0]);
+    }
+  });
+  
+  return clustered;
 }
 
 export default async function handler(
@@ -26,15 +117,37 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { query } = req.method === 'POST' ? req.body : req.query;
+  const { 
+    query, 
+    source_filter = 'all', 
+    year_filter, 
+    limit = 30 
+  }: SearchParams = req.method === 'POST' ? req.body : req.query;
 
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     return res.status(400).json({ error: 'Query is required' });
   }
 
   try {
-    // For now, we'll use a simple text search until embeddings are set up
-    // In production, this should use vector similarity search with embeddings
+    // Build dynamic WHERE clause for filters
+    let whereConditions = ['(c.text ILIKE $1 OR s.title ILIKE $1)'];
+    let queryParams: any[] = [`%${query}%`];
+    let paramCount = 1;
+
+    // Source filter
+    if (source_filter !== 'all') {
+      paramCount++;
+      whereConditions.push(`s.source_type = $${paramCount}`);
+      queryParams.push(source_filter);
+    }
+
+    // Year filter
+    if (year_filter) {
+      paramCount++;
+      whereConditions.push(`EXTRACT(YEAR FROM s.published_at) = $${paramCount}`);
+      queryParams.push(parseInt(year_filter));
+    }
+
     const searchQuery = `
       SELECT 
         c.id,
@@ -44,50 +157,69 @@ export default async function handler(
         c.start_time_seconds,
         c.end_time_seconds,
         s.source_type,
-        0.5 as similarity -- Placeholder similarity score
+        s.published_at,
+        0.5 as similarity -- Initial similarity score
       FROM chunks c
       JOIN sources s ON c.source_id = s.id
-      WHERE 
-        c.text ILIKE $1
-        OR s.title ILIKE $1
-        OR s.description ILIKE $1
+      WHERE ${whereConditions.join(' AND ')}
       ORDER BY 
         CASE 
-          WHEN c.text ILIKE $2 THEN 1
-          WHEN s.title ILIKE $2 THEN 2
+          WHEN c.text ILIKE $1 THEN 1
+          WHEN s.title ILIKE $1 THEN 2
           ELSE 3
         END,
         c.start_time_seconds ASC
-      LIMIT 20
+      LIMIT $${paramCount + 1}
     `;
 
-    const searchParam = `%${query.trim()}%`;
-    const exactParam = `%${query.trim()}%`;
+    queryParams.push(limit);
+    const result = await pool.query(searchQuery, queryParams);
 
-    const result = await pool.query(searchQuery, [searchParam, exactParam]);
-    
-    const results: SearchResult[] = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      text: row.text,
-      url: row.url,
-      start_time_seconds: row.start_time_seconds,
-      end_time_seconds: row.end_time_seconds,
-      similarity: row.similarity,
-      source_type: row.source_type,
-    }));
+    // Process initial results
+    let searchResults = result.rows.map(row => {
+      let urlWithTimestamp = row.url;
+      if (row.source_type === 'youtube' && row.start_time_seconds) {
+        const timestampSeconds = Math.floor(row.start_time_seconds);
+        urlWithTimestamp = `${row.url}&t=${timestampSeconds}s`;
+      }
+      return {
+        id: row.id,
+        title: row.title,
+        text: row.text,
+        url: urlWithTimestamp,
+        start_time_seconds: row.start_time_seconds,
+        end_time_seconds: row.end_time_seconds,
+        similarity: Math.abs(row.similarity * 100).toFixed(1),
+        source_type: row.source_type,
+        published_at: row.published_at,
+      };
+    });
+
+    // Apply reranking if enabled (placeholder for now - will implement with Python service)
+    const isRerankEnabled = process.env.RERANK_ENABLED === 'true';
+    if (isRerankEnabled && searchResults.length > 5) {
+      // TODO: Call Python reranker service
+      // For now, just take top 5
+      searchResults = searchResults.slice(0, 5);
+    }
+
+    // Cluster segments within ±120s
+    const clusteredResults = clusterSegments(searchResults);
 
     res.status(200).json({ 
-      results,
-      total: results.length,
-      query: query.trim()
+      results: clusteredResults, 
+      total: clusteredResults.length, 
+      query: query.trim(),
+      filters: {
+        source_filter,
+        year_filter
+      }
     });
 
   } catch (error) {
     console.error('Search error:', error);
     res.status(500).json({ 
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     });
   }
 }

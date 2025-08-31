@@ -44,9 +44,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class YouTubeIngester:
-    def __init__(self):
+    def __init__(self, seed_mode: bool = False):
         self.db = DatabaseManager()
         self.embedder = EmbeddingGenerator()
+        self.seed_mode = seed_mode
         self.processor = TranscriptProcessor(
             chunk_duration_seconds=int(os.getenv('CHUNK_DURATION_SECONDS', 45))
         )
@@ -306,15 +307,26 @@ def main():
     """Main entry point"""
     import argparse
     
+    # Check for seed mode from environment
+    seed_mode = os.getenv('SEED', '').lower() in ('1', 'true', 'yes')
+    
     parser = argparse.ArgumentParser(description='Ingest YouTube transcripts for Ask Dr. Chaffee')
     parser.add_argument('--max-videos', type=int, default=50, 
                        help='Maximum number of videos to process')
     parser.add_argument('--video-id', type=str, 
                        help='Process specific video ID only')
+    parser.add_argument('--seed', action='store_true',
+                       help='Enable seed mode (limit to 10 videos for development)')
     
     args = parser.parse_args()
     
-    ingester = YouTubeIngester()
+    # Enable seed mode if flag or env var is set
+    if args.seed or seed_mode:
+        seed_mode = True
+        args.max_videos = min(args.max_videos, 10)
+        logger.info("🌱 Seed mode enabled - limiting to 10 videos for development")
+    
+    ingester = YouTubeIngester(seed_mode=seed_mode)
     
     if args.video_id:
         # Process single video
