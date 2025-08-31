@@ -113,9 +113,9 @@ class YouTubeIngester:
             transcript_list = []
             for entry in transcript_data:
                 transcript_list.append({
-                    'start': entry['start'],
-                    'duration': entry['duration'], 
-                    'text': entry['text']
+                    'start': entry.start,
+                    'duration': entry.duration, 
+                    'text': entry.text
                 })
             logger.info(f"Successfully fetched YouTube transcript ({len(transcript_list)} entries)")
             return transcript_list

@@ -1,7 +1,8 @@
 import os
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
 import logging
+import json
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class DatabaseManager:
                         updated_at = NOW()
                     RETURNING id
                 """, (source_type, source_id, title, description, duration_seconds, 
-                      published_at, url, metadata))
+                      published_at, url, Json(metadata) if metadata else None))
                 
                 return cur.fetchone()[0]
     

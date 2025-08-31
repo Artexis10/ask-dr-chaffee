@@ -44,7 +44,7 @@ class TranscriptProcessor:
             
             if chunk_duration > self.chunk_duration_seconds and current_chunk['text']:
                 # Finalize current chunk
-                current_chunk['end_time'] = current_chunk['entries'][-1]['end_time']
+                current_chunk['end_time'] = current_chunk['entries'][-1]['end']
                 chunks.append(self._finalize_chunk(current_chunk, len(chunks)))
                 
                 # Start new chunk

@@ -175,7 +175,9 @@ def main():
         for i, result in enumerate(text_results, 1):
             print(f"\n{i}. [{result['source_type'].upper()}] {result['title']}")
             print(f"   Time: {result['start_time_seconds']:.0f}s - {result['end_time_seconds']:.0f}s")
-            print(f"   Text: {result['text'][:200]}...")
+            # Handle Unicode characters that can't be displayed in Windows console
+            text_safe = result['text'][:200].encode('ascii', 'ignore').decode('ascii')
+            print(f"   Text: {text_safe}...")
             if result['url']:
                 print(f"   URL: {result['url']}")
     
