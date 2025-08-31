@@ -1,28 +1,42 @@
 # Ask Dr. Chaffee
 
-A searchable transcript app for Dr. Anthony Chaffee's YouTube and Zoom recordings.
+**Ask Dr. Chaffee** is an AI-powered transcript search app for Dr. Anthony Chaffee’s content.  
+It indexes transcripts from his **YouTube channel** and optional **Zoom recordings**, then makes them searchable with semantic embeddings and full-text queries.  
+Instead of digging through hundreds of hours of video, you can jump straight to the exact clip where a topic is discussed.
 
-## Project Structure
+---
+
+## ✨ Features
+
+- 🔎 Semantic & keyword search across Dr. Chaffee’s talks  
+- ⏱ Timestamped results with direct links to YouTube or Zoom  
+- 🎥 Unified database for both YouTube uploads and Zoom recordings  
+- ⚡ Powered by Postgres + pgvector for fast similarity search  
+- 🧩 Modular ingestion scripts for YouTube and Zoom (with Whisper fallback)  
+
+---
+
+## 📂 Project Structure
 
 ```
 ask-dr-chaffee/
-├── frontend/                 # Next.js frontend
-│   ├── src/
-│   │   ├── pages/
-│   │   └── components/
-│   ├── package.json
-│   └── next.config.js
-├── backend/                  # Python backend
-│   ├── scripts/
-│   │   ├── ingest_youtube.py
-│   │   ├── ingest_zoom.py
-│   │   └── common/
-│   └── requirements.txt
+├── frontend/ # Next.js frontend
+│ ├── src/
+│ │ ├── pages/ # Search page + API endpoint
+│ │ └── components/ # UI components
+│ ├── package.json
+│ └── next.config.js
+├── backend/ # Python ingestion pipeline
+│ ├── scripts/
+│ │ ├── ingest_youtube.py # YouTube transcript ingestion
+│ │ ├── ingest_zoom.py # Zoom VTT ingestion
+│ │ └── common/ # Shared utilities
+│ └── requirements.txt
 ├── db/
-│   └── schema.sql           # Database schema
-├── docker-compose.yml       # Postgres + pgvector
-├── Makefile                # Development commands
-├── .env.example            # Environment template
+│ └── schema.sql # Postgres + pgvector schema
+├── docker-compose.yml # Database setup
+├── Makefile # Dev & ingestion commands
+├── .env.example # Environment template
 └── README.md
 ```
 
