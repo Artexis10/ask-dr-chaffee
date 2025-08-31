@@ -31,13 +31,52 @@ install-backend:
 
 install: install-frontend install-backend
 
-# Ingestion commands
+# Enhanced ingestion commands
 ingest-youtube:
-	cd backend && python scripts/ingest_youtube.py
+	cd backend && python scripts/ingest_youtube_enhanced.py --source yt-dlp --concurrency 4 --newest-first
 
 ingest-youtube-seed:
-	@echo "Running YouTube ingestion in seed mode (first 10 videos)..."
-	cd backend && SEED=1 python scripts/ingest_youtube.py
+	@echo "Running YouTube ingestion in seed mode (first 20 videos)..."
+	cd backend && python scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 20 --newest-first
+
+ingest-youtube-api:
+	@echo "Running YouTube ingestion using Data API..."
+	cd backend && python scripts/ingest_youtube_enhanced.py --source api --concurrency 4 --newest-first
+
+ingest-youtube-api-seed:
+	@echo "Running YouTube API ingestion in seed mode (first 20 videos)..."
+	cd backend && python scripts/ingest_youtube_enhanced.py --source api --limit 20 --newest-first
+
+# Video listing commands
+list-youtube:
+	@echo "Dumping YouTube channel video list to JSON..."
+	cd backend && python -c "from scripts.common.list_videos_yt_dlp import YtDlpVideoLister; from pathlib import Path; lister = YtDlpVideoLister(); lister.dump_channel_json('$(or $(YOUTUBE_CHANNEL_URL),https://www.youtube.com/@anthonychaffeemd)', Path('data/videos.json'))"
+
+list-youtube-api:
+	@echo "Listing videos using YouTube Data API..."
+	cd backend && python scripts/common/list_videos_api.py "$(or $(YOUTUBE_CHANNEL_URL),https://www.youtube.com/@anthonychaffeemd)" --limit 50
+
+# Backfill commands
+backfill-youtube:
+	@echo "Backfilling from pre-dumped JSON..."
+	cd backend && python scripts/ingest_youtube_enhanced.py --source yt-dlp --from-json data/videos.json --concurrency 4 --newest-first
+
+backfill-youtube-api:
+	@echo "Backfilling using YouTube Data API..."
+	cd backend && python scripts/ingest_youtube_enhanced.py --source api --concurrency 4 --newest-first
+
+# Test and validation commands
+test-ingestion:
+	@echo "Testing ingestion pipeline (dry run)..."
+	cd backend && python scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 5 --dry-run
+
+validate-transcripts:
+	@echo "Validating transcript fetching..."
+	cd backend && python scripts/common/transcript_fetch.py dQw4w9WgXcQ
+
+ingestion-stats:
+	@echo "Showing ingestion statistics..."
+	cd backend && python scripts/common/database_upsert.py --stats
 
 ingest-zoom:
 	cd backend && python scripts/ingest_zoom.py
