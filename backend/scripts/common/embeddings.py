@@ -28,7 +28,7 @@ class EmbeddingGenerator:
         embeddings = self.model.encode(texts, batch_size=32, show_progress_bar=True)
         
         # Convert to list of lists for JSON serialization
-        return [embedding.tolist() for embedding in embeddings]
+        return [embedding.tolist() if hasattr(embedding, 'tolist') else embedding for embedding in embeddings]
     
     def generate_single_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text"""
