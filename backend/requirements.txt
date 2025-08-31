@@ -1,26 +1,24 @@
 # Core dependencies
-psycopg2-binary==2.9.7
+psycopg2-binary>=2.9.0
 python-dotenv==1.0.0
-requests==2.31.0
+requests>=2.28.0
 
 # YouTube transcript extraction
-youtube-transcript-api==0.6.1
-yt-dlp==2023.10.13
+youtube-transcript-api>=0.6.0
+yt-dlp>=2023.10.0
 
-# Audio transcription fallback
-faster-whisper==0.9.0
-torch==2.1.0
-torchaudio==2.1.0
-
-# Text embedding and processing
-sentence-transformers==2.2.2
-transformers==4.35.0
-numpy==1.24.3
-
-# Zoom API
-pyzoom==0.1.4
+# Text embedding and processing (lighter versions)
+sentence-transformers>=2.2.0
+numpy>=1.24.0
 
 # Utilities
-webvtt-py==0.4.6
-beautifulsoup4==4.12.2
-lxml==4.9.3
+webvtt-py>=0.4.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Optional: Audio transcription fallback (install separately if needed)
+# faster-whisper>=0.10.0
+# torch>=2.3.0
+# torchaudio>=2.3.0
+
+# Note: For Zoom API, we'll use direct requests instead of pyzoom

@@ -40,9 +40,9 @@ def check_dependencies():
     # Check Docker
     try:
         subprocess.run(["docker", "--version"], check=True, capture_output=True)
-        print("✓ Docker is available")
+        print("[OK] Docker is available")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("✗ Docker is not available or not installed")
+        print("[ERROR] Docker is not available or not installed")
         print("Please install Docker Desktop: https://www.docker.com/products/docker-desktop/")
         return False
     
@@ -54,9 +54,9 @@ def check_dependencies():
             capture_output=True, 
             text=True
         ).stdout.strip()
-        print(f"✓ Python is available: {version}")
+        print(f"[OK] Python is available: {version}")
     except subprocess.CalledProcessError:
-        print("✗ Python is not available")
+        print("[ERROR] Python is not available")
         return False
     
     # Check Node.js
@@ -67,9 +67,9 @@ def check_dependencies():
             capture_output=True, 
             text=True
         ).stdout.strip()
-        print(f"✓ Node.js is available: {version}")
+        print(f"[OK] Node.js is available: {version}")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("✗ Node.js is not available or not installed")
+        print("[ERROR] Node.js is not available or not installed")
         print("Please install Node.js: https://nodejs.org/")
         return False
     
@@ -82,12 +82,11 @@ def setup_environment():
     if not os.path.exists('.env'):
         if os.path.exists('.env.example'):
             shutil.copy('.env.example', '.env')
-            print("✓ Created .env file from template")
-            print("Please edit .env with your configuration")
+            print("[OK] Created .env file from template")
         else:
-            print("✗ .env.example not found")
+            print("[ERROR] .env.example not found")
     else:
-        print("✓ .env file already exists")
+        print("[OK] .env file already exists")
 
 def install_backend_dependencies():
     """Install Python backend dependencies"""
@@ -95,14 +94,14 @@ def install_backend_dependencies():
     
     backend_dir = Path("backend")
     if not backend_dir.exists():
-        print("✗ Backend directory not found")
+        print("[ERROR] Backend directory not found")
         return False
     
     # Create virtual environment if it doesn't exist
     venv_dir = backend_dir / "venv"
     if not venv_dir.exists():
         run_command(f"{sys.executable} -m venv venv", cwd=backend_dir)
-        print("✓ Created Python virtual environment")
+        print("[OK] Created Python virtual environment")
     
     # Install dependencies
     if os.name == 'nt':  # Windows
@@ -113,11 +112,19 @@ def install_backend_dependencies():
         python_path = venv_dir / "bin" / "python"
     
     if pip_path.exists():
-        run_command(f'"{pip_path}" install -r requirements.txt', cwd=backend_dir)
-        print("✓ Installed Python dependencies")
+        # Use absolute path and proper Windows path handling
+        pip_command = str(pip_path.absolute())
+        run_command(f'"{pip_command}" install -r requirements.txt', cwd=backend_dir)
+        print("[OK] Installed Python dependencies")
         return True
     else:
-        print("✗ Could not find pip in virtual environment")
+        print("[ERROR] Could not find pip in virtual environment")
+        # Alternative: use the virtual environment's Python with -m pip
+        if python_path.exists():
+            python_command = str(python_path.absolute())
+            run_command(f'"{python_command}" -m pip install -r requirements.txt', cwd=backend_dir)
+            print("[OK] Installed Python dependencies (using python -m pip)")
+            return True
         return False
 
 def install_frontend_dependencies():
@@ -126,11 +133,11 @@ def install_frontend_dependencies():
     
     frontend_dir = Path("frontend")
     if not frontend_dir.exists():
-        print("✗ Frontend directory not found")
+        print("[ERROR] Frontend directory not found")
         return False
     
     run_command("npm install", cwd=frontend_dir)
-    print("✓ Installed Node.js dependencies")
+    print("[OK] Installed Node.js dependencies")
     return True
 
 def setup_database():
@@ -139,14 +146,14 @@ def setup_database():
     
     # Start database
     run_command("docker-compose up -d postgres")
-    print("✓ Database container started")
+    print("[OK] Database container started")
     
     # Wait a moment for database to be ready
     import time
     print("Waiting for database to be ready...")
     time.sleep(10)
     
-    print("✓ Database setup complete")
+    print("[OK] Database setup complete")
 
 def main():
     """Main setup function"""
@@ -169,7 +176,7 @@ def main():
     frontend_success = install_frontend_dependencies()
     
     if not (backend_success and frontend_success):
-        print("\n✗ Some dependencies failed to install")
+        print("\n[ERROR] Some dependencies failed to install")
         sys.exit(1)
     
     print("\n" + "="*40)
@@ -178,7 +185,7 @@ def main():
     setup_database()
     
     print("\n" + "="*40)
-    print("\n✓ Setup complete!")
+    print("\n[OK] Setup complete!")
     print("\nNext steps:")
     print("1. Edit .env file with your API keys and configuration")
     print("2. Run 'make ingest-youtube' to start ingesting YouTube transcripts")
