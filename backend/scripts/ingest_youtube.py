@@ -107,7 +107,16 @@ class YouTubeIngester:
         # Method 1: Try YouTube's auto-generated transcript
         try:
             logger.info(f"Attempting to fetch YouTube transcript for {video_id}")
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            api = YouTubeTranscriptApi()
+            transcript_data = api.fetch(video_id, languages=['en'])
+            # transcript_data is a FetchedTranscript object, iterate over it
+            transcript_list = []
+            for entry in transcript_data:
+                transcript_list.append({
+                    'start': entry['start'],
+                    'duration': entry['duration'], 
+                    'text': entry['text']
+                })
             logger.info(f"Successfully fetched YouTube transcript ({len(transcript_list)} entries)")
             return transcript_list
             
