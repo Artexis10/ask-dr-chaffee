@@ -23,6 +23,16 @@ export default function Home() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const copyNotificationTimeout = useRef<NodeJS.Timeout | null>(null);
 
+  // Debug query state changes
+  const handleSetQuery = useCallback((newQuery: string) => {
+    console.log('Home: setQuery called with:', newQuery);
+    setQuery(newQuery);
+  }, []);
+
+  useEffect(() => {
+    console.log('Home: query state changed to:', query);
+  }, [query]);
+
   // Function to extract years from results
   const extractYears = useCallback((results: SearchResult[]) => {
     const yearsSet = new Set<string>();
@@ -76,21 +86,25 @@ export default function Home() {
   }, []);
 
   // Function to handle search form submission
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    const currentQuery = query.trim();
+    if (!currentQuery) return;
+    
+    console.log('Starting search for:', currentQuery, 'with filters:', { sourceFilter, yearFilter });
     
     setLoading(true);
     setError('');
-    setResults([]);
-    setGroupedResults([]);
+    // Don't clear results immediately - keep them visible while loading new ones
     
     try {
       const params = new URLSearchParams({
-        q: query,
+        q: currentQuery,
         ...(sourceFilter !== 'all' && { source_filter: sourceFilter }),
         ...(yearFilter !== 'all' && { year_filter: yearFilter })
       });
+      
+      console.log('API call URL:', `/api/search?${params}`);
       
       const response = await fetch(`/api/search?${params}`);
       
@@ -99,23 +113,31 @@ export default function Home() {
       }
       
       const data = await response.json();
-      setResults(data.results || []);
-      setTotalResults(data.results?.length || 0);
+      console.log('API response:', data);
       
-      // Extract available years from results
-      const years = extractYears(data.results || []);
+      const results = data.results || [];
+      const years = extractYears(results);
+      const grouped = groupResultsByVideo(results);
+      
+      // Update state all at once with new results
+      setResults(results);
+      setTotalResults(results.length);
       setAvailableYears(years);
-      
-      // Group results by video
-      const grouped = groupResultsByVideo(data.results || []);
       setGroupedResults(grouped);
       
+      console.log('State updated - results:', results.length, 'groups:', grouped.length);
+      
     } catch (err) {
+      console.error('Search error:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      // Clear results on error
+      setResults([]);
+      setGroupedResults([]);
+      setTotalResults(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [query, sourceFilter, yearFilter, extractYears, groupResultsByVideo]);
 
   // Function to highlight search terms in text
   const highlightSearchTerms = (text: string, query: string): string => {
@@ -212,6 +234,13 @@ export default function Home() {
     };
   }, [selectedResultIndex, results, groupedResults]);
 
+  // Re-run search when filters change (if there's an active query)
+  useEffect(() => {
+    if (query.trim()) {
+      handleSearch({ preventDefault: () => {} } as React.FormEvent);
+    }
+  }, [sourceFilter, yearFilter, handleSearch]);
+
   return (
     <>
       <Head>
@@ -229,7 +258,7 @@ export default function Home() {
 
         <SearchBar 
           query={query} 
-          setQuery={setQuery} 
+          setQuery={handleSetQuery} 
           handleSearch={handleSearch} 
           loading={loading} 
         />

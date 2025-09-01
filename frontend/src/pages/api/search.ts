@@ -117,12 +117,12 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { 
-    query, 
-    source_filter = 'all', 
-    year_filter, 
-    limit = 30 
-  }: SearchParams = req.method === 'POST' ? req.body : req.query;
+  // Handle both GET and POST requests
+  const params = req.method === 'POST' ? req.body : req.query;
+  const query = params.q || params.query;
+  const source_filter = params.source_filter || 'all';
+  const year_filter = params.year_filter;
+  const limit = parseInt(params.limit as string) || 30;
 
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     return res.status(400).json({ error: 'Query is required' });

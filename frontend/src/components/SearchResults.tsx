@@ -26,10 +26,19 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   seekToTimestamp,
   copyTimestampLink
 }) => {
+  console.log('SearchResults render:', { 
+    resultsLength: results.length, 
+    totalResults, 
+    groupedResultsLength: groupedResults.length, 
+    query, 
+    loading 
+  });
+
   if (loading) return null;
   if (!query.trim()) return null;
   
   if (results.length === 0) {
+    console.log('Showing NoResults because results.length === 0');
     return <NoResults sourceFilter={sourceFilter} query={query} />;
   }
 

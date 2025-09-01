@@ -8,15 +8,31 @@ interface SearchBarProps {
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({ query, setQuery, handleSearch, loading }) => {
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    console.log('SearchBar onSubmit called with query:', query);
+    handleSearch(e);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    console.log('Input change:', value);
+    setQuery(value);
+  };
+
+  React.useEffect(() => {
+    console.log('SearchBar query state updated:', query);
+  }, [query]);
+
   return (
-    <form onSubmit={handleSearch} className="search-form">
+    <form onSubmit={onSubmit} className="search-form">
       <div className="search-container">
         <input
           type="text"
           className="search-input"
           placeholder="Search Dr. Chaffee's knowledge..."
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={handleInputChange}
           aria-label="Search query"
         />
         <button 
