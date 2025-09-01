@@ -85,23 +85,20 @@ export default function Home() {
     });
   }, []);
 
-  // Function to handle search form submission
-  const handleSearch = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    const currentQuery = query.trim();
-    if (!currentQuery) return;
+  // Function to perform search API call
+  const performSearch = useCallback(async (searchQuery: string, currentSourceFilter: string, currentYearFilter: string) => {
+    if (!searchQuery.trim()) return;
     
-    console.log('Starting search for:', currentQuery, 'with filters:', { sourceFilter, yearFilter });
+    console.log('Starting search for:', searchQuery, 'with filters:', { currentSourceFilter, currentYearFilter });
     
     setLoading(true);
     setError('');
-    // Don't clear results immediately - keep them visible while loading new ones
     
     try {
       const params = new URLSearchParams({
-        q: currentQuery,
-        ...(sourceFilter !== 'all' && { source_filter: sourceFilter }),
-        ...(yearFilter !== 'all' && { year_filter: yearFilter })
+        q: searchQuery,
+        ...(currentSourceFilter !== 'all' && { source_filter: currentSourceFilter }),
+        ...(currentYearFilter !== 'all' && { year_filter: currentYearFilter })
       });
       
       console.log('API call URL:', `/api/search?${params}`);
@@ -130,14 +127,46 @@ export default function Home() {
     } catch (err) {
       console.error('Search error:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      // Clear results on error
       setResults([]);
       setGroupedResults([]);
       setTotalResults(0);
     } finally {
       setLoading(false);
     }
-  }, [query, sourceFilter, yearFilter, extractYears, groupResultsByVideo]);
+  }, [extractYears, groupResultsByVideo]);
+
+  // Debounced search effect for typing (only triggers on query changes)
+  const currentFiltersRef = useRef({ sourceFilter, yearFilter });
+  useEffect(() => {
+    currentFiltersRef.current = { sourceFilter, yearFilter };
+  }, [sourceFilter, yearFilter]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      // Clear results when query is empty
+      setResults([]);
+      setGroupedResults([]);
+      setTotalResults(0);
+      return;
+    }
+
+    // Debounce search while typing - use current filter values at time of execution
+    const debounceTimer = setTimeout(() => {
+      console.log('Debounced search triggered for query:', query);
+      const filters = currentFiltersRef.current;
+      performSearch(query, filters.sourceFilter, filters.yearFilter);
+    }, 300); // 300ms delay
+
+    return () => {
+      clearTimeout(debounceTimer);
+    };
+  }, [query, performSearch]); // Only depend on query for debouncing
+
+  // Function to handle search form submission
+  const handleSearch = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performSearch(query, sourceFilter, yearFilter);
+  }, [query, sourceFilter, yearFilter, performSearch]);
 
   // Function to highlight search terms in text
   const highlightSearchTerms = (text: string, query: string): string => {
@@ -234,12 +263,19 @@ export default function Home() {
     };
   }, [selectedResultIndex, results, groupedResults]);
 
-  // Re-run search when filters change (if there's an active query)
+  // Re-run search immediately when filters change (no debouncing for filters)
+  const prevFilters = useRef({ sourceFilter, yearFilter });
   useEffect(() => {
-    if (query.trim()) {
-      handleSearch({ preventDefault: () => {} } as React.FormEvent);
+    const filtersChanged = prevFilters.current.sourceFilter !== sourceFilter || 
+                          prevFilters.current.yearFilter !== yearFilter;
+    
+    if (query.trim() && filtersChanged) {
+      console.log('Filter change triggered immediate search');
+      performSearch(query, sourceFilter, yearFilter);
     }
-  }, [sourceFilter, yearFilter, handleSearch]);
+    
+    prevFilters.current = { sourceFilter, yearFilter };
+  }, [sourceFilter, yearFilter, query, performSearch]);
 
   return (
     <>
