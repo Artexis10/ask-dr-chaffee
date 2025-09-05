@@ -2,20 +2,31 @@ import os
 from typing import List
 from sentence_transformers import SentenceTransformer
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 class EmbeddingGenerator:
+    # Class-level lock for thread safety
+    _lock = threading.Lock()
+    
     def __init__(self, model_name: str = None):
         self.model_name = model_name or os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
         self.model = None
         
     def load_model(self):
-        """Lazy load the embedding model"""
+        """Lazy load the embedding model with thread safety"""
         if self.model is None:
-            logger.info(f"Loading embedding model: {self.model_name}")
-            self.model = SentenceTransformer(self.model_name)
-            logger.info("Embedding model loaded successfully")
+            # Use a lock to prevent multiple threads from loading the model simultaneously
+            with EmbeddingGenerator._lock:
+                # Double-check pattern to avoid unnecessary lock acquisition
+                if self.model is None:
+                    logger.info(f"Loading embedding model: {self.model_name}")
+                    # Explicitly specify device and ensure proper initialization
+                    self.model = SentenceTransformer(self.model_name, device="cpu")
+                    # Force model to initialize properly
+                    self.model.eval()
+                    logger.info("Embedding model loaded successfully")
     
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for a list of texts"""

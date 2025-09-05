@@ -29,6 +29,7 @@ from scripts.common.transcript_fetch import TranscriptFetcher, TranscriptSegment
 from scripts.common.database_upsert import DatabaseUpserter, ChunkData
 from scripts.common.embeddings import EmbeddingGenerator
 from scripts.common.transcript_processor import TranscriptProcessor
+from scripts.common.proxy_manager import ProxyManager, ProxyConfig
 
 # Load environment variables
 load_dotenv()
@@ -55,8 +56,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class IngestionConfig:
     """Configuration for ingestion pipeline"""
-    source: str = 'yt-dlp'  # 'yt-dlp' or 'api'
-    channel_url: str = None
+    source: str = 'api'  # 'api' or 'yt-dlp' (API is now default)
+    channel_url: Optional[str] = None
     from_json: Optional[Path] = None
     concurrency: int = 4
     skip_shorts: bool = False
@@ -67,12 +68,20 @@ class IngestionConfig:
     max_duration: Optional[int] = None
     force_whisper: bool = False
     cleanup_audio: bool = True
+    since_published: Optional[str] = None  # ISO8601 or YYYY-MM-DD format
     
     # Database
     db_url: str = None
     
     # API keys
     youtube_api_key: Optional[str] = None
+    ffmpeg_path: Optional[str] = None
+    
+    # Proxy configuration
+    proxy: Optional[str] = None
+    proxy_file: Optional[str] = None
+    proxy_rotate: bool = False
+    proxy_rotate_interval: int = 10
     
     def __post_init__(self):
         """Set defaults from environment"""
@@ -125,8 +134,25 @@ class EnhancedYouTubeIngester:
         
         # Initialize components
         self.db = DatabaseUpserter(config.db_url)
+        
+        # Setup proxy manager
+        proxy_config = ProxyConfig(
+            enabled=(config.proxy is not None or config.proxy_file is not None),
+            rotation_enabled=config.proxy_rotate,
+            rotation_interval=config.proxy_rotate_interval,
+            proxy_list=[config.proxy] if config.proxy else None,
+            proxy_file=config.proxy_file
+        )
+        self.proxy_manager = ProxyManager(proxy_config)
+        
+        # Get initial proxy
+        proxies = self.proxy_manager.get_proxy()
+        
         self.transcript_fetcher = TranscriptFetcher(
-            whisper_model=config.whisper_model
+            whisper_model=config.whisper_model,
+            ffmpeg_path=config.ffmpeg_path,
+            proxies=proxies,
+            api_key=config.youtube_api_key
         )
         self.embedder = EmbeddingGenerator()
         self.processor = TranscriptProcessor(
@@ -134,10 +160,12 @@ class EnhancedYouTubeIngester:
         )
         
         # Initialize video lister based on source
-        if config.source == 'yt-dlp':
+        if config.source == 'api':
+            if not config.youtube_api_key:
+                raise ValueError("YouTube API key required for API source")
+            self.video_lister = YouTubeAPILister(config.youtube_api_key, config.db_url)
+        elif config.source == 'yt-dlp':
             self.video_lister = YtDlpVideoLister()
-        elif config.source == 'api':
-            self.video_lister = YouTubeAPILister(config.youtube_api_key)
         else:
             raise ValueError(f"Unknown source: {config.source}")
     
@@ -151,16 +179,35 @@ class EnhancedYouTubeIngester:
                 raise ValueError("--from-json only supported with yt-dlp source")
             videos = self.video_lister.list_from_json(self.config.from_json)
         else:
-            # List from channel
-            if self.config.source == 'yt-dlp':
-                videos = self.video_lister.list_channel_videos(self.config.channel_url)
-            else:  # api
+            # Parse since_published if provided
+            since_published = None
+            if self.config.since_published:
+                try:
+                    # Try ISO8601 format first
+                    if 'T' in self.config.since_published or '+' in self.config.since_published:
+                        since_published = datetime.fromisoformat(self.config.since_published.replace('Z', '+00:00'))
+                    else:
+                        # Try YYYY-MM-DD format
+                        since_published = datetime.strptime(self.config.since_published, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                except ValueError as e:
+                    logger.error(f"Invalid since_published format: {self.config.since_published}. Use ISO8601 or YYYY-MM-DD")
+                    raise
+            
+            # List videos from channel
+            logger.info(f"Listing videos from channel using {self.config.source}")
+            if self.config.source == 'api' and hasattr(self.video_lister, 'list_channel_videos'):
                 videos = self.video_lister.list_channel_videos(
                     self.config.channel_url,
-                    max_results=self.config.limit
+                    max_results=self.config.limit,
+                    newest_first=self.config.newest_first,
+                    since_published=since_published
                 )
-        
-        # Apply filters
+            else:
+                videos = self.video_lister.list_channel_videos(
+                    self.config.channel_url,
+                    max_results=self.config.limit,
+                    newest_first=self.config.newest_first
+                )     # Apply filters
         if self.config.skip_shorts:
             videos = [v for v in videos if not v.duration_s or v.duration_s >= 120]
             logger.info(f"Filtered out shorts, {len(videos)} videos remaining")
@@ -413,12 +460,14 @@ Examples:
     )
     
     # Source configuration
-    parser.add_argument('--source', choices=['yt-dlp', 'api'], default='yt-dlp',
-                       help='Data source (default: yt-dlp)')
-    parser.add_argument('--channel-url', 
-                       help='YouTube channel URL (default: env YOUTUBE_CHANNEL_URL)')
+    parser.add_argument('--source', choices=['api', 'yt-dlp'], default='api',
+                       help='Data source: api for YouTube Data API (default), yt-dlp for scraping fallback')
     parser.add_argument('--from-json', type=Path,
-                       help='Load video list from JSON file (yt-dlp only)')
+                       help='Process videos from JSON file instead of fetching')
+    parser.add_argument('--channel-url',
+                       help='YouTube channel URL (default: env YOUTUBE_CHANNEL_URL)')
+    parser.add_argument('--since-published',
+                       help='Only process videos published after this date (ISO8601 or YYYY-MM-DD)')
     
     # Processing configuration
     parser.add_argument('--concurrency', type=int, default=4,
@@ -440,6 +489,18 @@ Examples:
                        help='Skip videos longer than N seconds for Whisper fallback')
     parser.add_argument('--force-whisper', action='store_true',
                        help='Use Whisper even when YouTube transcript available')
+    parser.add_argument('--ffmpeg-path', 
+                       help='Path to ffmpeg executable for audio processing')
+                       
+    # Proxy configuration
+    parser.add_argument('--proxy',
+                       help='HTTP/HTTPS proxy to use for YouTube requests (e.g., http://user:pass@host:port)')
+    parser.add_argument('--proxy-file',
+                       help='Path to file containing list of proxies (one per line)')
+    parser.add_argument('--proxy-rotate', action='store_true',
+                       help='Enable proxy rotation')
+    parser.add_argument('--proxy-rotate-interval', type=int, default=10,
+                       help='Minutes between proxy rotations (default: 10)')
     
     # Database configuration
     parser.add_argument('--db-url',

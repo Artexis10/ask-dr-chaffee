@@ -6,12 +6,20 @@ Robust transcript fetching with multiple fallback strategies
 import logging
 import tempfile
 import subprocess
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
+
+# Import API-based transcript fetcher if available
+try:
+    from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
+    YOUTUBE_DATA_API_AVAILABLE = True
+except ImportError:
+    YOUTUBE_DATA_API_AVAILABLE = False
 
 try:
     import faster_whisper
@@ -57,10 +65,14 @@ class TranscriptSegment:
 class TranscriptFetcher:
     """Fetch transcripts with multiple fallback strategies"""
     
-    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = "small.en"):
+    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = "small.en", ffmpeg_path: str = None, proxies: dict = None, api_key: str = None):
         self.yt_dlp_path = yt_dlp_path
         self.whisper_model = whisper_model
         self._whisper_model_cache = None
+        self.ffmpeg_path = ffmpeg_path
+        self.proxies = proxies
+        self.api_key = api_key or os.getenv('YOUTUBE_API_KEY')
+        self._api_client = None
     
     def _get_whisper_model(self):
         """Lazy load Whisper model"""
@@ -76,6 +88,12 @@ class TranscriptFetcher:
             )
         return self._whisper_model_cache
     
+    def _get_api_client(self):
+        """Get or create YouTube Data API client"""
+        if self._api_client is None and self.api_key and YOUTUBE_DATA_API_AVAILABLE:
+            self._api_client = YouTubeDataAPI(self.api_key)
+        return self._api_client
+    
     def fetch_youtube_transcript(self, video_id: str, languages: List[str] = None) -> Optional[List[TranscriptSegment]]:
         """Fetch transcript using YouTube's built-in captions"""
         if languages is None:
@@ -83,12 +101,45 @@ class TranscriptFetcher:
         
         logger.debug(f"Fetching YouTube transcript for {video_id}")
         
+        # Try YouTube Data API first if available
+        api_client = self._get_api_client()
+        if api_client:
+            try:
+                logger.info(f"Attempting to fetch transcript via YouTube Data API for {video_id}")
+                segments = api_client.get_transcript_segments(video_id, language_code=languages[0])
+                if segments:
+                    logger.info(f"Successfully fetched transcript via YouTube Data API for {video_id}")
+                    return segments
+                logger.info(f"No transcript found via YouTube Data API for {video_id}, falling back to transcript API")
+            except Exception as e:
+                logger.warning(f"Error fetching transcript via YouTube Data API: {e}, falling back to transcript API")
+        
+        # Fall back to YouTube Transcript API
         try:
-            # Create API instance
+            # Create API instance with proxy support if configured
             api = YouTubeTranscriptApi()
             
             # Try to fetch transcript with preferred languages
-            fetched_transcript = api.fetch(video_id, languages=languages)
+            if self.proxies:
+                # Use proxy if provided
+                import requests
+                from youtube_transcript_api.formatters import JSONFormatter
+                
+                # Create a session with proxies
+                session = requests.Session()
+                session.proxies.update(self.proxies)
+                
+                # Use the session to fetch the transcript
+                try:
+                    # First try with proxies
+                    fetched_transcript = api.fetch(video_id, languages=languages, proxies=self.proxies)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch with proxies: {e}, trying without proxies")
+                    fetched_transcript = api.fetch(video_id, languages=languages)
+            else:
+                # Standard fetch without proxies
+                fetched_transcript = api.fetch(video_id, languages=languages)
+                
             logger.debug(f"Found transcript for {video_id}")
             
             # Convert fetched transcript to our format
@@ -123,9 +174,15 @@ class TranscriptFetcher:
             "--audio-format", "m4a",
             "--audio-quality", "0",  # Best quality
             "-o", str(output_file.with_suffix('.%(ext)s')),
-            "--no-warnings",
-            f"https://www.youtube.com/watch?v={video_id}"
+            "--no-warnings"
         ]
+        
+        # Add ffmpeg location if specified
+        if self.ffmpeg_path:
+            cmd.extend(["--ffmpeg-location", self.ffmpeg_path])
+            
+        # Add video URL
+        cmd.append(f"https://www.youtube.com/watch?v={video_id}")
         
         try:
             result = subprocess.run(
@@ -249,12 +306,28 @@ def main():
     parser.add_argument('--whisper-model', default='small.en', help='Whisper model size')
     parser.add_argument('--force-whisper', action='store_true', help='Skip YouTube transcript')
     parser.add_argument('--max-duration', type=int, help='Max duration for Whisper fallback')
+    parser.add_argument('--ffmpeg-path', help='Path to ffmpeg executable')
+    parser.add_argument('--proxy', help='HTTP/HTTPS proxy to use for YouTube requests')
+    parser.add_argument('--api-key', help='YouTube Data API key for transcript fetching')
     
     args = parser.parse_args()
     
     logging.basicConfig(level=logging.INFO)
     
-    fetcher = TranscriptFetcher(whisper_model=args.whisper_model)
+    # Setup proxies if provided
+    proxies = None
+    if args.proxy:
+        proxies = {
+            'http': args.proxy,
+            'https': args.proxy
+        }
+    
+    fetcher = TranscriptFetcher(
+        whisper_model=args.whisper_model, 
+        ffmpeg_path=args.ffmpeg_path,
+        proxies=proxies,
+        api_key=args.api_key
+    )
     segments, method = fetcher.fetch_transcript(
         args.video_id,
         max_duration_s=args.max_duration,

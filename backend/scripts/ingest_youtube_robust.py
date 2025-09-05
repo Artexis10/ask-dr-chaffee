@@ -74,6 +74,10 @@ class IngestConfig:
     # API keys
     youtube_api_key: Optional[str] = None
     
+    # Whisper/ffmpeg
+    ffmpeg_path: Optional[str] = None
+    proxy: Optional[str] = None
+    
     def __post_init__(self):
         if self.channel_url is None:
             self.channel_url = os.getenv('YOUTUBE_CHANNEL_URL', 'https://www.youtube.com/@anthonychaffeemd')
@@ -115,7 +119,19 @@ class RobustYouTubeIngester:
         
         # Initialize components
         self.db = DatabaseUpserter(config.db_url)
-        self.transcript_fetcher = TranscriptFetcher()
+        
+        # Setup proxies if provided
+        proxies = None
+        if config.proxy:
+            proxies = {
+                'http': config.proxy,
+                'https': config.proxy
+            }
+            
+        self.transcript_fetcher = TranscriptFetcher(
+            ffmpeg_path=config.ffmpeg_path,
+            proxies=proxies
+        )
         self.embedder = EmbeddingGenerator()
         self.processor = TranscriptProcessor(
             chunk_duration_seconds=int(os.getenv('CHUNK_DURATION_SECONDS', 45))
@@ -233,7 +249,7 @@ class RobustYouTubeIngester:
                 return False
             
             # Update transcript status
-            status = 'transcript' if method == 'youtube' else 'whisper'
+            status = 'transcribed'  # Use valid status from constraint
             self.db.update_ingest_status(
                 video_id, status,
                 has_yt_transcript=(method == 'youtube'),
@@ -340,205 +356,6 @@ class RobustYouTubeIngester:
         stats.log_batch_summary(batch_num)
         return stats
     
-    def get_channel_videos(self, max_videos: int = 50) -> List[Dict[str, Any]]:
-        """Fetch video metadata from the YouTube channel"""
-        logger.info(f"Fetching videos from {self.channel_url}")
-        
-        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
-            try:
-                # Extract channel info and video list
-                channel_info = ydl.extract_info(
-                    self.channel_url,
-                    download=False
-                )
-                
-                videos = []
-                entries = channel_info.get('entries', [])[:max_videos]
-                
-                for entry in entries:
-                    video_id = entry.get('id')
-                    if not video_id:
-                        continue
-                    
-                    # Get detailed video info
-                    video_url = f"https://www.youtube.com/watch?v={video_id}"
-                    video_info = ydl.extract_info(video_url, download=False)
-                    
-                    videos.append({
-                        'id': video_id,
-                        'title': video_info.get('title', ''),
-                        'description': video_info.get('description', ''),
-                        'duration': video_info.get('duration'),
-                        'upload_date': video_info.get('upload_date'),
-                        'url': video_url,
-                        'view_count': video_info.get('view_count'),
-                        'like_count': video_info.get('like_count'),
-                    })
-                
-                logger.info(f"Found {len(videos)} videos")
-                return videos
-                
-            except Exception as e:
-                logger.error(f"Error fetching channel videos: {e}")
-                return []
-    
-    def get_transcript(self, video_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Get transcript for a video, trying multiple methods"""
-        
-        # Method 1: Try YouTube's auto-generated transcript
-        try:
-            logger.info(f"Attempting to fetch YouTube transcript for {video_id}")
-            api = YouTubeTranscriptApi()
-            transcript_data = api.fetch(video_id, languages=['en'])
-            # transcript_data is a FetchedTranscript object, iterate over it
-            transcript_list = []
-            for entry in transcript_data:
-                transcript_list.append({
-                    'start': entry.start,
-                    'duration': entry.duration, 
-                    'text': entry.text
-                })
-            logger.info(f"Successfully fetched YouTube transcript ({len(transcript_list)} entries)")
-            return transcript_list
-            
-        except (TranscriptsDisabled, NoTranscriptFound) as e:
-            logger.warning(f"No YouTube transcript available for {video_id}: {e}")
-            
-        # Method 2: Fallback to faster-whisper (requires audio download)
-        try:
-            logger.info(f"Attempting Whisper transcription for {video_id}")
-            transcript = self._transcribe_with_whisper(video_id)
-            if transcript:
-                logger.info(f"Successfully transcribed with Whisper ({len(transcript)} entries)")
-                return transcript
-                
-        except Exception as e:
-            logger.error(f"Whisper transcription failed for {video_id}: {e}")
-        
-        logger.error(f"All transcript methods failed for {video_id}")
-        return None
-    
-    def _transcribe_with_whisper(self, video_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Transcribe video using faster-whisper (fallback method)"""
-        try:
-            from faster_whisper import WhisperModel
-            import tempfile
-            
-            # Download audio
-            audio_path = self._download_audio(video_id)
-            if not audio_path:
-                return None
-            
-            # Initialize Whisper model
-            model = WhisperModel("base", device="cpu", compute_type="int8")
-            
-            # Transcribe
-            segments, info = model.transcribe(audio_path, beam_size=5)
-            
-            transcript = []
-            for segment in segments:
-                transcript.append({
-                    'start': segment.start,
-                    'duration': segment.end - segment.start,
-                    'text': segment.text.strip()
-                })
-            
-            # Clean up audio file
-            os.unlink(audio_path)
-            
-            return transcript
-            
-        except Exception as e:
-            logger.error(f"Whisper transcription error: {e}")
-            return None
-    
-    def _download_audio(self, video_id: str) -> Optional[str]:
-        """Download audio for transcription"""
-        try:
-            import tempfile
-            
-            temp_dir = tempfile.mkdtemp()
-            audio_path = os.path.join(temp_dir, f"{video_id}.mp3")
-            
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': audio_path,
-                'quiet': True,
-                'no_warnings': True,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                video_url = f"https://www.youtube.com/watch?v={video_id}"
-                ydl.download([video_url])
-            
-            return audio_path if os.path.exists(audio_path) else None
-            
-        except Exception as e:
-            logger.error(f"Audio download error: {e}")
-            return None
-    
-    def process_video(self, video_info: Dict[str, Any]) -> bool:
-        """Process a single video: get transcript, chunk, embed, and store"""
-        video_id = video_info['id']
-        
-        # Check if already processed
-        if self.db.source_exists('youtube', video_id):
-            logger.info(f"Video {video_id} already processed, skipping")
-            return True
-        
-        logger.info(f"Processing video: {video_info['title']}")
-        
-        # Get transcript
-        transcript = self.get_transcript(video_id)
-        if not transcript:
-            logger.error(f"Could not get transcript for {video_id}")
-            return False
-    
-    def process_batch_concurrent(self, videos: List[VideoInfo], batch_num: int = 1) -> BatchStats:
-        """Process a batch of videos with concurrency"""
-        stats = BatchStats(total=len(videos))
-        
-        if self.config.dry_run:
-            for video in videos:
-                logger.info(f"DRY RUN: Would process {video.video_id}: {video.title}")
-            return stats
-        
-        # Use ThreadPoolExecutor for I/O bound tasks
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.concurrency) as executor:
-            with tqdm.tqdm(total=len(videos), desc=f"Batch {batch_num}") as pbar:
-                # Submit all tasks
-                future_to_video = {
-                    executor.submit(self.process_single_video, video): video
-                    for video in videos
-                }
-                
-                # Process completed tasks
-                for future in concurrent.futures.as_completed(future_to_video):
-                    video = future_to_video[future]
-                    try:
-                        success = future.result()
-                        if success:
-                            # Check final status to update stats
-                            state = self.db.get_ingest_state(video.video_id)
-                            if state and state['status'] == 'done':
-                                stats.done += 1
-                            else:
-                                stats.processed += 1
-                        else:
-                            stats.errors += 1
-                    except Exception as e:
-                        logger.error(f"Unexpected error for {video.video_id}: {e}")
-                        stats.errors += 1
-                    
-                    pbar.update(1)
-                    pbar.set_postfix({
-                        'done': stats.done,
-                        'errors': stats.errors
-                    })
-        
-        stats.log_batch_summary(batch_num)
-        return stats
-    
     def run_backfill(self) -> None:
         """Run backfill operation (resumable)"""
         start_time = datetime.now()
@@ -550,15 +367,17 @@ class RobustYouTubeIngester:
         
         try:
             # For backfill, we first populate ingest_state with all videos
-            if not self.config.from_json:
-                logger.info("Populating ingest_state with all channel videos...")
-                videos = self.list_videos()
-                
+            logger.info("Populating ingest_state with videos...")
+            videos = self.list_videos()
+            
+            if videos:
                 # Add all videos to ingest_state (idempotent)
                 for video in videos:
                     self.db.upsert_ingest_state(video.video_id, video, status='pending')
                 
                 logger.info(f"Added {len(videos)} videos to ingest queue")
+            else:
+                logger.warning("No videos found from source - check your JSON file or API configuration")
             
             # Now process in batches from the queue
             batch_size = self.config.limit or 50  # Default batch size
@@ -626,135 +445,108 @@ class RobustYouTubeIngester:
             
             # Close database connection
             self.db.close_connection()
-        
-        # Parse upload date
-        upload_date = None
-        if video_info.get('upload_date'):
-            try:
-                upload_date = datetime.strptime(
-                    video_info['upload_date'], 
-                    '%Y%m%d'
-                ).replace(tzinfo=timezone.utc)
-            except ValueError:
-                pass
-        
-        # Store source in database
-        source_db_id = self.db.insert_source(
-            source_type='youtube',
-            source_id=video_id,
-            title=video_info['title'],
-            description=video_info.get('description'),
-            duration_seconds=video_info.get('duration'),
-            published_at=upload_date,
-            url=video_info['url'],
-            metadata={
-                'view_count': video_info.get('view_count'),
-                'like_count': video_info.get('like_count'),
-            }
-        )
-        
-        # Chunk transcript
-        chunks = self.processor.chunk_transcript(transcript)
-        
-        # Store chunks
-        self.db.insert_chunks(source_db_id, chunks)
-        
-        logger.info(f"Successfully processed video {video_id}")
-        return True
-    
-    def generate_embeddings(self):
-        """Generate embeddings for all chunks without embeddings"""
-        logger.info("Generating embeddings for chunks...")
-        
-        chunks_to_embed = self.db.get_sources_without_embeddings()
-        if not chunks_to_embed:
-            logger.info("No chunks need embeddings")
-            return
-        
-        logger.info(f"Generating embeddings for {len(chunks_to_embed)} chunks")
-        
-        # Process in batches
-        batch_size = 100
-        for i in range(0, len(chunks_to_embed), batch_size):
-            batch = chunks_to_embed[i:i + batch_size]
-            texts = [chunk['text'] for chunk in batch]
-            
-            # Generate embeddings
-            embeddings = self.embedder.generate_embeddings(texts)
-            
-            # Update database
-            for chunk, embedding in zip(batch, embeddings):
-                self.db.update_chunk_embedding(chunk['id'], embedding)
-            
-            logger.info(f"Processed batch {i//batch_size + 1}/{(len(chunks_to_embed) + batch_size - 1)//batch_size}")
-    
-    def run(self, max_videos: int = 50):
-        """Run the full ingestion pipeline"""
-        logger.info("Starting YouTube ingestion pipeline")
-        
-        try:
-            # Get videos from channel
-            videos = self.get_channel_videos(max_videos)
-            if not videos:
-                logger.error("No videos found")
-                return
-            
-            # Process each video
-            processed_count = 0
-            for video in videos:
-                if self.process_video(video):
-                    processed_count += 1
-            
-            logger.info(f"Processed {processed_count}/{len(videos)} videos")
-            
-            # Generate embeddings
-            self.generate_embeddings()
-            
-            logger.info("YouTube ingestion pipeline completed successfully")
-            
-        except Exception as e:
-            logger.error(f"Pipeline error: {e}", exc_info=True)
-            raise
 
-def main():
-    """Main entry point"""
-    import argparse
+def parse_args() -> IngestConfig:
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description='Robust YouTube transcript ingestion for Ask Dr. Chaffee',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic backfill with yt-dlp
+  python ingest_youtube.py --source yt-dlp --limit 50 --newest-first
+
+  # Use YouTube Data API
+  python ingest_youtube.py --source api --concurrency 2 --newest-first
+
+  # Process from pre-dumped JSON
+  python ingest_youtube.py --from-json backend/data/videos.json --concurrency 4
+
+  # Dry run to see what would be processed
+  python ingest_youtube.py --dry-run --limit 10
+
+  # Skip shorts and limit duration
+  python ingest_youtube.py --skip-shorts --max-duration 3600
+        """
+    )
     
-    # Check for seed mode from environment
-    seed_mode = os.getenv('SEED', '').lower() in ('1', 'true', 'yes')
+    # Source configuration
+    parser.add_argument('--source', choices=['yt-dlp', 'api'], default='yt-dlp',
+                       help='Data source (default: yt-dlp)')
+    parser.add_argument('--from-json', type=Path,
+                       help='Load video list from JSON file (yt-dlp only)')
+    parser.add_argument('--channel-url',
+                       help='YouTube channel URL (default: env YOUTUBE_CHANNEL_URL)')
     
-    parser = argparse.ArgumentParser(description='Ingest YouTube transcripts for Ask Dr. Chaffee')
-    parser.add_argument('--max-videos', type=int, default=50, 
+    # Processing configuration
+    parser.add_argument('--concurrency', type=int, default=4,
+                       help='Concurrent workers (default: 4)')
+    parser.add_argument('--limit', type=int,
                        help='Maximum number of videos to process')
-    parser.add_argument('--video-id', type=str, 
-                       help='Process specific video ID only')
-    parser.add_argument('--seed', action='store_true',
-                       help='Enable seed mode (limit to 10 videos for development)')
+    parser.add_argument('--skip-shorts', action='store_true',
+                       help='Skip videos shorter than 120 seconds')
+    parser.add_argument('--newest-first', action='store_true',
+                       help='Process newest videos first')
+    parser.add_argument('--max-duration', type=int,
+                       help='Skip videos longer than N seconds')
+    parser.add_argument('--dry-run', action='store_true',
+                       help='Show what would be processed without writing to DB')
+    
+    # Database configuration
+    parser.add_argument('--db-url',
+                       help='Database URL (default: env DATABASE_URL)')
+    
+    # API configuration
+    parser.add_argument('--youtube-api-key',
+                       help='YouTube Data API key (default: env YOUTUBE_API_KEY)')
+    
+    # Whisper/ffmpeg configuration
+    parser.add_argument('--ffmpeg-path',
+                       help='Path to ffmpeg executable for audio processing')
+    parser.add_argument('--proxy',
+                       help='HTTP/HTTPS proxy to use for YouTube requests (e.g., http://user:pass@host:port)')
+    
+    # Debug options
+    parser.add_argument('--verbose', '-v', action='store_true',
+                       help='Enable verbose logging')
     
     args = parser.parse_args()
     
-    # Enable seed mode if flag or env var is set
-    if args.seed or seed_mode:
-        seed_mode = True
-        args.max_videos = min(args.max_videos, 10)
-        logger.info("🌱 Seed mode enabled - limiting to 10 videos for development")
+    # Set log level
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
     
-    ingester = YouTubeIngester(seed_mode=seed_mode)
+    # Create config
+    config = IngestConfig(
+        source=args.source,
+        from_json=args.from_json,
+        channel_url=args.channel_url,
+        concurrency=args.concurrency,
+        limit=args.limit,
+        skip_shorts=args.skip_shorts,
+        newest_first=args.newest_first,
+        max_duration=args.max_duration,
+        dry_run=args.dry_run,
+        db_url=args.db_url,
+        youtube_api_key=args.youtube_api_key,
+        ffmpeg_path=args.ffmpeg_path,
+        proxy=args.proxy
+    )
     
-    if args.video_id:
-        # Process single video
-        video_info = {
-            'id': args.video_id,
-            'title': f'Video {args.video_id}',
-            'url': f'https://www.youtube.com/watch?v={args.video_id}'
-        }
-        success = ingester.process_video(video_info)
-        if success:
-            ingester.generate_embeddings()
-        sys.exit(0 if success else 1)
-    else:
-        # Process channel
-        ingester.run(args.max_videos)
+    return config
+
+def main():
+    """Main entry point"""
+    try:
+        config = parse_args()
+        ingester = RobustYouTubeIngester(config)
+        ingester.run_backfill()
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Fatal error: {e}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

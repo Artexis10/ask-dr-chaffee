@@ -90,9 +90,9 @@ ask-dr-chaffee/
 
 4. **Ingest Content (Development Mode)**
    ```bash
-   make ingest-youtube-seed  # First 20 videos only
+   make seed-youtube  # First 10 videos using API
    # OR for full ingestion:
-   # make ingest-youtube
+   # make backfill-youtube
    ```
 
 5. **Start Frontend**
@@ -133,7 +133,7 @@ ask-dr-chaffee/
 4. **Ingest Content (Development Mode)**
    ```powershell
    Set-Location backend
-   python scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 20 --newest-first
+   python scripts/ingest_youtube_enhanced.py --source api --limit 10 --newest-first --skip-shorts
    ```
 
 5. **Start Frontend**
@@ -210,9 +210,9 @@ ask-dr-chaffee/
 # Database
 DATABASE_URL=postgresql://user:pass@localhost:5432/ask_dr_chaffee
 
-# YouTube Configuration
+# YouTube Configuration (REQUIRED)
 YOUTUBE_CHANNEL_URL=https://www.youtube.com/@anthonychaffeemd
-YOUTUBE_API_KEY=your_api_key_here  # Optional: for YouTube Data API
+YOUTUBE_API_KEY=your_api_key_here  # REQUIRED: YouTube Data API v3 key
 
 # Features
 RERANK_ENABLED=true  # Enable cross-encoder reranking
@@ -243,19 +243,25 @@ make db-up              # Start PostgreSQL
 make db-down            # Stop PostgreSQL  
 make db-reset           # Reset database (deletes data)
 
-# Ingestion (Enhanced Pipeline)
-make ingest-youtube         # Full channel ingestion (yt-dlp)
-make ingest-youtube-seed    # Development mode (20 videos)
-make ingest-youtube-api     # Full ingestion using YouTube Data API
-make ingest-youtube-api-seed # API development mode (20 videos)
+# Ingestion (Enhanced Pipeline - API Default)
+make ingest-youtube         # Full channel ingestion using API
+make seed-youtube          # Development mode (10 videos)
+make sync-youtube          # Sync recent videos (25 latest)
+make ingest-youtube-fallback # Use yt-dlp fallback if API fails
 
 # Video Discovery
 make list-youtube          # Dump channel videos to JSON
 make list-youtube-api      # List videos using API
 
-# Backfill Operations
-make backfill-youtube      # Process from pre-dumped JSON
-make backfill-youtube-api  # Full API backfill
+# Production Backfill Operations (Resumable)
+make backfill-youtube         # Full channel backfill using API (default)
+make backfill-youtube-fallback # Full channel backfill with yt-dlp fallback
+make sync-youtube            # Incremental sync of recent videos
+
+# Monitoring & Status
+make ingest-status           # Show status breakdown and statistics  
+make ingest-errors          # Display recent errors with details
+make ingest-queue           # Check pending queue size
 
 # Testing & Validation
 make test-ingestion        # Dry run (no database writes)
@@ -281,12 +287,12 @@ docker-compose up -d                           # Start PostgreSQL
 docker-compose down                            # Stop PostgreSQL
 docker-compose down -v; docker-compose up -d  # Reset database
 
-# Ingestion (Enhanced Pipeline)
+# Ingestion (Enhanced Pipeline - API Default)
 Set-Location backend
-python scripts/ingest_youtube_enhanced.py --source yt-dlp --concurrency 4 --newest-first              # Full channel
-python scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 20 --newest-first                   # Development mode
-python scripts/ingest_youtube_enhanced.py --source api --concurrency 4 --newest-first                 # Full API
-python scripts/ingest_youtube_enhanced.py --source api --limit 20 --newest-first                      # API development
+python scripts/ingest_youtube_enhanced.py --source api --concurrency 4 --newest-first --skip-shorts   # Full channel
+python scripts/ingest_youtube_enhanced.py --source api --limit 10 --newest-first --skip-shorts         # Development mode
+python scripts/ingest_youtube_enhanced.py --source api --since-published 2024-01-01                    # Date filtering
+python scripts/ingest_youtube_enhanced.py --source yt-dlp --concurrency 4 --newest-first              # yt-dlp fallback
 
 # Testing & Validation  
 python scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 5 --dry-run                         # Dry run
@@ -313,23 +319,23 @@ python scripts/common/list_videos_api.py "https://www.youtube.com/@anthonychaffe
 
 ### CLI Examples
 ```bash
-# Basic ingestion with yt-dlp
+# Basic ingestion with API (default)
+python backend/scripts/ingest_youtube_enhanced.py --source api --limit 50 --skip-shorts
+
+# Date-filtered ingestion
+python backend/scripts/ingest_youtube_enhanced.py --since-published 2024-01-01
+
+# Use yt-dlp fallback
 python backend/scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 50
 
-# Use YouTube Data API with concurrency
-python backend/scripts/ingest_youtube_enhanced.py --source api --concurrency 8 --newest-first
-
-# Process from pre-dumped JSON
-python backend/scripts/ingest_youtube_enhanced.py --from-json backend/data/videos.json
+# Process from pre-dumped JSON (yt-dlp only)
+python backend/scripts/ingest_youtube_enhanced.py --source yt-dlp --from-json backend/data/videos.json
 
 # Force Whisper transcription with larger model
 python backend/scripts/ingest_youtube_enhanced.py --force-whisper --whisper-model medium.en
 
 # Dry run to preview processing
 python backend/scripts/ingest_youtube_enhanced.py --dry-run --limit 10
-
-# Skip very long videos for Whisper fallback
-python backend/scripts/ingest_youtube_enhanced.py --max-duration 1800 --skip-shorts
 ```
 
 ### Pipeline Stages

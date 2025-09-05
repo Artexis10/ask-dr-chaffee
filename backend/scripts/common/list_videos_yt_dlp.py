@@ -63,25 +63,51 @@ class YtDlpVideoLister:
         logger.info(f"Loading videos from JSON: {json_path}")
         
         videos = []
-        with open(json_path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
+        
+        # Try different encodings
+        encodings_to_try = ['utf-8', 'latin1', 'cp1252', None]  # None will use locale.getpreferredencoding()
+        
+        for encoding in encodings_to_try:
+            try:
+                with open(json_path, 'r', encoding=encoding) as f:
+                    for line_num, line in enumerate(f, 1):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        
+                        try:
+                            entry = json.loads(line)
+                            if not entry or not entry.get('id'):
+                                continue
+                            
+                            # Validate required fields before creating VideoInfo
+                            if entry.get('title') is None:
+                                logger.warning(f"Skipping video on line {line_num}: missing title")
+                                continue
+                                
+                            try:
+                                video = VideoInfo.from_yt_dlp(entry)
+                                videos.append(video)
+                            except (AttributeError, TypeError) as e:
+                                logger.warning(f"Skipping video on line {line_num}: {e}")
+                                continue
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Failed to parse JSON on line {line_num}: {e}")
+                            continue
+                        except Exception as e:
+                            logger.warning(f"Failed to parse video entry on line {line_num}: {e}")
+                            continue
                 
-                try:
-                    entry = json.loads(line)
-                    if not entry or not entry.get('id'):
-                        continue
-                    
-                    video = VideoInfo.from_yt_dlp(entry)
-                    videos.append(video)
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse JSON on line {line_num}: {e}")
-                    continue
-                except Exception as e:
-                    logger.warning(f"Failed to parse video entry on line {line_num}: {e}")
-                    continue
+                # If we got here without exception, we found the right encoding
+                logger.info(f"Successfully read file with encoding: {encoding or 'system default'}")
+                break
+                
+            except UnicodeDecodeError:
+                logger.warning(f"Failed to decode file with encoding {encoding}, trying next encoding")
+                continue
+            except Exception as e:
+                logger.error(f"Error reading file: {e}")
+                raise
         
         logger.info(f"Loaded {len(videos)} videos from JSON")
         return videos

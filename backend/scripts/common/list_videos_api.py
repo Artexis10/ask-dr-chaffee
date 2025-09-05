@@ -5,7 +5,10 @@ YouTube video listing using official YouTube Data API v3
 
 import re
 import logging
-from datetime import datetime
+import time
+import random
+import os
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Iterator
 from urllib.parse import urlparse, parse_qs
 from dataclasses import dataclass
@@ -18,6 +21,13 @@ try:
 except ImportError:
     GOOGLE_API_AVAILABLE = False
 
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+
 from .list_videos_yt_dlp import VideoInfo
 
 logger = logging.getLogger(__name__)
@@ -25,7 +35,7 @@ logger = logging.getLogger(__name__)
 class YouTubeAPILister:
     """List videos from YouTube channel using official Data API v3"""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, db_url: str = None):
         if not GOOGLE_API_AVAILABLE:
             raise ImportError(
                 "Google API client not available. Install with: "
@@ -34,9 +44,94 @@ class YouTubeAPILister:
         
         self.api_key = api_key
         self.youtube = build('youtube', 'v3', developerKey=api_key)
+        self.db_url = db_url or os.getenv('DATABASE_URL')
+        self._channel_cache = {}  # In-memory cache for channel IDs
+    
+    def _get_db_connection(self):
+        """Get database connection for caching"""
+        if not POSTGRES_AVAILABLE or not self.db_url:
+            return None
+        try:
+            return psycopg2.connect(self.db_url)
+        except Exception as e:
+            logger.warning(f"Failed to connect to database for caching: {e}")
+            return None
+    
+    def _get_cache_value(self, key: str) -> Optional[Dict[str, Any]]:
+        """Get cached value from database"""
+        conn = self._get_db_connection()
+        if not conn:
+            return None
+        
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT etag, updated_at FROM api_cache WHERE key = %s",
+                    (key,)
+                )
+                result = cur.fetchone()
+                return dict(result) if result else None
+        except Exception as e:
+            logger.warning(f"Failed to get cache value for {key}: {e}")
+            return None
+        finally:
+            conn.close()
+    
+    def _set_cache_value(self, key: str, etag: str = None):
+        """Set cached value in database"""
+        conn = self._get_db_connection()
+        if not conn:
+            return
+        
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO api_cache (key, etag, updated_at) 
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (key) DO UPDATE SET 
+                        etag = EXCLUDED.etag,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (key, etag)
+                )
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Failed to set cache value for {key}: {e}")
+        finally:
+            conn.close()
+    
+    def _exponential_backoff(self, attempt: int, max_delay: int = 60):
+        """Implement exponential backoff with jitter"""
+        delay = min(max_delay, (2 ** attempt) + random.uniform(0, 1))
+        logger.info(f"Backing off for {delay:.2f} seconds (attempt {attempt})")
+        time.sleep(delay)
+    
+    def _make_api_request(self, request_func, max_retries: int = 3):
+        """Make API request with exponential backoff on rate limits"""
+        for attempt in range(max_retries):
+            try:
+                return request_func()
+            except HttpError as e:
+                if e.resp.status in [429, 500, 502, 503, 504]:  # Rate limit or server errors
+                    if attempt < max_retries - 1:
+                        self._exponential_backoff(attempt)
+                        continue
+                raise
     
     def _resolve_channel_id(self, channel_url: str) -> str:
-        """Resolve channel URL to channel ID"""
+        """Resolve channel URL to channel ID with caching"""
+        # Check in-memory cache first
+        if channel_url in self._channel_cache:
+            return self._channel_cache[channel_url]
+        
+        # Check database cache
+        cache_key = f"channel_id_{channel_url}"
+        cached = self._get_cache_value(cache_key)
+        if cached and cached.get('etag'):  # Use etag field to store channel_id
+            self._channel_cache[channel_url] = cached['etag']
+            return cached['etag']
+        
         # Extract channel identifier from URL
         parsed = urlparse(channel_url)
         path = parsed.path.strip('/')
@@ -52,27 +147,34 @@ class YouTubeAPILister:
         elif path.startswith('@'):
             # Handle URL: youtube.com/@username
             username = path[1:]  # Remove @
-            return self._get_channel_id_by_handle(username)
+            channel_id = self._get_channel_id_by_handle(username)
         elif '/@' in channel_url:
             # Handle URL: youtube.com/@username
             username = channel_url.split('/@')[-1]
-            return self._get_channel_id_by_handle(username)
+            channel_id = self._get_channel_id_by_handle(username)
         else:
             # Legacy username: youtube.com/user/username
             username = path.split('/')[-1]
-            return self._get_channel_id_by_username(username)
+            channel_id = self._get_channel_id_by_username(username)
+        
+        # Cache the resolved channel ID
+        self._channel_cache[channel_url] = channel_id
+        self._set_cache_value(cache_key, channel_id)
+        return channel_id
     
     def _get_channel_id_by_handle(self, handle: str) -> str:
         """Get channel ID from @handle"""
-        try:
-            # Search for channel by handle
+        def make_request():
             request = self.youtube.search().list(
                 part='snippet',
                 q=f'@{handle}',
                 type='channel',
                 maxResults=1
             )
-            response = request.execute()
+            return request.execute()
+        
+        try:
+            response = self._make_api_request(make_request)
             
             if response['items']:
                 return response['items'][0]['snippet']['channelId']
@@ -84,12 +186,15 @@ class YouTubeAPILister:
     
     def _get_channel_id_by_username(self, username: str) -> str:
         """Get channel ID from legacy username"""
-        try:
+        def make_request():
             request = self.youtube.channels().list(
                 part='id',
                 forUsername=username
             )
-            response = request.execute()
+            return request.execute()
+        
+        try:
+            response = self._make_api_request(make_request)
             
             if response['items']:
                 return response['items'][0]['id']
@@ -101,15 +206,17 @@ class YouTubeAPILister:
     
     def _get_channel_id_by_custom_url(self, custom_name: str) -> str:
         """Get channel ID from custom URL name"""
-        try:
-            # Search for channel by custom name
+        def make_request():
             request = self.youtube.search().list(
                 part='snippet',
                 q=custom_name,
                 type='channel',
                 maxResults=5
             )
-            response = request.execute()
+            return request.execute()
+        
+        try:
+            response = self._make_api_request(make_request)
             
             # Look for exact match
             for item in response['items']:
@@ -127,18 +234,29 @@ class YouTubeAPILister:
             raise
     
     def _get_uploads_playlist_id(self, channel_id: str) -> str:
-        """Get the uploads playlist ID for a channel"""
-        try:
+        """Get the uploads playlist ID for a channel with caching"""
+        cache_key = f"uploads_playlist_{channel_id}"
+        cached = self._get_cache_value(cache_key)
+        if cached and cached.get('etag'):
+            return cached['etag']
+        
+        def make_request():
             request = self.youtube.channels().list(
                 part='contentDetails',
                 id=channel_id
             )
-            response = request.execute()
+            return request.execute()
+        
+        try:
+            response = self._make_api_request(make_request)
             
             if not response['items']:
                 raise ValueError(f"Channel not found: {channel_id}")
             
             uploads_playlist = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            
+            # Cache the uploads playlist ID
+            self._set_cache_value(cache_key, uploads_playlist)
             return uploads_playlist
         except HttpError as e:
             logger.error(f"API error getting uploads playlist: {e}")
@@ -178,7 +296,7 @@ class YouTubeAPILister:
                     'published_at': datetime.fromisoformat(
                         snippet['publishedAt'].replace('Z', '+00:00')
                     ),
-                    'duration_s': self._parse_duration(content_details['duration']),
+                    'duration_s': self._parse_duration(content_details.get('duration', 'PT0S')),
                     'view_count': int(statistics.get('viewCount', 0)),
                     'like_count': int(statistics.get('likeCount', 0)),
                     'description': snippet.get('description', ''),
@@ -191,24 +309,30 @@ class YouTubeAPILister:
             logger.error(f"API error fetching video details: {e}")
             return {}
     
-    def _list_playlist_videos(self, playlist_id: str, max_results: Optional[int] = None) -> Iterator[str]:
-        """Generate video IDs from a playlist"""
+    def _list_playlist_videos(self, playlist_id: str, max_results: Optional[int] = None, since_published: Optional[datetime] = None) -> Iterator[str]:
+        """Generate video IDs from a playlist with optional date filtering"""
         next_page_token = None
         total_fetched = 0
         
         while True:
-            try:
+            def make_request():
                 request = self.youtube.playlistItems().list(
                     part='contentDetails',
                     playlistId=playlist_id,
                     maxResults=min(50, max_results - total_fetched if max_results else 50),
                     pageToken=next_page_token
                 )
-                response = request.execute()
+                return request.execute()
+            
+            try:
+                response = self._make_api_request(make_request)
                 
                 # Extract video IDs
                 for item in response['items']:
                     video_id = item['contentDetails']['videoId']
+                    
+                    # If we have a since_published filter, we need to check the video's publish date
+                    # This requires a separate API call, so we'll do it in batches later
                     yield video_id
                     total_fetched += 1
                     
@@ -228,7 +352,8 @@ class YouTubeAPILister:
         self, 
         channel_url: str, 
         max_results: Optional[int] = None,
-        newest_first: bool = True
+        newest_first: bool = True,
+        since_published: Optional[datetime] = None
     ) -> List[VideoInfo]:
         """List all videos from a YouTube channel"""
         logger.info(f"Listing videos from channel: {channel_url}")
@@ -242,7 +367,7 @@ class YouTubeAPILister:
         logger.info(f"Uploads playlist ID: {uploads_playlist_id}")
         
         # Collect video IDs
-        video_ids = list(self._list_playlist_videos(uploads_playlist_id, max_results))
+        video_ids = list(self._list_playlist_videos(uploads_playlist_id, max_results, since_published))
         logger.info(f"Found {len(video_ids)} video IDs")
         
         # Fetch video details in batches
@@ -256,6 +381,11 @@ class YouTubeAPILister:
             for video_id in batch_ids:
                 if video_id in details:
                     detail = details[video_id]
+                    
+                    # Apply since_published filter if specified
+                    if since_published and detail['published_at'] < since_published:
+                        continue
+                    
                     video = VideoInfo(
                         video_id=video_id,
                         title=detail['title'],
