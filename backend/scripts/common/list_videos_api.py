@@ -279,7 +279,7 @@ class YouTubeAPILister:
         try:
             # YouTube API allows up to 50 video IDs per request
             request = self.youtube.videos().list(
-                part='snippet,contentDetails,statistics',
+                part='snippet,contentDetails,statistics,liveStreamingDetails',
                 id=','.join(video_ids[:50])  # Limit to 50
             )
             response = request.execute()
@@ -290,6 +290,26 @@ class YouTubeAPILister:
                 snippet = item['snippet']
                 content_details = item['contentDetails']
                 statistics = item.get('statistics', {})
+                live_streaming_details = item.get('liveStreamingDetails', {})
+                
+                # Detect live stream status
+                is_live = False
+                is_upcoming = False
+                if live_streaming_details:
+                    is_live = 'actualStartTime' in live_streaming_details and 'actualEndTime' not in live_streaming_details
+                    is_upcoming = 'scheduledStartTime' in live_streaming_details and 'actualStartTime' not in live_streaming_details
+                
+                # Detect members-only content
+                is_members_only = False
+                if 'membershipRequired' in content_details:
+                    is_members_only = content_details['membershipRequired']
+                # Also check title and description for common indicators
+                title_lower = snippet['title'].lower()
+                desc_lower = snippet.get('description', '').lower()
+                if '[members only]' in title_lower or '(members only)' in title_lower or \
+                   '[members only]' in desc_lower or '(members only)' in desc_lower or \
+                   'exclusive to members' in desc_lower or 'member exclusive' in title_lower:
+                    is_members_only = True
                 
                 details[video_id] = {
                     'title': snippet['title'],
@@ -301,7 +321,10 @@ class YouTubeAPILister:
                     'like_count': int(statistics.get('likeCount', 0)),
                     'description': snippet.get('description', ''),
                     'tags': snippet.get('tags', []),
-                    'category_id': snippet.get('categoryId')
+                    'category_id': snippet.get('categoryId'),
+                    'is_live': is_live,
+                    'is_upcoming': is_upcoming,
+                    'is_members_only': is_members_only
                 }
             
             return details
@@ -353,7 +376,10 @@ class YouTubeAPILister:
         channel_url: str, 
         max_results: Optional[int] = None,
         newest_first: bool = True,
-        since_published: Optional[datetime] = None
+        since_published: Optional[datetime] = None,
+        skip_live: bool = True,
+        skip_upcoming: bool = True,
+        skip_members_only: bool = True
     ) -> List[VideoInfo]:
         """List all videos from a YouTube channel"""
         logger.info(f"Listing videos from channel: {channel_url}")
@@ -384,6 +410,19 @@ class YouTubeAPILister:
                     
                     # Apply since_published filter if specified
                     if since_published and detail['published_at'] < since_published:
+                        continue
+                    
+                    # Apply content type filters
+                    if skip_live and detail.get('is_live', False):
+                        logger.info(f"Skipping live stream: {video_id} - {detail['title']}")
+                        continue
+                        
+                    if skip_upcoming and detail.get('is_upcoming', False):
+                        logger.info(f"Skipping upcoming stream: {video_id} - {detail['title']}")
+                        continue
+                        
+                    if skip_members_only and detail.get('is_members_only', False):
+                        logger.info(f"Skipping members-only content: {video_id} - {detail['title']}")
                         continue
                     
                     video = VideoInfo(

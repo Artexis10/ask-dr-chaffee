@@ -70,6 +70,11 @@ class IngestionConfig:
     cleanup_audio: bool = True
     since_published: Optional[str] = None  # ISO8601 or YYYY-MM-DD format
     
+    # Content filtering
+    skip_live: bool = True
+    skip_upcoming: bool = True
+    skip_members_only: bool = True
+    
     # Database
     db_url: str = None
     
@@ -200,7 +205,10 @@ class EnhancedYouTubeIngester:
                     self.config.channel_url,
                     max_results=self.config.limit,
                     newest_first=self.config.newest_first,
-                    since_published=since_published
+                    since_published=since_published,
+                    skip_live=self.config.skip_live,
+                    skip_upcoming=self.config.skip_upcoming,
+                    skip_members_only=self.config.skip_members_only
                 )
             else:
                 videos = self.video_lister.list_channel_videos(
@@ -481,6 +489,14 @@ Examples:
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be processed without writing to DB')
     
+    # Content filtering options
+    parser.add_argument('--include-live', action='store_false', dest='skip_live',
+                       help='Include live streams (skipped by default)')
+    parser.add_argument('--include-upcoming', action='store_false', dest='skip_upcoming',
+                       help='Include upcoming streams (skipped by default)')
+    parser.add_argument('--include-members-only', action='store_false', dest='skip_members_only',
+                       help='Include members-only content (skipped by default)')
+    
     # Whisper configuration
     parser.add_argument('--whisper-model', default='small.en',
                        choices=['tiny.en', 'base.en', 'small.en', 'medium.en', 'large-v3'],
@@ -534,7 +550,11 @@ Examples:
         max_duration=args.max_duration,
         force_whisper=args.force_whisper,
         db_url=args.db_url,
-        youtube_api_key=args.youtube_api_key
+        youtube_api_key=args.youtube_api_key,
+        # Content filtering options
+        skip_live=args.skip_live,
+        skip_upcoming=args.skip_upcoming,
+        skip_members_only=args.skip_members_only
     )
     
     return config

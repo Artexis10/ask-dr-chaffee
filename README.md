@@ -175,19 +175,36 @@ ask-dr-chaffee/
 
 ### Ingestion Strategies
 
-**yt-dlp Method (Default)**
+**yt-dlp Method**
 - ✅ No API key required
 - ✅ Works with any YouTube channel
 - ✅ Robust scraping approach
 - ❌ Slower metadata collection
 - ❌ Limited to public data
 
-**YouTube Data API Method**
+**YouTube Data API Method (Default)**
 - ✅ Rich metadata (view counts, exact timestamps)
 - ✅ Faster bulk operations
 - ✅ Official Google API
+- ✅ Content filtering capabilities
 - ❌ Requires API key setup
 - ❌ API quota limitations
+
+### Content Filtering
+
+By default, the ingestion pipeline filters out certain types of content:
+
+- **Live Streams**: Currently streaming videos are skipped
+- **Upcoming Streams**: Scheduled but not yet live videos are skipped
+- **Members-Only Content**: Videos restricted to channel members are skipped
+- **Shorts**: Videos shorter than 120 seconds are skipped (with `--skip-shorts` flag)
+
+You can include these content types with the following flags:
+
+- `--include-live`: Include live streams
+- `--include-upcoming`: Include upcoming streams
+- `--include-members-only`: Include members-only content
+- `--no-skip-shorts`: Include short videos
 
 ### Search Features
 - **Basic Search**: Type any query to find relevant transcript segments
@@ -292,6 +309,7 @@ Set-Location backend
 python scripts/ingest_youtube_enhanced.py --source api --concurrency 4 --newest-first --skip-shorts   # Full channel
 python scripts/ingest_youtube_enhanced.py --source api --limit 10 --newest-first --skip-shorts         # Development mode
 python scripts/ingest_youtube_enhanced.py --source api --since-published 2024-01-01                    # Date filtering
+python scripts/ingest_youtube_enhanced.py --include-live --include-upcoming                           # Include live/upcoming streams
 python scripts/ingest_youtube_enhanced.py --source yt-dlp --concurrency 4 --newest-first              # yt-dlp fallback
 
 # Testing & Validation  
@@ -324,6 +342,9 @@ python backend/scripts/ingest_youtube_enhanced.py --source api --limit 50 --skip
 
 # Date-filtered ingestion
 python backend/scripts/ingest_youtube_enhanced.py --since-published 2024-01-01
+
+# Content filtering options (live streams, upcoming streams, and members-only are skipped by default)
+python backend/scripts/ingest_youtube_enhanced.py --include-live --include-upcoming --include-members-only
 
 # Use yt-dlp fallback
 python backend/scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 50
