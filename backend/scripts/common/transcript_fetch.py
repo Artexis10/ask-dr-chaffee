@@ -19,6 +19,8 @@ try:
     from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
     YOUTUBE_DATA_API_AVAILABLE = True
 except ImportError:
+    logger = logging.getLogger(__name__)
+    logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
     YOUTUBE_DATA_API_AVAILABLE = False
 
 try:
@@ -101,20 +103,26 @@ class TranscriptFetcher:
         
         logger.debug(f"Fetching YouTube transcript for {video_id}")
         
-        # Try YouTube Data API first if available
-        api_client = self._get_api_client()
-        if api_client:
-            try:
-                logger.info(f"Attempting to fetch transcript via YouTube Data API for {video_id}")
-                segments = api_client.get_transcript_segments(video_id, language_code=languages[0])
-                if segments:
-                    logger.info(f"Successfully fetched transcript via YouTube Data API for {video_id}")
-                    return segments
-                logger.info(f"No transcript found via YouTube Data API for {video_id}, falling back to transcript API")
-            except Exception as e:
-                logger.warning(f"Error fetching transcript via YouTube Data API: {e}, falling back to transcript API")
+        # ALWAYS try YouTube Data API first if API key is provided
+        if self.api_key:
+            api_client = self._get_api_client()
+            if api_client:
+                try:
+                    logger.info(f"Fetching transcript via YouTube Data API for {video_id}")
+                    segments = api_client.get_transcript_segments(video_id, language_code=languages[0])
+                    if segments:
+                        logger.info(f"Successfully fetched transcript via YouTube Data API for {video_id}")
+                        return segments
+                    logger.info(f"No transcript found via YouTube Data API for {video_id}")
+                except Exception as e:
+                    logger.warning(f"Error fetching transcript via YouTube Data API: {e}")
+            else:
+                logger.warning(f"YouTube Data API client initialization failed despite having API key")
+        else:
+            logger.warning(f"No YouTube API key provided - cannot use YouTube Data API")
         
-        # Fall back to YouTube Transcript API
+        # Only fall back to YouTube Transcript API if Data API failed or is unavailable
+        logger.info(f"Falling back to YouTube Transcript API for {video_id}")
         try:
             # Create API instance with proxy support if configured
             api = YouTubeTranscriptApi()
