@@ -294,6 +294,9 @@ nvm use                # Use Node.js version from .nvmrc
 ```
 
 #### **Windows 11 (PowerShell)**
+
+> **Note**: For easier use, load the PowerShell functions with `. .\scripts.ps1` and use the commands below.
+
 ```powershell
 # Setup
 copy .env.example .env                          # Create environment file
@@ -304,6 +307,30 @@ docker-compose up -d                           # Start PostgreSQL
 docker-compose down                            # Stop PostgreSQL
 docker-compose down -v; docker-compose up -d  # Reset database
 
+# Using scripts.ps1 (recommended)
+. .\scripts.ps1                               # Load all functions
+Start-Database                                # Start PostgreSQL
+Start-YouTubeSeed                             # Ingest 10 videos
+Get-IngestionStatus                           # Check status
+
+# Batch Processing (Production Scale)
+Start-BatchIngestion -BatchSize 50 -BatchDelay 60 -Concurrency 4 -SkipShorts  # Process in batches
+Resume-BatchIngestion                         # Resume interrupted batch
+Get-BatchStatus                               # Check batch progress
+
+# Monitoring & Optimization
+Get-IngestionMetrics                          # Show detailed metrics
+Get-ApiQuota                                  # Check API quota usage
+Get-MonitoringReport                          # Generate full report
+Optimize-Database                             # Run all optimizations
+Vacuum-Database                               # Reclaim storage space
+Reindex-Database                              # Rebuild indexes
+
+# Testing
+Test-LargeBatch                               # Test with 20 videos
+Test-FullBatch                                # Test with 100 videos
+
+# Manual Commands (without scripts.ps1)
 # Ingestion (Enhanced Pipeline - API Default)
 Set-Location backend
 python scripts/ingest_youtube_enhanced.py --source api --concurrency 4 --newest-first --skip-shorts   # Full channel
@@ -359,6 +386,33 @@ python backend/scripts/ingest_youtube_enhanced.py --force-whisper --whisper-mode
 python backend/scripts/ingest_youtube_enhanced.py --dry-run --limit 10
 ```
 
+### Windows: Install FFmpeg
+This project requires FFmpeg for audio extraction and Whisper transcription.
+
+On Windows 11, the simplest way is with **winget** (built-in):
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+### Windows: Using PowerShell Script
+
+For easier management on Windows 11, use the included PowerShell script:
+
+```powershell
+# Load all functions
+. .\scripts.ps1
+
+# Show all available commands
+Show-Help
+
+# Common workflow
+Start-Database                # Start PostgreSQL
+Start-BatchIngestion          # Process videos in batches
+Get-BatchStatus               # Monitor progress
+Get-IngestionMetrics         # View detailed metrics
+```
+
 ### Pipeline Stages
 1. **Video Discovery**: List all videos from channel
 2. **Transcript Fetching**: Try YouTube captions → fallback to Whisper
@@ -370,8 +424,9 @@ python backend/scripts/ingest_youtube_enhanced.py --dry-run --limit 10
 ### Error Recovery
 - **Automatic Retries**: Failed videos retry up to 3 times
 - **Resume Capability**: Restart ingestion without losing progress
-- **Status Tracking**: Monitor pipeline with `make ingestion-stats`
+- **Status Tracking**: Monitor pipeline with `make ingestion-stats` or `Get-IngestionStatus` (Windows)
 - **Selective Processing**: Skip completed videos automatically
+- **Batch Checkpointing**: Resume from last checkpoint with `make batch-resume` or `Resume-BatchIngestion` (Windows)
 
 ## ⚠️ Important Notes
 

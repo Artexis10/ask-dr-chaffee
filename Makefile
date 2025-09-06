@@ -1,4 +1,4 @@
-.PHONY: dev setup ingest-youtube ingest-zoom stop clean install-frontend install-backend
+.PHONY: dev setup ingest-youtube ingest-zoom stop clean install-frontend install-backend batch-ingest batch-resume batch-status db-optimize db-vacuum db-reindex monitor-health monitor-metrics monitor-report test-large-batch
 
 # Development commands
 dev: setup
@@ -56,6 +56,23 @@ seed-youtube:
 	@echo "Seeding with recent videos..."
 	cd backend && python scripts/ingest_youtube_enhanced.py --source api --limit 10 --newest-first --skip-shorts
 
+# Production batch processing commands
+batch-ingest:
+	@echo "Starting batch ingestion of all videos..."
+	cd backend && python scripts/batch_ingestion.py --batch-size 50 --batch-delay 60 --concurrency 4 --skip-shorts
+
+batch-resume:
+	@echo "Resuming batch ingestion with retry of failed videos..."
+	cd backend && python scripts/batch_ingestion.py --retry-failed --batch-size 50 --batch-delay 60 --concurrency 4 --skip-shorts
+
+batch-status:
+	@echo "=== BATCH INGESTION STATUS ==="
+	@if exist backend\ingestion_checkpoint.json (
+		@type backend\ingestion_checkpoint.json
+	) else (
+		@echo "No checkpoint file found"
+	)
+
 backfill-youtube-fallback:
 	@echo "Backfilling using yt-dlp fallback..."
 	@if not exist backend\data mkdir backend\data
@@ -66,6 +83,40 @@ backfill-youtube-fallback:
 ingest-status:
 	@echo "=== INGESTION STATUS REPORT ==="
 	@cd backend && python -c "from scripts.common.database_upsert import DatabaseUpserter; import os; db = DatabaseUpserter(os.getenv('DATABASE_URL')); stats = db.get_ingestion_stats(); print(f\"Total videos: {stats['total_videos']}\"); print(f\"Total sources: {stats['total_sources']}\"); print(f\"Total chunks: {stats['total_chunks']}\"); print(f\"\\nStatus breakdown:\"); [print(f\"  {k}: {v}\") for k, v in stats['status_counts'].items()]; print(f\"\\nTop errors:\") if stats['error_summary'] else None; [print(f\"  {k}: {v}\") for k, v in stats['error_summary'].items()]"
+
+# Database optimization commands
+db-optimize:
+	@echo "=== OPTIMIZING DATABASE FOR PRODUCTION ==="
+	cd backend && python scripts/common/db_optimization.py --all
+
+db-vacuum:
+	@echo "=== VACUUMING DATABASE TABLES ==="
+	cd backend && python scripts/common/db_optimization.py --vacuum
+
+db-reindex:
+	@echo "=== REBUILDING DATABASE INDEXES ==="
+	cd backend && python scripts/common/db_optimization.py --reindex --rebuild-vector-index
+
+# Monitoring commands
+monitor-health:
+	@echo "=== CHECKING DATABASE HEALTH ==="
+	cd backend && python scripts/common/monitoring.py --health-check
+
+monitor-metrics:
+	@echo "=== INGESTION METRICS ==="
+	cd backend && python scripts/common/monitoring.py --metrics
+
+monitor-quota:
+	@echo "=== CHECKING API QUOTA ==="
+	cd backend && python scripts/common/monitoring.py --quota
+
+monitor-report:
+	@echo "=== GENERATING FULL MONITORING REPORT ==="
+	cd backend && python scripts/common/monitoring.py --report
+
+monitor-alerts:
+	@echo "=== CHECKING FOR ALERT CONDITIONS ==="
+	cd backend && python scripts/common/monitoring.py --alerts
 
 ingest-errors:
 	@echo "=== INGESTION ERRORS ==="
@@ -90,6 +141,14 @@ list-youtube-api:
 test-ingestion:
 	@echo "Testing ingestion pipeline (dry run)..."
 	cd backend && python scripts/ingest_youtube_enhanced.py --source api --limit 5 --dry-run
+
+test-large-batch:
+	@echo "Testing large-scale batch ingestion..."
+	cd backend && python scripts/test_large_batch.py --test-size 20 --batch-size 5 --concurrency 4 --skip-shorts
+
+test-full-batch:
+	@echo "Testing full production-scale batch ingestion..."
+	cd backend && python scripts/test_large_batch.py --test-size 100 --batch-size 20 --concurrency 4 --skip-shorts
 
 validate-transcripts:
 	@echo "Validating transcript fetching..."
@@ -124,6 +183,21 @@ help:
 	@echo "  sync-youtube     - Sync recent videos (25 latest)"
 	@echo "  seed-youtube     - Quick seed with 10 videos"
 	@echo "  backfill-youtube - Full channel backfill using API"
+	@echo "  batch-ingest     - Production batch ingestion of all videos"
+	@echo "  batch-resume     - Resume batch ingestion with retry of failed videos"
+	@echo "  batch-status     - Show batch ingestion checkpoint status"
+	@echo "  ingest-status    - Show ingestion statistics"
+	@echo "  ingest-errors    - Show ingestion errors"
+	@echo "  db-optimize      - Run all database optimizations for production"
+	@echo "  db-vacuum        - Vacuum database tables to reclaim space"
+	@echo "  db-reindex       - Rebuild database indexes for performance"
+	@echo "  monitor-health   - Check database health status"
+	@echo "  monitor-metrics  - Show ingestion pipeline metrics"
+	@echo "  monitor-quota    - Check YouTube API quota usage"
+	@echo "  monitor-report   - Generate full monitoring report"
+	@echo "  monitor-alerts   - Check for alert conditions"
+	@echo "  test-large-batch - Test ingestion with 20 videos"
+	@echo "  test-full-batch  - Test ingestion with 100 videos"
 	@echo "  ingest-zoom      - Run Zoom transcript ingestion"
 	@echo "  db-up           - Start database only"
 	@echo "  db-down         - Stop database"
