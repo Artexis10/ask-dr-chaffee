@@ -1,6 +1,12 @@
 # YouTube Data API OAuth2 Setup Guide
 
-This guide explains how to set up OAuth2 authentication for the YouTube Data API to access captions/transcripts.
+**IMPORTANT**: The YouTube Data API captions endpoint only works for videos you own, not third-party videos. This implementation is kept for potential future use with owned content.
+
+For third-party video transcripts (like Dr. Chaffee's videos), the system uses:
+1. YouTube Transcript API (third-party library)
+2. Whisper transcription as fallback
+
+This guide explains OAuth2 setup for completeness, but it's not required for the current use case.
 
 ## Option 1: Service Account (Recommended for Production)
 
