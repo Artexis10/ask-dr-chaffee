@@ -42,3 +42,13 @@ repos:
       - id: check-json
         exclude: ^frontend/package-lock\.json$
       - id: check-merge-conflict
+      - id: detect-private-key
+      
+  # Custom secret detection
+  - repo: local
+    hooks:
+      - id: detect-secrets
+        name: Detect secrets and API keys
+        entry: python .pre-commit-hooks/detect-secrets.py
+        language: system
+        pass_filenames: false
