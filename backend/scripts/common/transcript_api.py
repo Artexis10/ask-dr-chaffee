@@ -10,8 +10,16 @@ import base64
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 
-# Import common transcript definitions
-from .transcript_common import TranscriptSegment
+# Handle imports differently when run as script vs module
+if __name__ == '__main__':
+    # When run as script, use absolute imports
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from backend.scripts.common.transcript_common import TranscriptSegment
+else:
+    # When imported as module, use relative imports
+    from .transcript_common import TranscriptSegment
 
 try:
     from googleapiclient.discovery import build

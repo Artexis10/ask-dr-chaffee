@@ -13,19 +13,31 @@ from typing import List, Dict, Any, Optional, Tuple
 # Initialize logger first to avoid reference before assignment
 logger = logging.getLogger(__name__)
 
-# Import common transcript definitions
-from .transcript_common import TranscriptSegment
-
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
-# Import API-based transcript fetcher if available
-try:
-    from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
-    YOUTUBE_DATA_API_AVAILABLE = True
-except ImportError:
-    logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
-    YOUTUBE_DATA_API_AVAILABLE = False
+# Handle imports differently when run as script vs module
+if __name__ == '__main__':
+    # When run as script, use absolute imports
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from backend.scripts.common.transcript_common import TranscriptSegment
+    try:
+        from backend.scripts.common.transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
+        YOUTUBE_DATA_API_AVAILABLE = True
+    except ImportError:
+        logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
+        YOUTUBE_DATA_API_AVAILABLE = False
+else:
+    # When imported as module, use relative imports
+    from .transcript_common import TranscriptSegment
+    try:
+        from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
+        YOUTUBE_DATA_API_AVAILABLE = True
+    except ImportError:
+        logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
+        YOUTUBE_DATA_API_AVAILABLE = False
 
 try:
     import faster_whisper
