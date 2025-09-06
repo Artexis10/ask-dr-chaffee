@@ -9,7 +9,9 @@ import json
 import base64
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+
+# Import common transcript definitions
+from .transcript_common import TranscriptSegment
 
 try:
     from googleapiclient.discovery import build
@@ -17,14 +19,6 @@ try:
     GOOGLE_API_AVAILABLE = True
 except ImportError:
     GOOGLE_API_AVAILABLE = False
-
-# Define TranscriptSegment class here to avoid circular import
-@dataclass
-class TranscriptSegment:
-    """Normalized transcript segment"""
-    start: float
-    end: float  
-    text: str
 
 logger = logging.getLogger(__name__)
 

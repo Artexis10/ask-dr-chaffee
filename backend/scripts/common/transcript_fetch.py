@@ -9,17 +9,19 @@ import subprocess
 import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass
 
 # Initialize logger first to avoid reference before assignment
 logger = logging.getLogger(__name__)
+
+# Import common transcript definitions
+from .transcript_common import TranscriptSegment
 
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
 # Import API-based transcript fetcher if available
 try:
-    from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI, TranscriptSegment as APITranscriptSegment
+    from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
     YOUTUBE_DATA_API_AVAILABLE = True
 except ImportError:
     logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
@@ -30,39 +32,6 @@ try:
     WHISPER_AVAILABLE = True
 except ImportError:
     WHISPER_AVAILABLE = False
-
-@dataclass
-class TranscriptSegment:
-    """Normalized transcript segment"""
-    start: float
-    end: float  
-    text: str
-    
-    @classmethod
-    def from_youtube_transcript(cls, data) -> 'TranscriptSegment':
-        """Create from YouTube transcript API format (FetchedTranscriptSnippet or dict)"""
-        # Handle both dict format and FetchedTranscriptSnippet object
-        if hasattr(data, 'start'):
-            return cls(
-                start=data.start,
-                end=data.start + data.duration,
-                text=data.text.strip()
-            )
-        else:
-            return cls(
-                start=data['start'],
-                end=data['start'] + data['duration'],
-                text=data['text'].strip()
-            )
-    
-    @classmethod
-    def from_whisper_segment(cls, segment) -> 'TranscriptSegment':
-        """Create from Whisper segment object"""
-        return cls(
-            start=segment.start,
-            end=segment.end,
-            text=segment.text.strip()
-        )
 
 class TranscriptFetcher:
     """Fetch transcripts with multiple fallback strategies"""
