@@ -119,38 +119,97 @@ class TranscriptFetcher:
             # Create API instance with proxy support if configured
             api = YouTubeTranscriptApi()
             
-            # Try to fetch transcript with preferred languages
+            # Add proxy support if configured
             if self.proxies:
-                # Use proxy if provided
-                import requests
-                from youtube_transcript_api.formatters import JSONFormatter
+                logger.info(f"Using proxy for YouTube Transcript API: {self.proxies}")
                 
-                # Create a session with proxies
-                session = requests.Session()
-                session.proxies.update(self.proxies)
-                
-                # Use the session to fetch the transcript
                 try:
-                    # First try with proxies
-                    fetched_transcript = api.fetch(video_id, languages=languages, proxies=self.proxies)
+                    # Handle different proxy formats
+                    proxy_dict = self.proxies
+                    if isinstance(self.proxies, str):
+                        # Convert string proxy to dict format
+                        proxy_dict = {
+                            'http': self.proxies,
+                            'https': self.proxies
+                        }
+                    
+                    # Monkey patch requests for youtube_transcript_api
+                    import youtube_transcript_api._api
+                    original_get = youtube_transcript_api._api.requests.get
+                    
+                    def proxied_get(*args, **kwargs):
+                        kwargs['proxies'] = proxy_dict
+                        kwargs['timeout'] = 30  # Add timeout for proxy requests
+                        return original_get(*args, **kwargs)
+                    
+                    youtube_transcript_api._api.requests.get = proxied_get
+                    
+                    # Get transcript with proxy
+                    transcript_list = api.list_transcripts(video_id)
+                    transcript = None
+                    
+                    # Try preferred languages
+                    for lang in languages:
+                        try:
+                            transcript = transcript_list.find_transcript([lang])
+                            break
+                        except:
+                            continue
+                    
+                    if not transcript:
+                        transcript = transcript_list.find_generated_transcript(['en'])
+                    
+                    if transcript:
+                        transcript_data = transcript.fetch()
+                        segments = [TranscriptSegment.from_youtube_transcript(item) for item in transcript_data]
+                        # Filter out non-verbal content
+                        segments = [seg for seg in segments if not any(marker in seg.text.lower() for marker in ['[music]', '[applause]', '[laughter]'])]
+                        
+                        # Restore original function
+                        youtube_transcript_api._api.requests.get = original_get
+                        
+                        logger.info(f"Successfully fetched transcript with proxy for {video_id} ({len(segments)} segments)")
+                        return segments
+                    
+                    # Restore original function
+                    youtube_transcript_api._api.requests.get = original_get
+                    
                 except Exception as e:
-                    logger.warning(f"Failed to fetch with proxies: {e}, trying without proxies")
-                    fetched_transcript = api.fetch(video_id, languages=languages)
+                    logger.warning(f"Proxy-based transcript fetch failed: {e}")
+                    # Restore original function in case of error
+                    try:
+                        youtube_transcript_api._api.requests.get = original_get
+                    except:
+                        pass
+                    # Continue without proxy   
             else:
                 # Standard fetch without proxies
-                fetched_transcript = api.fetch(video_id, languages=languages)
+                transcript_list = api.list_transcripts(video_id)
+                transcript = None
                 
-            logger.debug(f"Found transcript for {video_id}")
+                # Try preferred languages
+                for lang in languages:
+                    try:
+                        transcript = transcript_list.find_transcript([lang])
+                        break
+                    except:
+                        continue
+                
+                if not transcript:
+                    transcript = transcript_list.find_generated_transcript(['en'])
+                
+                if transcript:
+                    transcript_data = transcript.fetch()
+                    segments = [TranscriptSegment.from_youtube_transcript(item) for item in transcript_data]
+                    # Filter out non-verbal content
+                    segments = [seg for seg in segments if not any(marker in seg.text.lower() for marker in ['[music]', '[applause]', '[laughter]'])]
+                    
+                    logger.info(f"Successfully fetched transcript for {video_id} ({len(segments)} segments)")
+                    return segments
             
-            # Convert fetched transcript to our format
-            segments = []
-            for item in fetched_transcript:
-                segment = TranscriptSegment.from_youtube_transcript(item)
-                if segment.text and segment.text.strip() != '[Music]':  # Filter out music markers
-                    segments.append(segment)
-            
-            return segments
-            
+            logger.debug(f"YouTube transcript not available for {video_id}")
+            return None
+        
         except (TranscriptsDisabled, VideoUnavailable) as e:
             logger.debug(f"YouTube transcript not available for {video_id}: {e}")
             return None
@@ -158,59 +217,77 @@ class TranscriptFetcher:
             logger.warning(f"Error fetching YouTube transcript for {video_id}: {e}")
             return None
     
-    def download_audio(self, video_id: str, output_dir: Path = None) -> Optional[Path]:
-        """Download audio using yt-dlp"""
-        if output_dir is None:
-            output_dir = Path(tempfile.gettempdir())
-        
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / f"{video_id}.m4a"
-        
-        logger.debug(f"Downloading audio for {video_id}")
-        
-        cmd = [
-            self.yt_dlp_path,
-            "-x",  # Extract audio
-            "--audio-format", "m4a",
-            "--audio-quality", "0",  # Best quality
-            "-o", str(output_file.with_suffix('.%(ext)s')),
-            "--no-warnings"
-        ]
-        
-        # Add ffmpeg location if specified
-        if self.ffmpeg_path:
-            cmd.extend(["--ffmpeg-location", self.ffmpeg_path])
+    def fetch_whisper_transcript(self, video_id: str) -> Optional[List[TranscriptSegment]]:
+        """Fetch transcript using Whisper after downloading audio with yt-dlp"""
+        if not WHISPER_AVAILABLE:
+            logger.error("Whisper not available for transcription")
+            return None
             
-        # Add video URL
-        cmd.append(f"https://www.youtube.com/watch?v={video_id}")
+        logger.info(f"Downloading audio for Whisper transcription: {video_id}")
         
-        try:
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=600  # 10 minute timeout
-            )
+        # Download audio using yt-dlp
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / f"{video_id}.%(ext)s"
             
-            if result.returncode != 0:
-                logger.error(f"yt-dlp failed for {video_id}: {result.stderr}")
-                return None
+            cmd = [
+                self.yt_dlp_path,
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '0',  # Best quality
+                '--no-playlist',
+                '-o', str(output_path),
+                f'https://www.youtube.com/watch?v={video_id}'
+            ]
             
-            # Check if file was created
-            if output_file.exists():
-                logger.debug(f"Audio downloaded: {output_file}")
-                return output_file
-            else:
-                logger.error(f"Audio file not found after download: {output_file}")
-                return None
+            # Add ffmpeg path if specified
+            if self.ffmpeg_path:
+                cmd.extend(['--ffmpeg-location', self.ffmpeg_path])
+            
+            # Add proxy support for yt-dlp
+            if self.proxies:
+                # yt-dlp proxy format
+                if isinstance(self.proxies, dict):
+                    if 'http' in self.proxies:
+                        cmd.extend(['--proxy', self.proxies['http']])
+                    elif 'https' in self.proxies:
+                        cmd.extend(['--proxy', self.proxies['https']])
+                elif isinstance(self.proxies, str):
+                    cmd.extend(['--proxy', self.proxies])
                 
-        except subprocess.TimeoutExpired:
-            logger.error(f"Audio download timeout for {video_id}")
-            return None
-        except Exception as e:
-            logger.error(f"Error downloading audio for {video_id}: {e}")
-            return None
+                logger.info(f"Using proxy for yt-dlp: {self.proxies}")
+            
+            try:
+                logger.debug(f"Running yt-dlp command: {' '.join(cmd)}")
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=600  # 10 minute timeout
+                )
+                
+                if result.returncode != 0:
+                    logger.error(f"yt-dlp failed for {video_id}: {result.stderr}")
+                    return None
+                
+                # Find the downloaded audio file
+                audio_files = list(Path(temp_dir).glob(f"{video_id}.*"))
+                if not audio_files:
+                    logger.error(f"No audio file found after download for {video_id}")
+                    return None
+                
+                audio_file = audio_files[0]
+                logger.debug(f"Audio downloaded: {audio_file}")
+                
+                # Transcribe with Whisper
+                return self.transcribe_with_whisper(audio_file)
+                
+            except subprocess.TimeoutExpired:
+                logger.error(f"Audio download timeout for {video_id}")
+                return None
+            except Exception as e:
+                logger.error(f"Error downloading audio for {video_id}: {e}")
+                return None
     
     def transcribe_with_whisper(self, audio_path: Path) -> Optional[List[TranscriptSegment]]:
         """Transcribe audio using Whisper"""
