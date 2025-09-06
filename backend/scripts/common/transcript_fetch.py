@@ -19,7 +19,7 @@ from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFoun
 
 # Import API-based transcript fetcher if available
 try:
-    from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
+    from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI, TranscriptSegment as APITranscriptSegment
     YOUTUBE_DATA_API_AVAILABLE = True
 except ImportError:
     logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")

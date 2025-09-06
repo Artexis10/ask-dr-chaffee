@@ -18,7 +18,13 @@ try:
 except ImportError:
     GOOGLE_API_AVAILABLE = False
 
-from .transcript_fetch import TranscriptSegment
+# Define TranscriptSegment class here to avoid circular import
+@dataclass
+class TranscriptSegment:
+    """Normalized transcript segment"""
+    start: float
+    end: float  
+    text: str
 
 logger = logging.getLogger(__name__)
 
