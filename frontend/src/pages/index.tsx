@@ -5,6 +5,7 @@ import { FilterPills } from '../components/FilterPills';
 import { SearchResults } from '../components/SearchResults';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { Footer } from '../components/Footer';
+import { AnswerCard } from '../components/AnswerCard';
 import { SearchResult, VideoGroup } from '../types';
 
 export default function Home() {
@@ -20,6 +21,9 @@ export default function Home() {
   const [groupedResults, setGroupedResults] = useState<VideoGroup[]>([]);
   const [copySuccess, setCopySuccess] = useState('');
   const [showCopyNotification, setShowCopyNotification] = useState(false);
+  const [answerData, setAnswerData] = useState<any>(null);
+  const [answerLoading, setAnswerLoading] = useState(false);
+  const [answerError, setAnswerError] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const copyNotificationTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -85,6 +89,47 @@ export default function Home() {
     });
   }, []);
 
+  // Function to call answer API
+  const performAnswer = useCallback(async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
+    
+    setAnswerLoading(true);
+    setAnswerError('');
+    setAnswerData(null);
+    
+    try {
+      const params = new URLSearchParams({
+        q: searchQuery,
+        style: 'concise'
+      });
+      
+      console.log('Answer API call URL:', `/api/answer?${params}`);
+      
+      const response = await fetch(`/api/answer?${params}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Answer failed with status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Answer API response:', data);
+      
+      if (data.error) {
+        // Handle cases like "Not enough on-record context yet"
+        setAnswerError(data.error);
+      } else {
+        setAnswerData(data);
+      }
+      
+    } catch (err) {
+      console.error('Answer error:', err);
+      setAnswerError(err instanceof Error ? err.message : 'Failed to generate answer');
+    } finally {
+      setAnswerLoading(false);
+    }
+  }, []);
+
   // Function to perform search API call
   const performSearch = useCallback(async (searchQuery: string, currentSourceFilter: string, currentYearFilter: string) => {
     if (!searchQuery.trim()) return;
@@ -147,6 +192,8 @@ export default function Home() {
       setResults([]);
       setGroupedResults([]);
       setTotalResults(0);
+      setAnswerData(null);
+      setAnswerError('');
       return;
     }
 
@@ -154,19 +201,23 @@ export default function Home() {
     const debounceTimer = setTimeout(() => {
       console.log('Debounced search triggered for query:', query);
       const filters = currentFiltersRef.current;
+      
+      // Call both search and answer APIs in parallel
       performSearch(query, filters.sourceFilter, filters.yearFilter);
+      performAnswer(query);
     }, 300); // 300ms delay
 
     return () => {
       clearTimeout(debounceTimer);
     };
-  }, [query, performSearch]); // Only depend on query for debouncing
+  }, [query, performSearch, performAnswer]); // Only depend on query for debouncing
 
   // Function to handle search form submission
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     await performSearch(query, sourceFilter, yearFilter);
-  }, [query, sourceFilter, yearFilter, performSearch]);
+    await performAnswer(query);
+  }, [query, sourceFilter, yearFilter, performSearch, performAnswer]);
 
   // Function to highlight search terms in text
   const highlightSearchTerms = (text: string, query: string): string => {
@@ -272,10 +323,11 @@ export default function Home() {
     if (query.trim() && filtersChanged) {
       console.log('Filter change triggered immediate search');
       performSearch(query, sourceFilter, yearFilter);
+      performAnswer(query);
     }
     
     prevFilters.current = { sourceFilter, yearFilter };
-  }, [sourceFilter, yearFilter, query, performSearch]);
+  }, [sourceFilter, yearFilter, query, performSearch, performAnswer]);
 
   return (
     <>
@@ -314,6 +366,14 @@ export default function Home() {
             ⚠️ {error}
           </div>
         )}
+
+        <AnswerCard
+          answer={answerData}
+          loading={answerLoading}
+          error={answerError}
+          onPlayClip={(videoId, timestamp) => seekToTimestamp(videoId, timestamp)}
+          onCopyLink={copyTimestampLink}
+        />
 
         <SearchResults 
           results={results}

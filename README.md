@@ -215,6 +215,13 @@ You can include these content types with the following flags:
   - `Enter`: Play in embedded player
   - `Shift+Enter`: Open in YouTube
 
+### Answer Mode
+- **AI-Generated Answers**: Get concise answers based ONLY on Dr. Chaffee's recorded statements
+- **Inline Citations**: Every sentence includes clickable citation chips linking to specific timestamps
+- **Confidence Scoring**: Answers show confidence levels (High/Medium/Low) based on source quality and agreement
+- **Smart Caching**: Answers are cached for 14 days with refresh capability
+- **Source Transparency**: Expandable source list shows all referenced clips with timestamps
+
 ### Video Controls
 - **"Play Here" Button**: Seeks embedded player to exact timestamp
 - **"Copy Link" Button**: Copies timestamped YouTube URL to clipboard
@@ -244,6 +251,13 @@ CHUNK_DURATION_SECONDS=45   # Transcript chunk size
 DEFAULT_CONCURRENCY=4       # Concurrent workers
 SKIP_SHORTS=true            # Skip videos < 120 seconds
 NEWEST_FIRST=true           # Process newest videos first
+
+# Answer Mode Configuration
+ANSWER_ENABLED=true         # Enable AI answer generation
+ANSWER_TOPK=40             # Max chunks to consider for answers
+ANSWER_TTL_HOURS=336       # Cache TTL (14 days)
+SUMMARIZER_MODEL=gpt-3.5-turbo  # LLM model for answer generation
+ANSWER_STYLE_DEFAULT=concise     # Answer style (concise|detailed)
 ```
 
 ### Available Commands
@@ -359,6 +373,17 @@ python scripts/common/list_videos_api.py "https://www.youtube.com/@anthonychaffe
 - **Filter by Source**: Use source pills to focus on YouTube or Zoom content
 - **Filter by Year**: Use year dropdown to find recent or historical content
 - **Copy Links**: Use "Copy Link" to share specific moments with others
+
+### Answer Mode Usage
+- **Direct Questions**: Ask specific questions like "What does Dr. Chaffee say about seed oils?"
+- **Medical Topics**: Query about specific health conditions or dietary advice
+- **Citation Navigation**: Click citation chips like [clip 12:15] to jump to exact video moments
+- **Source Verification**: Expand "See sources" to review all referenced clips
+- **Cache Refresh**: Add `?refresh=1` to URL to bypass cache and get updated answers
+- **Confidence Levels**: 
+  - **High (80%+)**: Strong consensus across multiple recent clips
+  - **Medium (60-79%)**: Good evidence with some gaps or conflicts
+  - **Low (<60%)**: Limited or conflicting evidence
 
 ## 🔧 Advanced Usage
 
