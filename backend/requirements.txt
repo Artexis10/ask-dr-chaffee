@@ -4,9 +4,17 @@ python-dotenv==1.0.0
 numpy==1.24.3
 tqdm==4.66.1
 
+# Web API dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+aiofiles==23.2.1
+celery==5.3.4
+redis==5.0.1
+
 # YouTube transcript fetching
 youtube-transcript-api==0.6.1
-yt-dlp==2023.7.6
+yt-dlp>=2023.11.16  # Latest for better reliability
 
 # YouTube Data API
 google-api-python-client==2.108.0
@@ -22,13 +30,19 @@ transformers==4.33.2
 sentence-transformers[cross-encoder]==2.2.2
 
 # Audio transcription with Whisper
-faster-whisper==0.9.0
+faster-whisper>=1.0.0
+# Ensure CPU-only Torch for compatibility
+torch>=2.0.1,<2.3.0 --index-url https://download.pytorch.org/whl/cpu
+torchaudio>=2.0.1,<2.3.0 --index-url https://download.pytorch.org/whl/cpu
 
 # Date/time parsing
 isodate==0.6.1
 
 # Async/concurrent processing
 asyncio-throttle==1.0.2
+apscheduler==3.10.4
+aiohttp==3.9.1
+aiohttp-socks==0.8.4
 
 # Optional development tools
 black==23.9.1

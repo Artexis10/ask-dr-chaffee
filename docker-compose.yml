@@ -17,6 +17,52 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: askdrchaffee-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    container_name: askdrchaffee-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/askdrchaffee
+      - REDIS_URL=redis://redis:6379/0
+      - YT_DLP_PATH=yt-dlp
+      - FFMPEG_PATH=ffmpeg
+      - WHISPER_CACHE_DIR=/tmp/whisper_cache
+      - TEMP_AUDIO_DIR=/tmp/audio_downloads
+    volumes:
+      - whisper_cache:/tmp/whisper_cache
+      - audio_temp:/tmp/audio_downloads
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  whisper_cache:
+    driver: local
+  audio_temp:
     driver: local
