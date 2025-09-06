@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
+# Initialize logger first to avoid reference before assignment
+logger = logging.getLogger(__name__)
+
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
@@ -19,7 +22,6 @@ try:
     from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
     YOUTUBE_DATA_API_AVAILABLE = True
 except ImportError:
-    logger = logging.getLogger(__name__)
     logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
     YOUTUBE_DATA_API_AVAILABLE = False
 
@@ -28,8 +30,6 @@ try:
     WHISPER_AVAILABLE = True
 except ImportError:
     WHISPER_AVAILABLE = False
-
-logger = logging.getLogger(__name__)
 
 @dataclass
 class TranscriptSegment:
@@ -93,7 +93,16 @@ class TranscriptFetcher:
     def _get_api_client(self):
         """Get or create YouTube Data API client"""
         if self._api_client is None and self.api_key and YOUTUBE_DATA_API_AVAILABLE:
-            self._api_client = YouTubeDataAPI(self.api_key)
+            try:
+                self._api_client = YouTubeDataAPI(self.api_key)
+                logger.info(f"Successfully initialized YouTube Data API client")
+            except Exception as e:
+                logger.error(f"Failed to initialize YouTube Data API client: {e}")
+                return None
+        elif not YOUTUBE_DATA_API_AVAILABLE:
+            logger.warning("YouTube Data API module not available - cannot use API for transcripts")
+        elif not self.api_key:
+            logger.warning("No YouTube API key provided - cannot use API for transcripts")
         return self._api_client
     
     def fetch_youtube_transcript(self, video_id: str, languages: List[str] = None) -> Optional[List[TranscriptSegment]]:
