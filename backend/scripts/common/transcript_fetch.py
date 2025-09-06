@@ -48,13 +48,14 @@ except ImportError:
 class TranscriptFetcher:
     """Fetch transcripts with multiple fallback strategies"""
     
-    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = "small.en", ffmpeg_path: str = None, proxies: dict = None, api_key: str = None):
+    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = "small.en", ffmpeg_path: str = None, proxies: dict = None, api_key: str = None, credentials_path: str = None):
         self.yt_dlp_path = yt_dlp_path
         self.whisper_model = whisper_model
         self._whisper_model_cache = None
         self.ffmpeg_path = ffmpeg_path
         self.proxies = proxies
         self.api_key = api_key or os.getenv('YOUTUBE_API_KEY')
+        self.credentials_path = credentials_path or os.getenv('YOUTUBE_CREDENTIALS_PATH')
         self._api_client = None
     
     def _get_whisper_model(self):
@@ -73,17 +74,21 @@ class TranscriptFetcher:
     
     def _get_api_client(self):
         """Get or create YouTube Data API client"""
-        if self._api_client is None and self.api_key and YOUTUBE_DATA_API_AVAILABLE:
+        if self._api_client is None and YOUTUBE_DATA_API_AVAILABLE:
             try:
-                self._api_client = YouTubeDataAPI(self.api_key)
+                # Try OAuth2 first, then fall back to API key
+                self._api_client = YouTubeDataAPI(
+                    credentials_path=self.credentials_path,
+                    api_key=self.api_key
+                )
                 logger.info(f"Successfully initialized YouTube Data API client")
             except Exception as e:
                 logger.error(f"Failed to initialize YouTube Data API client: {e}")
                 return None
         elif not YOUTUBE_DATA_API_AVAILABLE:
             logger.warning("YouTube Data API module not available - cannot use API for transcripts")
-        elif not self.api_key:
-            logger.warning("No YouTube API key provided - cannot use API for transcripts")
+        elif not self.credentials_path and not self.api_key:
+            logger.warning("No YouTube credentials or API key provided - cannot use API for transcripts")
         return self._api_client
     
     def fetch_youtube_transcript(self, video_id: str, languages: List[str] = None) -> Optional[List[TranscriptSegment]]:
@@ -93,8 +98,8 @@ class TranscriptFetcher:
         
         logger.debug(f"Fetching YouTube transcript for {video_id}")
         
-        # ALWAYS try YouTube Data API first if API key is provided
-        if self.api_key:
+        # ALWAYS try YouTube Data API first if credentials are provided
+        if self.credentials_path or self.api_key:
             api_client = self._get_api_client()
             if api_client:
                 try:

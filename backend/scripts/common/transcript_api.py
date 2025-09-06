@@ -9,6 +9,7 @@ import json
 import base64
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
+from pathlib import Path
 
 # Handle imports differently when run as script vs module
 if __name__ == '__main__':
@@ -24,6 +25,11 @@ else:
 try:
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google.auth.exceptions import RefreshError
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.oauth2 import service_account
     GOOGLE_API_AVAILABLE = True
 except ImportError:
     GOOGLE_API_AVAILABLE = False
@@ -31,17 +37,83 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class YouTubeTranscriptAPI:
-    """Fetch transcripts using YouTube Data API v3"""
+    """Fetch transcripts using YouTube Data API v3 with OAuth2"""
     
-    def __init__(self, api_key: str):
+    # OAuth2 scopes needed for captions
+    SCOPES = ['https://www.googleapis.com/auth/youtube.force-ssl']
+    
+    def __init__(self, credentials_path: str = None, api_key: str = None):
         if not GOOGLE_API_AVAILABLE:
             raise ImportError(
                 "Google API client not available. Install with: "
-                "pip install google-api-python-client"
+                "pip install google-api-python-client google-auth-oauthlib google-auth-httplib2"
             )
         
+        self.credentials_path = credentials_path
         self.api_key = api_key
-        self.youtube = build('youtube', 'v3', developerKey=api_key)
+        self.youtube = self._build_service()
+    
+    def _build_service(self):
+        """Build YouTube service with appropriate authentication"""
+        creds = None
+        
+        # Try to use OAuth2 credentials if path provided
+        if self.credentials_path and os.path.exists(self.credentials_path):
+            try:
+                if self.credentials_path.endswith('.json'):
+                    # Check if it's a service account or client secrets file
+                    with open(self.credentials_path, 'r') as f:
+                        cred_data = json.load(f)
+                    
+                    if 'type' in cred_data and cred_data['type'] == 'service_account':
+                        # Service account credentials
+                        creds = service_account.Credentials.from_service_account_file(
+                            self.credentials_path, scopes=self.SCOPES
+                        )
+                        logger.info("Using service account authentication")
+                    else:
+                        # Client secrets - use installed app flow
+                        flow = InstalledAppFlow.from_client_secrets_file(
+                            self.credentials_path, self.SCOPES
+                        )
+                        creds = flow.run_local_server(port=0)
+                        logger.info("Using OAuth2 installed app authentication")
+                        
+                        # Save credentials for next run
+                        token_path = self.credentials_path.replace('.json', '_token.json')
+                        with open(token_path, 'w') as token:
+                            token.write(creds.to_json())
+                            
+            except Exception as e:
+                logger.warning(f"Failed to load OAuth2 credentials: {e}")
+        
+        # Try to load saved token
+        if not creds and self.credentials_path:
+            token_path = self.credentials_path.replace('.json', '_token.json')
+            if os.path.exists(token_path):
+                try:
+                    creds = Credentials.from_authorized_user_file(token_path, self.SCOPES)
+                    logger.info("Using saved OAuth2 token")
+                except Exception as e:
+                    logger.warning(f"Failed to load saved token: {e}")
+        
+        # Refresh credentials if needed
+        if creds and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                logger.info("Refreshed OAuth2 credentials")
+            except RefreshError as e:
+                logger.error(f"Failed to refresh credentials: {e}")
+                creds = None
+        
+        # Build service with credentials or fall back to API key
+        if creds and creds.valid:
+            return build('youtube', 'v3', credentials=creds)
+        elif self.api_key:
+            logger.warning("OAuth2 not available, falling back to API key (captions won't work)")
+            return build('youtube', 'v3', developerKey=self.api_key)
+        else:
+            raise ValueError("No valid credentials or API key provided")
     
     def list_captions(self, video_id: str) -> List[Dict[str, Any]]:
         """List available captions for a video"""

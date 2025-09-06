@@ -157,7 +157,8 @@ class EnhancedYouTubeIngester:
             whisper_model=config.whisper_model,
             ffmpeg_path=config.ffmpeg_path,
             proxies=proxies,
-            api_key=config.youtube_api_key
+            api_key=config.youtube_api_key,
+            credentials_path=os.getenv('YOUTUBE_CREDENTIALS_PATH')
         )
         self.embedder = EmbeddingGenerator()
         self.processor = TranscriptProcessor(
