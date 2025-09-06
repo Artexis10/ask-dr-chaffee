@@ -98,25 +98,21 @@ class TranscriptFetcher:
         
         logger.debug(f"Fetching YouTube transcript for {video_id}")
         
-        # Note: YouTube Data API captions endpoint only works for videos you own
-        # For third-party videos, we skip directly to YouTube Transcript API
-        # Keeping OAuth2 code for potential future use with owned videos
+        # Try YouTube Data API first if OAuth2 credentials available (requires channel permissions)
+        if self.credentials_path:
+            api_client = self._get_api_client()
+            if api_client:
+                try:
+                    logger.info(f"Fetching transcript via YouTube Data API for {video_id}")
+                    segments = api_client.get_transcript_segments(video_id, language_code=languages[0])
+                    if segments:
+                        logger.info(f"Successfully fetched transcript via YouTube Data API for {video_id}")
+                        return segments
+                    logger.info(f"No transcript found via YouTube Data API for {video_id}")
+                except Exception as e:
+                    logger.warning(f"Error fetching transcript via YouTube Data API: {e}")
         
-        # Skip YouTube Data API for now due to ownership requirement
-        # if self.credentials_path or self.api_key:
-        #     api_client = self._get_api_client()
-        #     if api_client:
-        #         try:
-        #             logger.info(f"Fetching transcript via YouTube Data API for {video_id}")
-        #             segments = api_client.get_transcript_segments(video_id, language_code=languages[0])
-        #             if segments:
-        #                 logger.info(f"Successfully fetched transcript via YouTube Data API for {video_id}")
-        #                 return segments
-        #             logger.info(f"No transcript found via YouTube Data API for {video_id}")
-        #         except Exception as e:
-        #             logger.warning(f"Error fetching transcript via YouTube Data API: {e}")
-        
-        logger.debug(f"Using YouTube Transcript API for third-party video {video_id}")
+        logger.debug(f"Using YouTube Transcript API as fallback for {video_id}")
         
         # Use YouTube Transcript API for third-party videos
         try:
