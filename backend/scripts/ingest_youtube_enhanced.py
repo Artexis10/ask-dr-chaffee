@@ -267,35 +267,65 @@ class EnhancedYouTubeIngester:
             # Initialize/update ingest state
             self.db.upsert_ingest_state(video_id, video, status='pending')
             
-            # Step 1: Fetch transcript
-            segments, method = self.transcript_fetcher.fetch_transcript(
+            # Step 1: Fetch transcript with enhanced metadata
+            segments, method, metadata = self.transcript_fetcher.fetch_transcript(
                 video_id,
                 max_duration_s=self.config.max_duration,
                 force_whisper=self.config.force_whisper,
-                cleanup_audio=self.config.cleanup_audio
+                cleanup_audio=self.config.cleanup_audio,
+                enable_silence_removal=False  # Conservative default
             )
             
             if not segments:
+                error_msg = metadata.get('error', 'Failed to fetch transcript')
                 self.db.update_ingest_status(
                     video_id, 'error', 
-                    error="Failed to fetch transcript",
+                    error=error_msg,
                     increment_retries=True
                 )
                 self.stats.errors += 1
                 return False
             
-            # Update transcript status
+            # Update transcript status with enhanced metadata tracking
             transcript_status = {
                 'has_yt_transcript': method == 'youtube',
-                'has_whisper': method == 'whisper',
+                'has_whisper': method in ('whisper', 'whisper_upgraded'),
                 'status': 'has_yt_transcript' if method == 'youtube' else 'transcribed'
             }
             self.db.update_ingest_status(video_id, **transcript_status)
             
+            # Track transcription method statistics
             if method == 'youtube':
                 self.stats.youtube_transcripts += 1
-            else:
+            elif method in ('whisper', 'whisper_upgraded'):
                 self.stats.whisper_transcripts += 1
+                if method == 'whisper_upgraded':
+                    logger.info(f"Used upgraded Whisper model for {video_id}")
+            
+            # Log quality information if available
+            if 'quality_assessment' in metadata:
+                quality_info = metadata['quality_assessment']
+                logger.info(f"Transcript quality for {video_id}: score={quality_info['score']}, issues={quality_info.get('issues', [])}")
+            
+            # Extract provenance and extra metadata for database storage
+            provenance = method  # 'youtube', 'whisper', or 'whisper_upgraded'
+            extra_metadata = {
+                'transcript_method': method,
+                'segment_count': len(segments)
+            }
+            
+            # Add preprocessing and quality info if available
+            if 'preprocessing_flags' in metadata:
+                extra_metadata['preprocessing'] = metadata['preprocessing_flags']
+            
+            if 'quality_assessment' in metadata:
+                extra_metadata['quality'] = metadata['quality_assessment']
+            
+            if 'model' in metadata:
+                extra_metadata['whisper_model'] = metadata['model']
+            
+            if 'upgrade_used' in metadata:
+                extra_metadata['upgrade_used'] = metadata['upgrade_used']
             
             # Step 2: Chunk transcript
             chunks = []
@@ -321,11 +351,16 @@ class EnhancedYouTubeIngester:
                 embedding_count=len(embeddings)
             )
             
-            # Step 4: Upsert to database
+            # Step 4: Upsert to database with metadata tracking
             # Always use 'youtube' as the source_type regardless of the data source method
             source_type = 'youtube'
             
-            source_id = self.db.upsert_source(video, source_type=source_type)
+            source_id = self.db.upsert_source(
+                video, 
+                source_type=source_type,
+                provenance=provenance,
+                extra_metadata=extra_metadata
+            )
             
             # Update chunks with correct source_id
             for chunk in chunks:

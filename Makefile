@@ -31,30 +31,45 @@ install-backend:
 
 install: install-frontend install-backend
 
-# Enhanced ingestion commands (API is now default)
+# Enhanced ingestion commands with new transcript pipeline (API is now default)
 ingest-youtube:
-	cd backend && python scripts/ingest_youtube_enhanced.py --source api --concurrency 4 --newest-first --skip-shorts
+	@echo "Running YouTube transcript ingestion with new pipeline..."
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --source api --limit 50 --max-workers 3 --batch-size 5
 
 ingest-youtube-seed:
-	@echo "Running YouTube ingestion in seed mode (first 20 videos)..."
-	cd backend && python scripts/ingest_youtube_enhanced.py --source api --limit 20 --newest-first --skip-shorts
+	@echo "Running YouTube ingestion in seed mode (first 10 videos)..."
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --source api --limit 10 --max-workers 2
 
 ingest-youtube-fallback:
 	@echo "Running YouTube ingestion using yt-dlp fallback..."
-	cd backend && python scripts/ingest_youtube_enhanced.py --source yt-dlp --concurrency 4 --newest-first --skip-shorts
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --source yt-dlp --limit 50 --max-workers 3
+
+# Whisper processing commands for videos without captions
+whisper-missing:
+	@echo "Processing videos marked for Whisper transcription..."
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --whisper --whisper-limit 10
+
+whisper-batch:
+	@echo "Processing larger batch of videos with Whisper..."
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --whisper --whisper-limit 25
 
 # Production-ready backfill commands (API is now default)
 backfill-youtube:
 	@echo "Starting full YouTube channel backfill using API..."
-	cd backend && python scripts/ingest_youtube_enhanced.py --source api --newest-first --concurrency 4 --skip-shorts
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --source api --limit 500 --max-workers 4 --batch-size 10
 
 sync-youtube:
 	@echo "Syncing recent YouTube videos..."
-	cd backend && python scripts/ingest_youtube_enhanced.py --source api --newest-first --limit 25 --concurrency 3 --skip-shorts
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --source api --limit 25 --max-workers 3 --since-published 2024-01-01
 
 seed-youtube:
 	@echo "Seeding with recent videos..."
-	cd backend && python scripts/ingest_youtube_enhanced.py --source api --limit 10 --newest-first --skip-shorts
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --source api --limit 10 --max-workers 2
+
+# Subtitle fetching fallback (for videos without API captions)
+fetch-subs:
+	@echo "Fetching subtitles using yt-dlp for videos without captions..."
+	cd backend && python scripts/ingest_youtube.py @anthonychaffeemd --source yt-dlp --limit 100 --max-workers 2
 
 # Production batch processing commands
 batch-ingest:
@@ -159,6 +174,18 @@ ingestion-stats: ingest-status
 
 ingest-zoom:
 	cd backend && python scripts/ingest_zoom.py
+
+# Whisper-specific commands
+whisper-one:
+	@echo "Testing Whisper transcription for single video: $(VIDEO)"
+	@if "$(VIDEO)"=="" (echo "Usage: make whisper-one VIDEO=video_id" && exit /b 1)
+	cd backend && python scripts/common/transcript_fetch.py $(VIDEO) --force-whisper --whisper-model $(or $(WHISPER_MODEL),small.en)
+
+set-proxy:
+	@echo "Setting YTDLP_PROXY in .env file: $(PROXY)"
+	@if "$(PROXY)"=="" (echo "Usage: make set-proxy PROXY=socks5://user:pass@host:port" && exit /b 1)
+	@powershell -Command "(Get-Content .env) -replace '^YTDLP_PROXY=.*$$', 'YTDLP_PROXY=$(PROXY)' | Set-Content .env"
+	@echo "Updated YTDLP_PROXY in .env file"
 
 # Utility commands
 stop:

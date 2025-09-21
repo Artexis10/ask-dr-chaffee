@@ -9,12 +9,16 @@ const pool = new Pool({
 });
 
 // Configuration
-const ANSWER_ENABLED = process.env.ANSWER_ENABLED === 'true';
+const ANSWER_ENABLED = process.env.ANSWER_ENABLED !== 'false'; // Default to enabled
 const ANSWER_TOPK = parseInt(process.env.ANSWER_TOPK || '40');
 const ANSWER_TTL_HOURS = parseInt(process.env.ANSWER_TTL_HOURS || '336'); // 14 days
 const SUMMARIZER_MODEL = process.env.SUMMARIZER_MODEL || 'gpt-3.5-turbo';
 const ANSWER_STYLE_DEFAULT = process.env.ANSWER_STYLE_DEFAULT || 'concise';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const USE_MOCK_MODE = !OPENAI_API_KEY || OPENAI_API_KEY.includes('your_') || process.env.USE_MOCK_MODE === 'true';
+
+console.log('ANSWER_ENABLED:', ANSWER_ENABLED);
+console.log('USE_MOCK_MODE:', USE_MOCK_MODE);
 
 interface AnswerParams {
   q: string;
@@ -140,84 +144,108 @@ function clusterChunks(chunks: ChunkResult[]): ChunkResult[] {
 
 // Generate embeddings for the query
 async function generateQueryEmbedding(query: string): Promise<number[]> {
-  // This would typically call your embedding service
-  // For now, return a placeholder - you'll need to implement this based on your embedding model
-  // This should match how you generate embeddings in your ingestion pipeline
-  
-  try {
-    // You might call a Python service here or use a JavaScript embedding library
-    // For now, returning null to indicate we need semantic search implementation
-    return [];
-  } catch (error) {
-    console.error('Failed to generate embedding:', error);
-    return [];
-  }
+  // Since we don't have a JavaScript embedding service integrated yet,
+  // we'll return an empty array to force fallback to text search
+  console.log('Using text search fallback for answer generation');
+  return [];
 }
 
 // Call LLM to generate answer
 async function callSummarizer(query: string, excerpts: ChunkResult[], style: string): Promise<LLMResponse> {
-  if (!OPENAI_API_KEY) {
+  if (USE_MOCK_MODE) {
     throw new Error('OpenAI API key not configured');
   }
 
+  console.log('Using OpenAI API for answer generation');
+  
   const excerptText = excerpts.map((chunk, i) => 
-    `- id: ${chunk.video_id}@${formatTimestamp(chunk.start_time_seconds)}\n  date: ${chunk.published_at.split('T')[0]}\n  text: "${chunk.text}"`
+    `- id: ${chunk.video_id}@${formatTimestamp(chunk.start_time_seconds)}\n  date: ${new Date(chunk.published_at).toISOString().split('T')[0]}\n  text: "${chunk.text}"`
   ).join('\n\n');
 
-  const maxWords = style === 'detailed' ? 320 : 180;
+  // Enhanced word limits for long-form synthesis
+  const targetWords = style === 'detailed' ? '600–1200' : '300–600';
+  const maxTokens = style === 'detailed' ? 2500 : 1500;
   
-  const systemPrompt = `You are compiling Dr. Anthony Chaffee's on-record answer using ONLY the provided excerpts. Do not invent facts or rely on outside knowledge. If excerpts conflict, acknowledge the conflict. Prefer newer material when summarizing. Every sentence must cite ≥1 excerpt as [video_id@mm:ss]. Output strictly as JSON matching the schema.`;
+  const systemPrompt = `You are compiling a long-form synthesis of Dr. Anthony Chaffee's views. Ground EVERYTHING strictly in the provided transcript excerpts. Do NOT use outside knowledge or speculation. Write a cohesive, well-structured markdown answer that synthesizes across clips. Use ## section headers for organization. Cite with inline timestamps like [video_id@mm:ss] at the END of sentences/clauses they support. Prefer newer material when consolidating conflicting statements. If views evolved, state the nuance and cite both. Tone: neutral narrator summarizing Chaffee's position; do not speak as him.`;
   
-  const userPrompt = `Query: "${query}"
+  const userPrompt = `You are compiling a long-form synthesis of Dr. Anthony Chaffee's views.
 
-Excerpts:
+Query: "${query}"
+
+Context Excerpts (use only these):
 ${excerptText}
 
-Output JSON schema:
+Instructions:
+- Ground EVERYTHING strictly in the provided transcript excerpts. Do NOT use outside knowledge or speculation.
+- Write a cohesive, well-structured markdown answer (use ## section headers) that synthesizes across clips.
+- Length target: ${targetWords} words (ok to be shorter if context is thin).
+- Use inline timestamp citations like [video_id@mm:ss] at the END of the sentences/clauses they support.
+- Cite whenever a claim depends on a specific excerpt; don't over-cite trivial transitions.
+- Prefer newer material when consolidating conflicting statements; if views evolved, state the nuance and cite both.
+- If a point is unclear or missing in the excerpts, say so briefly (e.g., "not addressed in provided excerpts").
+- Tone: neutral narrator summarizing Chaffee's position; do not speak as him.
+
+Output MUST be valid JSON with this schema:
 {
-  "answer": "2–5 sentences of clear prose with inline citations like [yt123@12:15]. Keep under ${maxWords} words (${style}).",
+  "answer": "Markdown with sections and inline citations like [abc123@12:34]. ${targetWords} words if context supports it.",
   "citations": [
-    { "video_id": "yt123", "timestamp": "12:15", "date": "2024-06-10" }
+    { "video_id": "abc123", "timestamp": "12:34", "date": "2024-06-18" }
   ],
-  "confidence": 0.0-1.0,
-  "notes": "optional: conflicts, missing info, scope limits"
-}`;
+  "confidence": 0.0,
+  "notes": "Optional brief notes: conflicts seen, gaps, or scope limits."
+}
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: SUMMARIZER_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.1,
-      max_tokens: 1000,
-      timeout: 8000, // 8 second timeout
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`LLM API failed: ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices[0]?.message?.content;
-  
-  if (!content) {
-    throw new Error('Empty response from LLM');
-  }
+Validation requirements:
+- Every [video_id@mm:ss] that appears in answer MUST also appear once in citations[].
+- Every citation MUST correspond to an excerpt listed above (exact match or within ±5s).
+- Do NOT include citations to sources not present in the excerpts.
+- Keep formatting clean: no stray backslashes, no code fences in answer, no HTML.
+- If context is too sparse (<8 useful excerpts), create a short answer and explain the limitation in notes.`;
 
   try {
-    return JSON.parse(content);
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: SUMMARIZER_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: maxTokens,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('OpenAI API error:', response.status, response.statusText);
+      throw new Error(`OpenAI API failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('Empty response from OpenAI API');
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      console.log('Successfully generated long-form synthesis using OpenAI API');
+      return parsed;
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response as JSON:', content);
+      throw new Error('Invalid JSON response from OpenAI API');
+    }
   } catch (error) {
-    throw new Error('Invalid JSON response from LLM');
+    console.error('OpenAI API call failed:', error);
+    throw error;
   }
 }
+
 
 // Validate citations and compute confidence
 function validateAndProcessResponse(llmResponse: LLMResponse, chunks: ChunkResult[]): AnswerResponse {
@@ -304,30 +332,14 @@ export default async function handler(
   }
 
   try {
-    const queryNorm = normalizeQuery(query);
-    
-    // Step 1: Check cache first (unless refresh requested)
-    if (!refresh) {
-      const cacheQuery = `
-        SELECT answer_md, citations, confidence, notes, used_chunk_ids, created_at
-        FROM summaries 
-        WHERE cache_key = $1 AND type = 'answer' AND expires_at > NOW()
-        ORDER BY created_at DESC 
-        LIMIT 1
-      `;
-      
-      // Generate a preliminary cache key for lookup (we'll update with actual chunks later)
-      const preliminaryCacheKey = generateCacheKey(queryNorm, [], SUMMARIZER_MODEL);
-      const cacheResult = await pool.query(cacheQuery, [preliminaryCacheKey]);
-      
-      if (cacheResult.rows.length > 0) {
-        const cached = cacheResult.rows[0];
-        return res.status(200).json({
-          ...cached,
-          cached: true,
-          cache_date: cached.created_at,
-        });
-      }
+    console.log('Processing query:', query);
+
+    if (USE_MOCK_MODE) {
+      return res.status(503).json({
+        error: 'Answer generation unavailable',
+        message: 'OpenAI API key not configured. Please configure OPENAI_API_KEY environment variable.',
+        code: 'API_KEY_MISSING'
+      });
     }
 
     // Step 2: Embed query and retrieve relevant chunks
@@ -358,7 +370,7 @@ export default async function handler(
       `;
       queryParams = [JSON.stringify(queryEmbedding), maxContext];
     } else {
-      // Fallback to text search
+      // Fallback to simple text search for reliability
       searchQuery = `
         SELECT 
           c.id,
@@ -376,6 +388,7 @@ export default async function handler(
         WHERE c.text ILIKE $1
         ORDER BY 
           CASE WHEN c.text ILIKE $1 THEN 1 ELSE 2 END,
+          COALESCE(s.provenance, 'yt_caption') = 'owner' DESC,
           s.published_at DESC,
           c.start_time_seconds ASC
         LIMIT $2
@@ -386,32 +399,28 @@ export default async function handler(
     const searchResult = await pool.query(searchQuery, queryParams);
     let chunks: ChunkResult[] = searchResult.rows;
     
-    if (chunks.length < 8) {
+    if (chunks.length < 1) {
       return res.status(200).json({ 
-        error: 'Not enough on-record context yet',
+        error: 'Insufficient content available',
+        message: `Only found ${chunks.length} relevant clips. Need at least 1 clip to generate an answer.`,
         available_chunks: chunks.length,
-        minimum_required: 8 
+        code: 'INSUFFICIENT_CONTENT'
       });
     }
 
-    // Step 3: Apply ranking preferences and cluster/dedupe
+    // Apply clustering and ranking
     chunks = chunks.map(chunk => ({
       ...chunk,
-      similarity: Math.abs(chunk.similarity) // Ensure positive similarity scores
+      similarity: Math.abs(chunk.similarity)
     }));
 
-    // Boost newer content and better provenance
     chunks = chunks.map(chunk => {
       let boost = 1.0;
-      
-      // Recency boost (newer = better)
       const publishedDate = new Date(chunk.published_at);
       const now = new Date();
       const yearsDiff = (now.getTime() - publishedDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
       if (yearsDiff <= 1) boost += 0.1;
       else if (yearsDiff <= 2) boost += 0.05;
-      
-      // Provenance boost (owner > yt_caption > whisper)
       if (chunk.source_type === 'youtube') boost += 0.05;
       
       return {
@@ -420,84 +429,27 @@ export default async function handler(
       };
     });
 
-    // Sort by boosted similarity and cluster
     chunks.sort((a, b) => b.similarity - a.similarity);
     const clusteredChunks = clusterChunks(chunks.slice(0, maxContext));
     
     if (clusteredChunks.length === 0) {
       return res.status(200).json({ 
-        error: 'No relevant content found after clustering' 
+        error: 'No relevant content found',
+        message: 'Could not find any relevant content after processing and clustering.',
+        code: 'NO_RELEVANT_CONTENT'
       });
     }
 
-    // Step 4: Generate cache key with actual chunks
-    const chunkIds = clusteredChunks.map(c => `${c.video_id}:${c.start_time_seconds}`);
-    const cacheKey = generateCacheKey(queryNorm, chunkIds, SUMMARIZER_MODEL);
-    
-    // Check cache again with real cache key
-    if (!refresh) {
-      const cacheQuery = `
-        SELECT answer_md, citations, confidence, notes, used_chunk_ids, created_at
-        FROM summaries 
-        WHERE cache_key = $1 AND type = 'answer' AND expires_at > NOW()
-        ORDER BY created_at DESC 
-        LIMIT 1
-      `;
-      
-      const cacheResult = await pool.query(cacheQuery, [cacheKey]);
-      
-      if (cacheResult.rows.length > 0) {
-        const cached = cacheResult.rows[0];
-        return res.status(200).json({
-          ...cached,
-          cached: true,
-          cache_date: cached.created_at,
-        });
-      }
-    }
-
-    // Step 5: Call LLM to generate answer
+    // Generate and validate answer
     const llmResponse = await callSummarizer(query, clusteredChunks, style);
-    
-    // Step 6: Validate and process response
     const validatedResponse = validateAndProcessResponse(llmResponse, clusteredChunks);
-    
-    // Step 7: Cache the result
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + ANSWER_TTL_HOURS);
-    
-    const insertQuery = `
-      INSERT INTO summaries (
-        cache_key, type, query_text, chunk_ids, model_version,
-        answer_md, citations, confidence, notes, used_chunk_ids, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      ON CONFLICT (cache_key) DO UPDATE SET
-        answer_md = EXCLUDED.answer_md,
-        citations = EXCLUDED.citations,
-        confidence = EXCLUDED.confidence,
-        notes = EXCLUDED.notes,
-        used_chunk_ids = EXCLUDED.used_chunk_ids,
-        expires_at = EXCLUDED.expires_at,
-        updated_at = NOW()
-    `;
-    
-    await pool.query(insertQuery, [
-      cacheKey,
-      'answer',
-      query,
-      chunkIds,
-      SUMMARIZER_MODEL,
-      validatedResponse.answer_md,
-      JSON.stringify(validatedResponse.citations),
-      validatedResponse.confidence,
-      validatedResponse.notes,
-      validatedResponse.used_chunk_ids,
-      expiresAt
-    ]);
 
-    // Step 8: Return response
+    // Cache the result (implement caching logic here when ready)
+    
+    // Return response with source clips
     res.status(200).json({
       ...validatedResponse,
+      source_clips: clusteredChunks,
       cached: false,
       total_chunks_considered: chunks.length,
       chunks_after_clustering: clusteredChunks.length,
@@ -505,8 +457,29 @@ export default async function handler(
 
   } catch (error) {
     console.error('Answer generation error:', error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('429')) {
+        return res.status(429).json({
+          error: 'Rate limit exceeded',
+          message: 'OpenAI API rate limit reached. Please try again in a few moments.',
+          code: 'RATE_LIMIT_EXCEEDED'
+        });
+      }
+      
+      if (error.message.includes('401')) {
+        return res.status(401).json({
+          error: 'API authentication failed',
+          message: 'OpenAI API key is invalid or expired.',
+          code: 'INVALID_API_KEY'
+        });
+      }
+    }
+    
     res.status(500).json({ 
-      error: `Answer generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: 'Answer generation failed',
+      message: error instanceof Error ? error.message : 'An unexpected error occurred.',
+      code: 'GENERATION_FAILED'
     });
   }
 }

@@ -188,12 +188,22 @@ class DatabaseUpserter:
         
         logger.debug(f"Updated {video_id} status to {status}")
     
-    def upsert_source(self, video_info: VideoInfo, source_type: str = 'youtube') -> int:
+    def upsert_source(
+        self, 
+        video_info: VideoInfo, 
+        source_type: str = 'youtube',
+        provenance: str = 'yt_caption',
+        access_level: str = 'public',
+        extra_metadata: Optional[Dict[str, Any]] = None
+    ) -> int:
         """Upsert video into sources table and return database ID
         
         Args:
             video_info: Video information
             source_type: Source type (youtube, zoom, etc.)
+            provenance: Transcript source ('owner', 'yt_caption', 'yt_dlp', 'whisper')
+            access_level: Content access level ('public', 'restricted', 'private')
+            extra_metadata: Additional metadata to store (preprocessing flags, quality info, etc.)
             
         Returns:
             Database ID of the upserted source
@@ -203,18 +213,25 @@ class DatabaseUpserter:
         with conn.cursor() as cur:
             playback_url = f"https://www.youtube.com/watch?v={video_info.video_id}"
             
+            # Build metadata object
+            metadata = extra_metadata or {}
+            
+            # Convert duration_s to duration_seconds to match schema
             query = """
                 INSERT INTO sources (
                     source_type, source_id, title, published_at, 
-                    url, duration_s, view_count
+                    url, duration_seconds, view_count, provenance, access_level, metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (source_type, source_id) DO UPDATE SET
                     title = EXCLUDED.title,
                     published_at = EXCLUDED.published_at,
                     url = EXCLUDED.url,
-                    duration_s = EXCLUDED.duration_s,
+                    duration_seconds = EXCLUDED.duration_seconds,
                     view_count = EXCLUDED.view_count,
+                    provenance = EXCLUDED.provenance,
+                    access_level = EXCLUDED.access_level,
+                    metadata = EXCLUDED.metadata,
                     updated_at = now()
                 RETURNING id
             """
@@ -226,13 +243,16 @@ class DatabaseUpserter:
                 video_info.published_at,
                 playback_url,
                 video_info.duration_s,
-                video_info.view_count
+                video_info.view_count,
+                provenance,
+                access_level,
+                psycopg2.extras.Json(metadata) if metadata else None
             ))
             
             source_id = cur.fetchone()[0]
             conn.commit()
         
-        logger.debug(f"Upserted source for {video_info.video_id} with ID {source_id}")
+        logger.debug(f"Upserted source for {video_info.video_id} with ID {source_id}, provenance: {provenance}, access: {access_level}")
         return source_id
     
     def upsert_chunks(self, chunks: List[ChunkData]) -> int:

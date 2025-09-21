@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """
-Robust, resumable YouTube ingestion pipeline for Ask Dr. Chaffee.
+Complete YouTube transcript ingestion pipeline with preferred order:
+1. youtube-transcript-api (cheap, fast)
+2. yt-dlp subtitles (with proxy support)  
+3. Mark for Whisper processing (optional GPU run)
 
-Features:
-- Resumable pipeline with ingest_state tracking
-- Batch processing with concurrency controls
-- Support for yt-dlp JSON dumps and API sources
-- Idempotent operations with ON CONFLICT handling
-- Comprehensive error tracking and retry logic
-- Production-ready logging and monitoring
+All results are normalized, chunked, embedded, and stored with provenance tags.
 """
 
 import os
@@ -22,6 +19,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 import time
+import tempfile
+import subprocess
 
 # Third-party imports
 import tqdm
@@ -31,10 +30,17 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.common.list_videos_yt_dlp import YtDlpVideoLister, VideoInfo
 from scripts.common.list_videos_api import YouTubeAPILister
-from scripts.common.transcript_fetch import TranscriptFetcher, TranscriptSegment
+from scripts.common.transcripts import TranscriptFetcher, TranscriptSegment, create_transcript_fetcher
 from scripts.common.database_upsert import DatabaseUpserter, ChunkData
 from scripts.common.embeddings import EmbeddingGenerator
 from scripts.common.transcript_processor import TranscriptProcessor
+
+# Import Whisper support
+try:
+    import faster_whisper
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -115,11 +121,16 @@ class RobustYouTubeIngester:
         
         # Initialize components
         self.db = DatabaseUpserter(config.db_url)
-        self.transcript_fetcher = TranscriptFetcher()
+        self.transcript_fetcher = create_transcript_fetcher()
         self.embedder = EmbeddingGenerator()
         self.processor = TranscriptProcessor(
             chunk_duration_seconds=int(os.getenv('CHUNK_DURATION_SECONDS', 45))
         )
+        
+        # Whisper configuration for --whisper mode
+        self.whisper_model = None
+        self.ytdlp_bin = os.getenv('YTDLP_BIN', 'yt-dlp')
+        self.ytdlp_proxy = os.getenv('YTDLP_PROXY', '').strip()
         
         # Initialize video lister based on source
         if config.source == 'yt-dlp':
@@ -203,7 +214,7 @@ class RobustYouTubeIngester:
         return False, ""
     
     def process_single_video(self, video_info: VideoInfo) -> bool:
-        """Process a single video through the complete pipeline"""
+        """Process a single video through the complete transcript pipeline"""
         video_id = video_info.video_id
         
         try:
@@ -215,69 +226,71 @@ class RobustYouTubeIngester:
             
             logger.info(f"Processing {video_id}: {video_info.title}")
             
-            # Step 0: Initialize/update ingest state
+            # Initialize/update ingest state
             self.db.upsert_ingest_state(video_id, video_info, status='pending')
             
-            # Step 1: Fetch transcript
-            segments, method = self.transcript_fetcher.fetch_transcript(
-                video_id,
-                max_duration_s=self.config.max_duration
-            )
+            # Step 1: Fetch transcript using new pipeline
+            segments, provenance = self.transcript_fetcher.fetch_transcript(video_id)
             
             if not segments:
+                # No transcript found - mark for Whisper
                 self.db.update_ingest_status(
-                    video_id, 'error',
-                    error="Failed to fetch transcript",
-                    increment_retries=True
+                    video_id, 'needs_whisper',
+                    error='no_captions'
                 )
-                return False
+                logger.info(f"📝 {video_id} marked for Whisper processing")
+                return True
             
-            # Update transcript status
-            status = 'transcript' if method == 'youtube' else 'whisper'
-            self.db.update_ingest_status(
-                video_id, status,
-                has_yt_transcript=(method == 'youtube'),
-                has_whisper=(method == 'whisper')
-            )
+            # Step 2: Determine access level and metadata
+            access_level = 'public'  # Default for public YouTube videos
+            extra_metadata = {
+                'has_captions': True,
+                'is_clip': video_info.duration_s and video_info.duration_s < 300  # <5min = clip
+            }
             
-            # Step 2: Chunk transcript 
-            chunks = []
-            for i, segment in enumerate(segments):
-                chunk = ChunkData.from_transcript_segment(segment, video_id)
-                chunks.append(chunk)
+            # Step 3: Chunk transcript (45-60s sentence-aware)
+            chunks = self.processor.process_segments(segments)
+            chunk_data = []
+            for i, chunk in enumerate(chunks):
+                chunk_obj = ChunkData(
+                    chunk_hash=f"{video_id}_{i}",
+                    source_id=video_id,  # Will be updated after source insert
+                    text=chunk.text,
+                    t_start_s=chunk.start,
+                    t_end_s=chunk.end
+                )
+                chunk_data.append(chunk_obj)
             
-            self.db.update_ingest_status(
-                video_id, 'chunked',
-                chunk_count=len(chunks)
-            )
+            self.db.update_ingest_status(video_id, 'chunked', chunk_count=len(chunk_data))
             
-            # Step 3: Generate embeddings
-            texts = [chunk.text for chunk in chunks]
+            # Step 4: Generate embeddings
+            texts = [chunk.text for chunk in chunk_data]
             embeddings = self.embedder.generate_embeddings(texts)
             
             # Attach embeddings to chunks
-            for chunk, embedding in zip(chunks, embeddings):
+            for chunk, embedding in zip(chunk_data, embeddings):
                 chunk.embedding = embedding
             
-            self.db.update_ingest_status(
-                video_id, 'embedded',
-                embedding_count=len(embeddings)
+            self.db.update_ingest_status(video_id, 'embedded', embedding_count=len(embeddings))
+            
+            # Step 5: Upsert to database with provenance tracking
+            source_id = self.db.upsert_source(
+                video_info,
+                source_type='youtube',
+                provenance=provenance,
+                access_level=access_level,
+                extra_metadata=extra_metadata
             )
             
-            # Step 4: Upsert to database
-            source_id = self.db.upsert_source(video_info, source_type='youtube')
-            
             # Update chunks with correct source_id
-            for chunk in chunks:
+            for chunk in chunk_data:
                 chunk.source_id = source_id
             
-            chunk_count = self.db.upsert_chunks(chunks)
-            self.db.update_ingest_status(video_id, 'upserted')
+            chunk_count = self.db.upsert_chunks(chunk_data)
             
-            # Final status
             self.db.update_ingest_status(video_id, 'done')
             
-            logger.info(f"✅ Completed {video_id}: {len(chunks)} chunks, {method} transcript")
+            logger.info(f"✅ {video_id} completed: {len(chunk_data)} chunks, provenance={provenance}")
             return True
             
         except Exception as e:
@@ -295,466 +308,305 @@ class RobustYouTubeIngester:
             
             return False
     
-    def process_batch_concurrent(self, videos: List[VideoInfo], batch_num: int = 1) -> BatchStats:
-        """Process a batch of videos with concurrency"""
-        stats = BatchStats(total=len(videos))
-        
-        if self.config.dry_run:
-            for video in videos:
-                logger.info(f"DRY RUN: Would process {video.video_id}: {video.title}")
-            return stats
-        
-        # Use ThreadPoolExecutor for I/O bound tasks
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.concurrency) as executor:
-            with tqdm.tqdm(total=len(videos), desc=f"Batch {batch_num}") as pbar:
-                # Submit all tasks
-                future_to_video = {
-                    executor.submit(self.process_single_video, video): video
-                    for video in videos
-                }
-                
-                # Process completed tasks
-                for future in concurrent.futures.as_completed(future_to_video):
-                    video = future_to_video[future]
-                    try:
-                        success = future.result()
-                        if success:
-                            # Check final status to update stats
-                            state = self.db.get_ingest_state(video.video_id)
-                            if state and state['status'] == 'done':
-                                stats.done += 1
-                            else:
-                                stats.processed += 1
-                        else:
-                            stats.errors += 1
-                    except Exception as e:
-                        logger.error(f"Unexpected error for {video.video_id}: {e}")
-                        stats.errors += 1
-                    
-                    pbar.update(1)
-                    pbar.set_postfix({
-                        'done': stats.done,
-                        'errors': stats.errors
-                    })
-        
-        stats.log_batch_summary(batch_num)
-        return stats
-    
-    def get_channel_videos(self, max_videos: int = 50) -> List[Dict[str, Any]]:
-        """Fetch video metadata from the YouTube channel"""
-        logger.info(f"Fetching videos from {self.channel_url}")
-        
-        with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
-            try:
-                # Extract channel info and video list
-                channel_info = ydl.extract_info(
-                    self.channel_url,
-                    download=False
-                )
-                
-                videos = []
-                entries = channel_info.get('entries', [])[:max_videos]
-                
-                for entry in entries:
-                    video_id = entry.get('id')
-                    if not video_id:
-                        continue
-                    
-                    # Get detailed video info
-                    video_url = f"https://www.youtube.com/watch?v={video_id}"
-                    video_info = ydl.extract_info(video_url, download=False)
-                    
-                    videos.append({
-                        'id': video_id,
-                        'title': video_info.get('title', ''),
-                        'description': video_info.get('description', ''),
-                        'duration': video_info.get('duration'),
-                        'upload_date': video_info.get('upload_date'),
-                        'url': video_url,
-                        'view_count': video_info.get('view_count'),
-                        'like_count': video_info.get('like_count'),
-                    })
-                
-                logger.info(f"Found {len(videos)} videos")
-                return videos
-                
-            except Exception as e:
-                logger.error(f"Error fetching channel videos: {e}")
-                return []
-    
-    def get_transcript(self, video_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Get transcript for a video, trying multiple methods"""
-        
-        # Method 1: Try YouTube's auto-generated transcript
-        try:
-            logger.info(f"Attempting to fetch YouTube transcript for {video_id}")
-            api = YouTubeTranscriptApi()
-            transcript_data = api.fetch(video_id, languages=['en'])
-            # transcript_data is a FetchedTranscript object, iterate over it
-            transcript_list = []
-            for entry in transcript_data:
-                transcript_list.append({
-                    'start': entry.start,
-                    'duration': entry.duration, 
-                    'text': entry.text
-                })
-            logger.info(f"Successfully fetched YouTube transcript ({len(transcript_list)} entries)")
-            return transcript_list
-            
-        except (TranscriptsDisabled, NoTranscriptFound) as e:
-            logger.warning(f"No YouTube transcript available for {video_id}: {e}")
-            
-        # Method 2: Fallback to faster-whisper (requires audio download)
-        try:
-            logger.info(f"Attempting Whisper transcription for {video_id}")
-            transcript = self._transcribe_with_whisper(video_id)
-            if transcript:
-                logger.info(f"Successfully transcribed with Whisper ({len(transcript)} entries)")
-                return transcript
-                
-        except Exception as e:
-            logger.error(f"Whisper transcription failed for {video_id}: {e}")
-        
-        logger.error(f"All transcript methods failed for {video_id}")
-        return None
-    
-    def _transcribe_with_whisper(self, video_id: str) -> Optional[List[Dict[str, Any]]]:
-        """Transcribe video using faster-whisper (fallback method)"""
-        try:
-            from faster_whisper import WhisperModel
-            import tempfile
-            
-            # Download audio
-            audio_path = self._download_audio(video_id)
-            if not audio_path:
-                return None
-            
-            # Initialize Whisper model
-            model = WhisperModel("base", device="cpu", compute_type="int8")
-            
-            # Transcribe
-            segments, info = model.transcribe(audio_path, beam_size=5)
-            
-            transcript = []
-            for segment in segments:
-                transcript.append({
-                    'start': segment.start,
-                    'duration': segment.end - segment.start,
-                    'text': segment.text.strip()
-                })
-            
-            # Clean up audio file
-            os.unlink(audio_path)
-            
-            return transcript
-            
-        except Exception as e:
-            logger.error(f"Whisper transcription error: {e}")
-            return None
-    
-    def _download_audio(self, video_id: str) -> Optional[str]:
-        """Download audio for transcription"""
-        try:
-            import tempfile
-            
-            temp_dir = tempfile.mkdtemp()
-            audio_path = os.path.join(temp_dir, f"{video_id}.mp3")
-            
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': audio_path,
-                'quiet': True,
-                'no_warnings': True,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                video_url = f"https://www.youtube.com/watch?v={video_id}"
-                ydl.download([video_url])
-            
-            return audio_path if os.path.exists(audio_path) else None
-            
-        except Exception as e:
-            logger.error(f"Audio download error: {e}")
-            return None
-    
-    def process_video(self, video_info: Dict[str, Any]) -> bool:
-        """Process a single video: get transcript, chunk, embed, and store"""
-        video_id = video_info['id']
-        
-        # Check if already processed
-        if self.db.source_exists('youtube', video_id):
-            logger.info(f"Video {video_id} already processed, skipping")
-            return True
-        
-        logger.info(f"Processing video: {video_info['title']}")
-        
-        # Get transcript
-        transcript = self.get_transcript(video_id)
-        if not transcript:
-            logger.error(f"Could not get transcript for {video_id}")
-            return False
-    
-    def process_batch_concurrent(self, videos: List[VideoInfo], batch_num: int = 1) -> BatchStats:
-        """Process a batch of videos with concurrency"""
-        stats = BatchStats(total=len(videos))
-        
-        if self.config.dry_run:
-            for video in videos:
-                logger.info(f"DRY RUN: Would process {video.video_id}: {video.title}")
-            return stats
-        
-        # Use ThreadPoolExecutor for I/O bound tasks
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.concurrency) as executor:
-            with tqdm.tqdm(total=len(videos), desc=f"Batch {batch_num}") as pbar:
-                # Submit all tasks
-                future_to_video = {
-                    executor.submit(self.process_single_video, video): video
-                    for video in videos
-                }
-                
-                # Process completed tasks
-                for future in concurrent.futures.as_completed(future_to_video):
-                    video = future_to_video[future]
-                    try:
-                        success = future.result()
-                        if success:
-                            # Check final status to update stats
-                            state = self.db.get_ingest_state(video.video_id)
-                            if state and state['status'] == 'done':
-                                stats.done += 1
-                            else:
-                                stats.processed += 1
-                        else:
-                            stats.errors += 1
-                    except Exception as e:
-                        logger.error(f"Unexpected error for {video.video_id}: {e}")
-                        stats.errors += 1
-                    
-                    pbar.update(1)
-                    pbar.set_postfix({
-                        'done': stats.done,
-                        'errors': stats.errors
-                    })
-        
-        stats.log_batch_summary(batch_num)
-        return stats
-    
-    def run_backfill(self) -> None:
-        """Run backfill operation (resumable)"""
-        start_time = datetime.now()
-        logger.info("🚀 Starting YouTube backfill pipeline")
-        logger.info(f"Config: source={self.config.source}, concurrency={self.config.concurrency}, limit={self.config.limit}")
-        
-        total_stats = BatchStats()
-        batch_num = 1
-        
-        try:
-            # For backfill, we first populate ingest_state with all videos
-            if not self.config.from_json:
-                logger.info("Populating ingest_state with all channel videos...")
-                videos = self.list_videos()
-                
-                # Add all videos to ingest_state (idempotent)
-                for video in videos:
-                    self.db.upsert_ingest_state(video.video_id, video, status='pending')
-                
-                logger.info(f"Added {len(videos)} videos to ingest queue")
-            
-            # Now process in batches from the queue
-            batch_size = self.config.limit or 50  # Default batch size
-            
-            while True:
-                # Get next batch of pending videos
-                pending = self.get_pending_videos(batch_size)
-                
-                if not pending:
-                    logger.info("No more videos to process")
-                    break
-                
-                # Convert to VideoInfo objects for processing
-                video_batch = []
-                for video_data in pending:
-                    video_info = VideoInfo(
-                        video_id=video_data['video_id'],
-                        title=video_data.get('title', ''),
-                        published_at=video_data.get('published_at'),
-                        duration_s=video_data.get('duration_s'),
-                        view_count=video_data.get('view_count'),
-                        description=video_data.get('description')
-                    )
-                    video_batch.append(video_info)
-                
-                logger.info(f"Processing batch {batch_num} with {len(video_batch)} videos")
-                
-                # Process batch
-                batch_stats = self.process_batch_concurrent(video_batch, batch_num)
-                
-                # Update total stats
-                total_stats.total += batch_stats.total
-                total_stats.processed += batch_stats.processed
-                total_stats.done += batch_stats.done
-                total_stats.errors += batch_stats.errors
-                total_stats.skipped += batch_stats.skipped
-                
-                batch_num += 1
-                
-                # Optional delay between batches to be nice to services
-                if batch_num > 1:
-                    time.sleep(2)
-                    
-        except KeyboardInterrupt:
-            logger.info("\nReceived interrupt signal - pipeline is resumable")
-        except Exception as e:
-            logger.error(f"Pipeline error: {e}", exc_info=True)
-            raise
-        finally:
-            # Log final statistics
-            end_time = datetime.now()
-            duration = end_time - start_time
-            
-            logger.info("\n" + "="*50)
-            logger.info(f"FINAL STATISTICS (completed in {duration})")
-            logger.info(f"Total videos processed: {total_stats.total}")
-            logger.info(f"Successfully completed: {total_stats.done}")
-            logger.info(f"Processed (partial): {total_stats.processed}")
-            logger.info(f"Errors: {total_stats.errors}")
-            logger.info(f"Skipped: {total_stats.skipped}")
-            
-            if total_stats.total > 0:
-                success_rate = (total_stats.done / total_stats.total) * 100
-                logger.info(f"Success rate: {success_rate:.1f}%")
-            
-            # Close database connection
-            self.db.close_connection()
-        
-        # Parse upload date
-        upload_date = None
-        if video_info.get('upload_date'):
-            try:
-                upload_date = datetime.strptime(
-                    video_info['upload_date'], 
-                    '%Y%m%d'
-                ).replace(tzinfo=timezone.utc)
-            except ValueError:
-                pass
-        
-        # Store source in database
-        source_db_id = self.db.insert_source(
-            source_type='youtube',
-            source_id=video_id,
-            title=video_info['title'],
-            description=video_info.get('description'),
-            duration_seconds=video_info.get('duration'),
-            published_at=upload_date,
-            url=video_info['url'],
-            metadata={
-                'view_count': video_info.get('view_count'),
-                'like_count': video_info.get('like_count'),
-            }
-        )
-        
-        # Chunk transcript
-        chunks = self.processor.chunk_transcript(transcript)
-        
-        # Store chunks
-        self.db.insert_chunks(source_db_id, chunks)
-        
-        logger.info(f"Successfully processed video {video_id}")
-        return True
-    
-    def generate_embeddings(self):
-        """Generate embeddings for all chunks without embeddings"""
-        logger.info("Generating embeddings for chunks...")
-        
-        chunks_to_embed = self.db.get_sources_without_embeddings()
-        if not chunks_to_embed:
-            logger.info("No chunks need embeddings")
+    def process_whisper_videos(self, limit: Optional[int] = None) -> None:
+        """Process videos marked for Whisper transcription"""
+        if not WHISPER_AVAILABLE:
+            logger.error("Whisper not available. Install with: pip install faster-whisper")
             return
         
-        logger.info(f"Generating embeddings for {len(chunks_to_embed)} chunks")
+        # Get videos that need Whisper processing
+        needs_whisper = self.db.get_videos_by_status('needs_whisper', limit=limit)
         
-        # Process in batches
-        batch_size = 100
-        for i in range(0, len(chunks_to_embed), batch_size):
-            batch = chunks_to_embed[i:i + batch_size]
-            texts = [chunk['text'] for chunk in batch]
-            
-            # Generate embeddings
-            embeddings = self.embedder.generate_embeddings(texts)
-            
-            # Update database
-            for chunk, embedding in zip(batch, embeddings):
-                self.db.update_chunk_embedding(chunk['id'], embedding)
-            
-            logger.info(f"Processed batch {i//batch_size + 1}/{(len(chunks_to_embed) + batch_size - 1)//batch_size}")
+        if not needs_whisper:
+            logger.info("No videos need Whisper processing")
+            return
+        
+        logger.info(f"Processing {len(needs_whisper)} videos with Whisper")
+        
+        # Initialize Whisper model
+        if not self.whisper_model:
+            model_name = os.getenv('WHISPER_MODEL', 'small.en')
+            logger.info(f"Loading Whisper model: {model_name}")
+            self.whisper_model = faster_whisper.WhisperModel(
+                model_name,
+                device="cpu",
+                compute_type="int8"
+            )
+        
+        for video_data in tqdm.tqdm(needs_whisper, desc="Whisper processing"):
+            video_id = video_data['video_id']
+            self._process_single_whisper(video_id, video_data)
     
-    def run(self, max_videos: int = 50):
-        """Run the full ingestion pipeline"""
-        logger.info("Starting YouTube ingestion pipeline")
+    def _process_single_whisper(self, video_id: str, video_data: Dict[str, Any]) -> bool:
+        """Process a single video with Whisper transcription"""
+        try:
+            logger.info(f"🎤 Whisper processing {video_id}: {video_data.get('title', 'Unknown')}")
+            
+            # Check duration limits for cost control
+            duration_s = video_data.get('duration_s', 0)
+            max_duration = int(os.getenv('MAX_AUDIO_DURATION', 3600))
+            
+            if duration_s > max_duration:
+                logger.warning(f"Skipping {video_id}: duration {duration_s}s exceeds limit {max_duration}s")
+                self.db.update_ingest_status(
+                    video_id, 'error',
+                    error=f'duration_exceeds_limit_{max_duration}s',
+                    increment_retries=True
+                )
+                return False
+            
+            # Download audio with yt-dlp
+            audio_path = self._download_audio(video_id)
+            if not audio_path:
+                self.db.update_ingest_status(
+                    video_id, 'error',
+                    error='audio_download_failed',
+                    increment_retries=True
+                )
+                return False
+            
+            try:
+                # Preprocess audio to 16kHz mono
+                processed_audio = self._preprocess_audio(audio_path)
+                
+                # Transcribe with Whisper
+                segments = self._transcribe_with_whisper(processed_audio)
+                
+                if not segments:
+                    self.db.update_ingest_status(
+                        video_id, 'error',
+                        error='whisper_transcription_failed',
+                        increment_retries=True
+                    )
+                    return False
+                
+                # Continue with normal pipeline (chunk, embed, upsert)
+                video_info = VideoInfo(
+                    video_id=video_id,
+                    title=video_data.get('title', ''),
+                    duration_s=video_data.get('duration_s'),
+                    published_at=video_data.get('published_at'),
+                    view_count=video_data.get('view_count', 0),
+                    description=video_data.get('description', '')
+                )
+                
+                return self._complete_whisper_pipeline(video_info, segments)
+                
+            finally:
+                # Clean up audio files
+                for file_path in [audio_path, processed_audio]:
+                    if file_path and os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                        except OSError:
+                            pass
+        
+        except Exception as e:
+            error_msg = str(e)[:500]
+            logger.error(f"❌ Whisper error for {video_id}: {error_msg}")
+            
+            try:
+                self.db.update_ingest_status(
+                    video_id, 'error',
+                    error=error_msg,
+                    increment_retries=True
+                )
+            except Exception as db_error:
+                logger.error(f"Failed to update error status: {db_error}")
+            
+            return False
+    
+    def _download_audio(self, video_id: str) -> Optional[str]:
+        """Download audio using yt-dlp"""
+        output_dir = Path(tempfile.gettempdir()) / 'whisper_audio'
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / f"{video_id}.%(ext)s"
+        
+        cmd = [
+            self.ytdlp_bin,
+            f"https://www.youtube.com/watch?v={video_id}",
+            '--extract-audio',
+            '--audio-format', 'mp3',
+            '--audio-quality', '0',
+            '-o', str(output_path)
+        ]
+        
+        if self.ytdlp_proxy:
+            cmd.extend(['--proxy', self.ytdlp_proxy])
         
         try:
-            # Get videos from channel
-            videos = self.get_channel_videos(max_videos)
-            if not videos:
-                logger.error("No videos found")
-                return
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             
-            # Process each video
-            processed_count = 0
-            for video in videos:
-                if self.process_video(video):
-                    processed_count += 1
+            if result.returncode != 0:
+                logger.error(f"yt-dlp audio download failed for {video_id}: {result.stderr}")
+                return None
             
-            logger.info(f"Processed {processed_count}/{len(videos)} videos")
+            # Find the downloaded file
+            for ext in ['mp3', 'webm', 'm4a', 'ogg']:
+                candidate = str(output_path).replace('%(ext)s', ext)
+                if os.path.exists(candidate):
+                    return candidate
             
-            # Generate embeddings
-            self.generate_embeddings()
+            return None
             
-            logger.info("YouTube ingestion pipeline completed successfully")
+        except subprocess.TimeoutExpired:
+            logger.error(f"Audio download timeout for {video_id}")
+            return None
+        except Exception as e:
+            logger.error(f"Audio download error for {video_id}: {e}")
+            return None
+    
+    def _preprocess_audio(self, audio_path: str) -> str:
+        """Preprocess audio to 16kHz mono WAV"""
+        output_path = audio_path.rsplit('.', 1)[0] + '_processed.wav'
+        
+        cmd = [
+            'ffmpeg', '-i', audio_path,
+            '-ac', '1', '-ar', '16000', '-sample_fmt', 's16',
+            '-vn', '-y', output_path
+        ]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode != 0:
+                logger.error(f"ffmpeg preprocessing failed: {result.stderr}")
+                return audio_path  # Return original if preprocessing fails
+            
+            return output_path
             
         except Exception as e:
-            logger.error(f"Pipeline error: {e}", exc_info=True)
-            raise
+            logger.warning(f"Audio preprocessing failed, using original: {e}")
+            return audio_path
+    
+    def _transcribe_with_whisper(self, audio_path: str) -> Optional[List[TranscriptSegment]]:
+        """Transcribe audio with Whisper"""
+        try:
+            segments, info = self.whisper_model.transcribe(
+                audio_path,
+                beam_size=5,
+                word_timestamps=True,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 700}
+            )
+            
+            transcript_segments = []
+            for segment in segments:
+                # Convert Whisper segment to our format
+                seg = TranscriptSegment(
+                    start=segment.start,
+                    end=segment.end,
+                    text=segment.text.strip()
+                )
+                if seg.text and len(seg.text) > 2:
+                    transcript_segments.append(seg)
+            
+            return transcript_segments
+            
+        except Exception as e:
+            logger.error(f"Whisper transcription failed: {e}")
+            return None
+    
+    def _complete_whisper_pipeline(self, video_info: VideoInfo, segments: List[TranscriptSegment]) -> bool:
+        """Complete the pipeline for Whisper-transcribed content"""
+        try:
+            video_id = video_info.video_id
+            
+            # Chunk transcript
+            chunks = self.processor.process_segments(segments)
+            chunk_data = []
+            for i, chunk in enumerate(chunks):
+                chunk_obj = ChunkData(
+                    chunk_hash=f"{video_id}_{i}",
+                    source_id=video_id,
+                    text=chunk.text,
+                    t_start_s=chunk.start,
+                    t_end_s=chunk.end
+                )
+                chunk_data.append(chunk_obj)
+            
+            # Generate embeddings
+            texts = [chunk.text for chunk in chunk_data]
+            embeddings = self.embedder.generate_embeddings(texts)
+            
+            # Attach embeddings
+            for chunk, embedding in zip(chunk_data, embeddings):
+                chunk.embedding = embedding
+            
+            # Upsert with Whisper provenance
+            extra_metadata = {'has_captions': False, 'whisper_transcribed': True}
+            source_id = self.db.upsert_source(
+                video_info,
+                source_type='youtube',
+                provenance='whisper',
+                access_level='public',
+                extra_metadata=extra_metadata
+            )
+            
+            # Update chunks with source_id
+            for chunk in chunk_data:
+                chunk.source_id = source_id
+            
+            self.db.upsert_chunks(chunk_data)
+            self.db.update_ingest_status(video_id, 'done')
+            
+            logger.info(f"✅ Whisper completed {video_id}: {len(chunk_data)} chunks")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Whisper pipeline completion failed: {e}")
+            return False
+
 
 def main():
-    """Main entry point"""
-    import argparse
-    
-    # Check for seed mode from environment
-    seed_mode = os.getenv('SEED', '').lower() in ('1', 'true', 'yes')
-    
-    parser = argparse.ArgumentParser(description='Ingest YouTube transcripts for Ask Dr. Chaffee')
-    parser.add_argument('--max-videos', type=int, default=50, 
-                       help='Maximum number of videos to process')
-    parser.add_argument('--video-id', type=str, 
-                       help='Process specific video ID only')
-    parser.add_argument('--seed', action='store_true',
-                       help='Enable seed mode (limit to 10 videos for development)')
+    """Main entry point with CLI argument parsing"""
+    parser = argparse.ArgumentParser(description="Robust YouTube transcript ingestion pipeline")
+    parser.add_argument('channel_identifier', help='Channel handle (@username) or channel_id')
+    parser.add_argument('--limit', type=int, default=50, help='Maximum videos to process')
+    parser.add_argument('--max-duration', type=int, default=7200, help='Maximum video duration (seconds)')
+    parser.add_argument('--source', choices=['api', 'yt-dlp'], default='api', help='Video listing source')
+    parser.add_argument('--since-published', help='Only process videos published after this date (YYYY-MM-DD)')
+    parser.add_argument('--whisper', action='store_true', help='Process videos marked for Whisper transcription')
+    parser.add_argument('--whisper-limit', type=int, default=10, help='Max videos to process in Whisper mode')
+    parser.add_argument('--batch-size', type=int, default=5, help='Batch size for concurrent processing')
+    parser.add_argument('--max-workers', type=int, default=3, help='Max concurrent workers')
     
     args = parser.parse_args()
     
-    # Enable seed mode if flag or env var is set
-    if args.seed or seed_mode:
-        seed_mode = True
-        args.max_videos = min(args.max_videos, 10)
-        logger.info("🌱 Seed mode enabled - limiting to 10 videos for development")
+    # Load configuration
+    config = IngestConfig(
+        channel_identifier=args.channel_identifier,
+        max_videos=args.limit,
+        max_duration=args.max_duration,
+        source=args.source,
+        since_published=args.since_published,
+        youtube_api_key=os.getenv('YOUTUBE_API_KEY'),
+        db_url=os.getenv('DATABASE_URL')
+    )
     
-    ingester = YouTubeIngester(seed_mode=seed_mode)
+    # Initialize ingester
+    ingester = RobustYouTubeIngester(config)
     
-    if args.video_id:
-        # Process single video
-        video_info = {
-            'id': args.video_id,
-            'title': f'Video {args.video_id}',
-            'url': f'https://www.youtube.com/watch?v={args.video_id}'
-        }
-        success = ingester.process_video(video_info)
-        if success:
-            ingester.generate_embeddings()
-        sys.exit(0 if success else 1)
+    if args.whisper:
+        # Whisper processing mode
+        logger.info(f"🎤 Starting Whisper processing (limit: {args.whisper_limit})")
+        ingester.process_whisper_videos(limit=args.whisper_limit)
     else:
-        # Process channel
-        ingester.run(args.max_videos)
+        # Normal ingestion mode
+        logger.info(f"🚀 Starting YouTube ingestion for {config.channel_identifier}")
+        logger.info(f"Source: {config.source}, Limit: {config.max_videos}, Max duration: {config.max_duration}s")
+        
+        success = ingester.ingest_videos(
+            batch_size=args.batch_size,
+            max_workers=args.max_workers
+        )
+        
+        if success:
+            logger.info("✅ Ingestion completed successfully")
+        else:
+            logger.error("❌ Ingestion completed with errors")
+            sys.exit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -158,16 +158,29 @@ export default async function handler(
         c.end_time_seconds,
         s.source_type,
         s.published_at,
+        COALESCE(s.provenance, 'yt_caption') as provenance,
         0.5 as similarity -- Initial similarity score
       FROM chunks c
       JOIN sources s ON c.source_id = s.id
       WHERE ${whereConditions.join(' AND ')}
       ORDER BY 
+        -- Primary: Text relevance
         CASE 
           WHEN c.text ILIKE $1 THEN 1
           WHEN s.title ILIKE $1 THEN 2
           ELSE 3
         END,
+        -- Secondary: Provenance preference (owner > yt_caption > yt_dlp > whisper)
+        CASE COALESCE(s.provenance, 'yt_caption') 
+          WHEN 'owner' THEN 1
+          WHEN 'yt_caption' THEN 2
+          WHEN 'yt_dlp' THEN 3
+          WHEN 'whisper' THEN 4
+          ELSE 5
+        END,
+        -- Tertiary: Recency boost for recent content
+        s.published_at DESC NULLS LAST,
+        -- Final: Temporal order within content
         c.start_time_seconds ASC
       LIMIT $${paramCount + 1}
     `;

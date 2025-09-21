@@ -7,6 +7,7 @@ import logging
 import tempfile
 import subprocess
 import os
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -23,6 +24,7 @@ if __name__ == '__main__':
     import os
     sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from backend.scripts.common.transcript_common import TranscriptSegment
+    from backend.scripts.common.downloader import AudioDownloader, AudioPreprocessingConfig
     try:
         from backend.scripts.common.transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
         YOUTUBE_DATA_API_AVAILABLE = True
@@ -32,6 +34,7 @@ if __name__ == '__main__':
 else:
     # When imported as module, use relative imports
     from .transcript_common import TranscriptSegment
+    from .downloader import AudioDownloader, AudioPreprocessingConfig
     try:
         from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
         YOUTUBE_DATA_API_AVAILABLE = True
@@ -48,29 +51,109 @@ except ImportError:
 class TranscriptFetcher:
     """Fetch transcripts with multiple fallback strategies"""
     
-    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = "small.en", ffmpeg_path: str = None, proxies: dict = None, api_key: str = None, credentials_path: str = None):
+    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = None, whisper_upgrade: str = None, ffmpeg_path: str = None, proxies: dict = None, api_key: str = None, credentials_path: str = None, enable_preprocessing: bool = True):
         self.yt_dlp_path = yt_dlp_path
-        self.whisper_model = whisper_model
-        self._whisper_model_cache = None
+        self.whisper_model = whisper_model or os.getenv('WHISPER_MODEL', 'small.en')
+        self.whisper_upgrade = whisper_upgrade or os.getenv('WHISPER_UPGRADE', 'medium.en')
+        self._whisper_model_cache = {}  # Cache multiple models
         self.ffmpeg_path = ffmpeg_path
         self.proxies = proxies
         self.api_key = api_key or os.getenv('YOUTUBE_API_KEY')
         self.credentials_path = credentials_path or os.getenv('YOUTUBE_CREDENTIALS_PATH')
         self._api_client = None
+        
+        # Initialize audio downloader
+        self.downloader = AudioDownloader(ffmpeg_path=ffmpeg_path)
+        self.preprocessing_config = AudioPreprocessingConfig(
+            normalize_audio=enable_preprocessing,
+            remove_silence=False,  # Conservative default, can be enabled per request
+            pipe_mode=False
+        )
     
-    def _get_whisper_model(self):
+    def _get_whisper_model(self, model_name: str = None):
         """Lazy load Whisper model"""
         if not WHISPER_AVAILABLE:
             raise ImportError("faster-whisper not available. Install with: pip install faster-whisper")
         
-        if self._whisper_model_cache is None:
-            logger.info(f"Loading Whisper model: {self.whisper_model}")
-            self._whisper_model_cache = faster_whisper.WhisperModel(
-                self.whisper_model, 
-                device="cpu",  # Use CPU for compatibility
-                compute_type="int8"  # Optimize memory usage
-            )
-        return self._whisper_model_cache
+        model_name = model_name or self.whisper_model
+        
+        if model_name not in self._whisper_model_cache:
+            logger.info(f"Loading Whisper model: {model_name}")
+            
+            # Try GPU first (much faster), fallback to CPU if needed
+            try:
+                # Use GPU acceleration for RTX cards
+                self._whisper_model_cache[model_name] = faster_whisper.WhisperModel(
+                    model_name, 
+                    device="cuda",  # Use GPU acceleration
+                    compute_type="float16"  # Optimal for modern GPUs
+                )
+                logger.info(f"Successfully loaded {model_name} on GPU (CUDA)")
+            except Exception as e:
+                logger.warning(f"GPU loading failed, falling back to CPU: {e}")
+                # Fallback to CPU
+                self._whisper_model_cache[model_name] = faster_whisper.WhisperModel(
+                    model_name, 
+                    device="cpu",  # Fallback to CPU
+                    compute_type="int8"  # Optimize memory usage for CPU
+                )
+                logger.info(f"Loaded {model_name} on CPU (fallback)")
+        return self._whisper_model_cache[model_name]
+    
+    def _assess_transcript_quality(self, segments: List[TranscriptSegment]) -> Dict[str, Any]:
+        """Assess the quality of a transcript to determine if upgrade is needed."""
+        if not segments:
+            return {"score": 0, "issues": ["no_content"], "needs_upgrade": True}
+        
+        total_text = " ".join(seg.text for seg in segments)
+        word_count = len(total_text.split())
+        char_count = len(total_text)
+        
+        # Calculate various quality metrics
+        punct_count = len(re.findall(r'[.!?,:;]', total_text))
+        punct_density = punct_count / max(char_count, 1)
+        
+        # Look for signs of poor transcription
+        repeat_patterns = len(re.findall(r'\b(\w+)\s+\1\b', total_text, re.IGNORECASE))
+        nonsense_words = len(re.findall(r'\b[bcdfghjklmnpqrstvwxyz]{4,}\b', total_text, re.IGNORECASE))
+        
+        # Average segment length
+        avg_segment_length = sum(seg.end - seg.start for seg in segments) / len(segments)
+        
+        issues = []
+        score = 100
+        
+        # Quality checks
+        if word_count < 10:
+            issues.append("too_short")
+            score -= 50
+        
+        if punct_density < 0.01:  # Less than 1% punctuation
+            issues.append("low_punctuation")
+            score -= 20
+        
+        if repeat_patterns > word_count * 0.1:  # More than 10% repeated words
+            issues.append("repetitive")
+            score -= 30
+        
+        if nonsense_words > word_count * 0.2:  # More than 20% nonsense words
+            issues.append("nonsense_words")
+            score -= 40
+        
+        if avg_segment_length > 30:  # Segments too long (poor segmentation)
+            issues.append("poor_segmentation")
+            score -= 10
+        
+        needs_upgrade = score < 70 or len(issues) > 2
+        
+        return {
+            "score": max(0, score),
+            "word_count": word_count,
+            "punct_density": punct_density,
+            "avg_segment_length": avg_segment_length,
+            "issues": issues,
+            "needs_upgrade": needs_upgrade
+        }
     
     def _get_api_client(self):
         """Get or create YouTube Data API client"""
@@ -289,24 +372,51 @@ class TranscriptFetcher:
                 logger.error(f"Error downloading audio for {video_id}: {e}")
                 return None
     
-    def transcribe_with_whisper(self, audio_path: Path) -> Optional[List[TranscriptSegment]]:
-        """Transcribe audio using Whisper"""
+    def transcribe_with_whisper(self, audio_path: Path, model_name: str = None, enable_silence_removal: bool = False) -> Tuple[Optional[List[TranscriptSegment]], Dict[str, Any]]:
+        """
+        Transcribe audio using Whisper with enhanced VAD settings and quality assessment
+        
+        Returns:
+            (segments, metadata) where metadata includes quality info and processing flags
+        """
         if not WHISPER_AVAILABLE:
             logger.error("Whisper not available for transcription")
-            return None
+            return None, {"error": "whisper_unavailable"}
         
-        logger.debug(f"Transcribing with Whisper: {audio_path}")
+        model_name = model_name or self.whisper_model
+        logger.debug(f"Transcribing with Whisper model {model_name}: {audio_path}")
+        
+        # Set up preprocessing config for this transcription
+        preprocessing_config = AudioPreprocessingConfig(
+            normalize_audio=self.preprocessing_config.normalize_audio,
+            remove_silence=enable_silence_removal,
+            pipe_mode=self.preprocessing_config.pipe_mode
+        )
+        
+        metadata = {
+            "model": model_name,
+            "preprocessing": preprocessing_config.to_dict(),
+            "vad_enabled": True
+        }
         
         try:
-            model = self._get_whisper_model()
+            model = self._get_whisper_model(model_name)
             
-            # Transcribe with word-level timestamps
+            # Enhanced VAD parameters for better voice activity detection
+            vad_parameters = {
+                "min_silence_duration_ms": 700,  # More sensitive than default 1000ms
+                "speech_pad_ms": 400,           # Padding around speech segments
+                "max_speech_duration_s": 30,     # Maximum continuous speech duration
+            }
+            
+            # Transcribe with enhanced settings
             segments, info = model.transcribe(
                 str(audio_path),
                 beam_size=5,
                 word_timestamps=True,
                 vad_filter=True,  # Voice activity detection
-                vad_parameters=dict(min_silence_duration_ms=1000)
+                vad_parameters=vad_parameters,
+                language="en"  # Force English for better performance
             )
             
             # Convert to normalized format
@@ -316,31 +426,44 @@ class TranscriptFetcher:
                 if ts.text and len(ts.text.strip()) > 1:  # Filter very short segments
                     transcript_segments.append(ts)
             
-            logger.info(f"Whisper transcribed {len(transcript_segments)} segments from {audio_path}")
-            return transcript_segments
+            # Add transcription info to metadata
+            metadata.update({
+                "detected_language": info.language,
+                "language_probability": info.language_probability,
+                "duration": info.duration,
+                "segments_count": len(transcript_segments)
+            })
+            
+            logger.info(f"Whisper ({model_name}) transcribed {len(transcript_segments)} segments from {audio_path}")
+            return transcript_segments, metadata
             
         except Exception as e:
             logger.error(f"Whisper transcription failed for {audio_path}: {e}")
-            return None
+            metadata["error"] = str(e)
+            return None, metadata
     
     def fetch_transcript(
         self, 
         video_id: str, 
         max_duration_s: Optional[int] = None,
         force_whisper: bool = False,
-        cleanup_audio: bool = True
-    ) -> Tuple[Optional[List[TranscriptSegment]], str]:
+        cleanup_audio: bool = True,
+        enable_silence_removal: bool = False
+    ) -> Tuple[Optional[List[TranscriptSegment]], str, Dict[str, Any]]:
         """
-        Fetch transcript with fallback strategy
+        Fetch transcript with fallback strategy and quality-based model escalation
         
         Returns:
-            (segments, method) where method is 'youtube' or 'whisper'
+            (segments, method, metadata) where method is 'youtube', 'whisper', or 'whisper_upgraded'
         """
+        metadata = {"video_id": video_id, "preprocessing_flags": {}}
+        
         # Try YouTube transcript first unless forced to use Whisper
         if not force_whisper:
             youtube_segments = self.fetch_youtube_transcript(video_id)
             if youtube_segments:
-                return youtube_segments, 'youtube'
+                metadata.update({"source": "youtube", "segment_count": len(youtube_segments)})
+                return youtube_segments, 'youtube', metadata
         
         # Check duration limit for Whisper fallback
         if max_duration_s is not None:
@@ -351,28 +474,84 @@ class TranscriptFetcher:
         # Fallback to Whisper transcription
         logger.info(f"Falling back to Whisper transcription for {video_id}")
         
-        # Download audio
-        audio_path = self.download_audio(video_id)
-        if not audio_path:
-            return None, 'failed'
-        
+        # Download and preprocess audio
         try:
-            # Transcribe with Whisper
-            whisper_segments = self.transcribe_with_whisper(audio_path)
+            preprocessing_config = AudioPreprocessingConfig(
+                normalize_audio=True,
+                remove_silence=enable_silence_removal,
+                pipe_mode=False
+            )
             
+            audio_path = self.downloader.download_audio(video_id, preprocessing_config)
+            metadata["preprocessing_flags"] = preprocessing_config.to_dict()
+            
+            if not audio_path or not os.path.exists(audio_path):
+                metadata["error"] = "audio_download_failed"
+                return None, 'failed', metadata
+            
+            # First attempt with default model
+            whisper_segments, whisper_metadata = self.transcribe_with_whisper(
+                Path(audio_path), 
+                model_name=self.whisper_model,
+                enable_silence_removal=enable_silence_removal
+            )
+            
+            method = 'whisper'
+            metadata.update(whisper_metadata)
+            
+            # If we got segments, assess quality and potentially upgrade
             if whisper_segments:
-                return whisper_segments, 'whisper'
-            else:
-                return None, 'failed'
+                quality_info = self._assess_transcript_quality(whisper_segments)
+                metadata["quality_assessment"] = quality_info
                 
+                logger.info(f"Transcript quality score: {quality_info['score']} for {video_id}")
+                
+                # Upgrade to better model if quality is poor and upgrade model is different
+                if (quality_info['needs_upgrade'] and 
+                    self.whisper_upgrade != self.whisper_model and
+                    quality_info['score'] < 70):
+                    
+                    logger.info(f"Quality issues detected ({quality_info['issues']}). "
+                               f"Upgrading to {self.whisper_upgrade} for {video_id}")
+                    
+                    # Try with upgraded model
+                    upgrade_segments, upgrade_metadata = self.transcribe_with_whisper(
+                        Path(audio_path),
+                        model_name=self.whisper_upgrade,
+                        enable_silence_removal=enable_silence_removal
+                    )
+                    
+                    if upgrade_segments:
+                        upgrade_quality = self._assess_transcript_quality(upgrade_segments)
+                        
+                        # Use upgraded version if it's better
+                        if upgrade_quality['score'] > quality_info['score']:
+                            logger.info(f"Upgrade successful. Quality improved from "
+                                       f"{quality_info['score']} to {upgrade_quality['score']}")
+                            whisper_segments = upgrade_segments
+                            method = 'whisper_upgraded'
+                            metadata.update(upgrade_metadata)
+                            metadata["quality_assessment"] = upgrade_quality
+                            metadata["upgrade_used"] = True
+                        else:
+                            logger.info("Upgrade did not improve quality, keeping original")
+                            metadata["upgrade_attempted"] = True
+                            metadata["upgrade_failed"] = True
+            
+            return whisper_segments, method, metadata
+                
+        except Exception as e:
+            logger.error(f"Error in Whisper transcription for {video_id}: {e}")
+            metadata["error"] = str(e)
+            return None, 'failed', metadata
+            
         finally:
             # Cleanup audio file
-            if cleanup_audio and audio_path and audio_path.exists():
+            if cleanup_audio:
                 try:
-                    audio_path.unlink()
-                    logger.debug(f"Cleaned up audio file: {audio_path}")
+                    self.downloader.cleanup_temp_files(video_id)
                 except Exception as e:
-                    logger.warning(f"Failed to cleanup audio file {audio_path}: {e}")
+                    logger.warning(f"Failed to cleanup temp files for {video_id}: {e}")
 
 def main():
     """CLI for testing transcript fetching"""

@@ -160,35 +160,56 @@ ask-dr-chaffee/
 - **Accessibility**: ARIA labels, keyboard navigation, focus management
 
 ### Backend (Python)
-- **Ingestion Pipeline**: Modular scripts for YouTube and Zoom
+- **Enhanced Ingestion Pipeline**: Tiered transcript fetching with cost optimization
+- **Transcript Sources**: youtube-transcript-api → yt-dlp subtitles → Whisper fallback
+- **Provenance Tracking**: Source quality ranking (owner > yt_caption > yt_dlp > whisper)
+- **Cost Control**: Selective Whisper processing with duration limits and proxy support
 - **Reranking**: Cross-encoder model for relevance improvement
 - **Embeddings**: sentence-transformers/all-MiniLM-L6-v2
-- **Transcripts**: youtube-transcript-api with Whisper fallback
 
 ### Database (PostgreSQL + pgvector)
-- **Sources Table**: Video metadata with publication dates
-- **Chunks Table**: Transcript segments with timestamps
+- **Sources Table**: Video metadata with provenance and access level tracking
+- **Chunks Table**: Transcript segments with timestamps and embeddings
+- **Provenance System**: Track transcript source quality for search ranking
 - **Vector Search**: Semantic similarity with pgvector extension
 - **Text Search**: Full-text search with PostgreSQL's built-in capabilities
 
 ## 🎯 Usage Guide
 
-### Ingestion Strategies
+### Enhanced Transcript Pipeline Strategy
 
-**yt-dlp Method**
-- ✅ No API key required
-- ✅ Works with any YouTube channel
-- ✅ Robust scraping approach
-- ❌ Slower metadata collection
-- ❌ Limited to public data
+The ingestion system uses a **tiered transcript fetching approach** to minimize costs while maximizing reliability:
+
+**Pipeline Order (Automatic Fallback Chain):**
+1. **youtube-transcript-api** → Fast, free, official captions
+2. **yt-dlp subtitle extraction** → Downloaded .vtt files with proxy support  
+3. **Whisper transcription** → Audio-to-text as last resort (cost-controlled)
+
+**Provenance Tracking & Search Ranking:**
+- **owner**: Manual uploads by channel owner (highest priority)
+- **yt_caption**: Official YouTube captions (high priority)
+- **yt_dlp**: Downloaded subtitles via yt-dlp (medium priority)  
+- **whisper**: AI-generated transcripts (lowest priority)
+
+Search results are automatically ranked by relevance → provenance → recency → timestamp.
+
+### Video Discovery Methods
 
 **YouTube Data API Method (Default)**
 - ✅ Rich metadata (view counts, exact timestamps)
-- ✅ Faster bulk operations
-- ✅ Official Google API
-- ✅ Content filtering capabilities
+- ✅ Faster bulk operations with ETag caching
+- ✅ Official Google API with rate limiting
+- ✅ Date filtering and content filtering
 - ❌ Requires API key setup
-- ❌ API quota limitations
+- ❌ API quota limitations (10K units/day)
+
+**yt-dlp Method (Fallback)**
+- ✅ No API key required
+- ✅ Works with any YouTube channel
+- ✅ Robust scraping approach
+- ✅ Proxy support for IP blocking
+- ❌ Slower metadata collection
+- ❌ Limited to public data
 
 ### Content Filtering
 
@@ -205,6 +226,31 @@ You can include these content types with the following flags:
 - `--include-upcoming`: Include upcoming streams
 - `--include-members-only`: Include members-only content
 - `--no-skip-shorts`: Include short videos
+
+### Cost-Controlled Whisper Processing
+
+The system implements **intelligent cost control** for Whisper transcription:
+
+**Two-Phase Processing:**
+1. **Normal Mode**: Processes videos with existing captions via youtube-transcript-api or yt-dlp
+2. **Whisper Mode**: Separate `--whisper` flag processes videos marked `needs_whisper`
+
+**Cost Control Features:**
+- **Duration Limits**: Skip videos longer than `MAX_AUDIO_DURATION` (default: 1 hour)
+- **Selective Processing**: Only transcribe videos without any captions
+- **Proxy Support**: Use `YTDLP_PROXY` to bypass IP blocking for audio downloads
+- **Batch Limits**: Control Whisper processing with `--whisper-limit` parameter
+
+**Enhanced Audio Processing:**
+- **Automatic preprocessing**: Convert to 16kHz mono WAV for optimal performance
+- **VAD filtering**: Voice Activity Detection with 700ms silence threshold
+- **Model selection**: Configurable model size (`small.en`, `medium.en`, etc.)
+- **Cleanup**: Automatic temporary file removal after processing
+
+**Quality & Tracking:**
+- **Provenance tags**: All Whisper content marked with `whisper` provenance
+- **Metadata storage**: Audio processing flags and model versions tracked
+- **Error handling**: Robust error recovery with retry logic
 
 ### Search Features
 - **Basic Search**: Type any query to find relevant transcript segments
@@ -243,8 +289,13 @@ RERANK_ENABLED=true  # Enable cross-encoder reranking
 SEED=false           # Enable seed mode for development
 
 # Whisper Configuration
-WHISPER_MODEL=small.en      # Model size for audio transcription
+WHISPER_MODEL=small.en      # Default model size for audio transcription
+WHISPER_UPGRADE=medium.en   # Upgraded model for poor quality transcripts
 MAX_AUDIO_DURATION=3600     # Skip very long videos for Whisper
+
+# yt-dlp Configuration
+YTDLP_PROXY=                # Proxy for yt-dlp (e.g., socks5://user:pass@host:port)
+YTDLP_OPTS=--sleep-requests 1 --max-sleep-interval 3 --retries 10 --fragment-retries 10 --socket-timeout 20
 
 # Processing
 CHUNK_DURATION_SECONDS=45   # Transcript chunk size
@@ -274,11 +325,13 @@ make db-up              # Start PostgreSQL
 make db-down            # Stop PostgreSQL  
 make db-reset           # Reset database (deletes data)
 
-# Ingestion (Enhanced Pipeline - API Default)
-make ingest-youtube         # Full channel ingestion using API
+# Enhanced Transcript Pipeline (API + Tiered Fetching)
+make ingest-youtube         # Full ingestion with new transcript pipeline
 make seed-youtube          # Development mode (10 videos)
-make sync-youtube          # Sync recent videos (25 latest)
-make ingest-youtube-fallback # Use yt-dlp fallback if API fails
+make sync-youtube          # Sync recent videos with date filtering
+make whisper-missing       # Process videos marked for Whisper transcription
+make fetch-subs            # Batch subtitle extraction via yt-dlp
+make ingest-youtube-fallback # Use yt-dlp fallback for video discovery
 
 # Video Discovery
 make list-youtube          # Dump channel videos to JSON
