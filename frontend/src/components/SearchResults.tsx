@@ -27,9 +27,9 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   copyTimestampLink
 }) => {
   console.log('SearchResults render:', { 
-    resultsLength: results.length, 
+    resultsLength: results ? results.length : 'null', 
     totalResults, 
-    groupedResultsLength: groupedResults.length, 
+    groupedResultsLength: groupedResults ? groupedResults.length : 'null', 
     query, 
     loading 
   });
@@ -37,17 +37,24 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   if (loading) return null;
   if (!query.trim()) return null;
   
-  if (results.length === 0) {
+  // Safety checks for undefined/null arrays
+  const safeResults = results || [];
+  const safeGroupedResults = groupedResults || [];
+  
+  if (safeResults.length === 0) {
     console.log('Showing NoResults because results.length === 0');
+    console.log('Debug - results:', results);
+    console.log('Debug - totalResults:', totalResults);
+    console.log('Debug - groupedResults:', groupedResults);
     return <NoResults sourceFilter={sourceFilter} query={query} />;
   }
 
   return (
     <div className="results" role="main">
       <h2 aria-live="polite">
-        🎯 Found {totalResults} relevant clip{totalResults !== 1 ? 's' : ''} in {groupedResults.length} video{groupedResults.length !== 1 ? 's' : ''}
+        🎯 Found {totalResults} relevant clip{totalResults !== 1 ? 's' : ''} in {safeGroupedResults.length} video{safeGroupedResults.length !== 1 ? 's' : ''}
       </h2>
-      {groupedResults.map((group) => (
+      {safeGroupedResults.map((group) => (
         <VideoCard
           key={group.videoId}
           group={group}
