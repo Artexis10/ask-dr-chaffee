@@ -30,18 +30,23 @@ export const SearchBar: React.FC<SearchBarProps> = ({ query, setQuery, handleSea
         <input
           type="text"
           className="search-input"
-          placeholder="Search Dr. Chaffee's knowledge..."
+          placeholder="Ask Dr. Chaffee about carnivore diet, autoimmune conditions, ketosis... (Press Enter or click Search)"
           value={query}
           onChange={handleInputChange}
           aria-label="Search query"
+          disabled={loading}
         />
         <button 
           type="submit" 
           className="search-button"
-          disabled={loading}
+          disabled={loading || !query.trim()}
           aria-label="Search"
+          style={{ 
+            opacity: loading || !query.trim() ? 0.6 : 1,
+            cursor: loading || !query.trim() ? 'not-allowed' : 'pointer'
+          }}
         >
-          {loading ? '🔄' : '🔍'} {loading ? 'Searching...' : 'Search'}
+          {loading ? '🔄 Searching...' : '🔍 Search Medical Knowledge'}
         </button>
       </div>
     </form>
