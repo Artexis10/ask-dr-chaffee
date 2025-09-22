@@ -2,6 +2,21 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import crypto from 'crypto';
 
+// Import our RAG functionality
+type RAGResponse = {
+  question: string;
+  answer: string;
+  citations: Array<{
+    video_id: string;
+    title: string;
+    timestamp: string;
+    similarity: number;
+  }>;
+  chunks_used: number;
+  cost_usd: number;
+  timestamp: number;
+};
+
 // Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -19,6 +34,53 @@ const USE_MOCK_MODE = !OPENAI_API_KEY || OPENAI_API_KEY.includes('your_') || pro
 
 console.log('ANSWER_ENABLED:', ANSWER_ENABLED);
 console.log('USE_MOCK_MODE:', USE_MOCK_MODE);
+
+// RAG Service Integration
+const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || 'http://localhost:5001';
+
+async function callRAGService(question: string): Promise<RAGResponse | null> {
+  try {
+    // Create timeout promise
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    const response = await fetch(`${RAG_SERVICE_URL}/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: question }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.error('RAG service error:', response.status, response.statusText);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    // Transform RAG response to match our format
+    return {
+      question: data.question || question,
+      answer: data.answer || '',
+      citations: data.sources?.map((source: any) => ({
+        video_id: source.video_id,
+        title: source.title,
+        timestamp: source.timestamp || '',
+        similarity: source.similarity || 0
+      })) || [],
+      chunks_used: data.sources?.length || 0,
+      cost_usd: data.cost_usd || 0,
+      timestamp: Date.now()
+    };
+  } catch (error) {
+    console.error('RAG service call failed:', error);
+    return null;
+  }
+}
 
 interface AnswerParams {
   q: string;
@@ -333,6 +395,33 @@ export default async function handler(
 
   try {
     console.log('Processing query:', query);
+
+    // Try RAG service first (preferred method)
+    const ragResult = await callRAGService(query);
+    
+    if (ragResult && ragResult.answer) {
+      console.log('Using RAG service response');
+      
+      // Transform RAG response to match frontend expectations
+      const citations = ragResult.citations.map(citation => ({
+        video_id: citation.video_id,
+        t_start_s: timestampToSeconds(citation.timestamp.replace(/[\[\]]/g, '')), // Remove brackets and parse
+        published_at: new Date().toISOString() // RAG doesn't provide published_at, use current time
+      }));
+      
+      return res.status(200).json({
+        answer_md: ragResult.answer,
+        citations: citations,
+        confidence: ragResult.chunks_used >= 5 ? 0.9 : 0.7, // High confidence if many sources
+        notes: `Generated using RAG service with ${ragResult.chunks_used} source chunks. Cost: $${ragResult.cost_usd.toFixed(4)}`,
+        used_chunk_ids: [], // RAG service doesn't provide chunk IDs
+        rag_enabled: true,
+        processing_cost: ragResult.cost_usd
+      });
+    }
+    
+    // Fallback to original method if RAG service fails
+    console.log('RAG service unavailable, falling back to original method');
 
     if (USE_MOCK_MODE) {
       return res.status(503).json({
