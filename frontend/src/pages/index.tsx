@@ -6,6 +6,7 @@ import { SearchResults } from '../components/SearchResults';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { Footer } from '../components/Footer';
 import { AnswerCard } from '../components/AnswerCard';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { SearchResult, VideoGroup } from '../types';
 
 export default function Home() {
@@ -26,6 +27,29 @@ export default function Home() {
   const [answerError, setAnswerError] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const copyNotificationTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Global error handlers to prevent popup errors
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Global error caught:', event.error);
+      event.preventDefault(); // Prevent the error popup
+      return false;
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled promise rejection caught:', event.reason);
+      event.preventDefault(); // Prevent the error popup
+      return false;
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   // Debug query state changes
   const handleSetQuery = useCallback((newQuery: string) => {
@@ -89,7 +113,6 @@ export default function Home() {
     });
   }, []);
 
-  // Function to call answer API
   const performAnswer = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
     
@@ -106,25 +129,35 @@ export default function Home() {
       console.log('Answer API call URL:', `/api/answer?${params}`);
       
       const response = await fetch(`/api/answer?${params}`);
+      let responseData;
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Answer failed with status: ${response.status}`);
+      try {
+        // Read the response body only once
+        responseData = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse response as JSON:', jsonError);
+        throw new Error(`Failed to parse response: ${jsonError.message}`);
       }
       
-      const data = await response.json();
-      console.log('Answer API response:', data);
+      if (!response.ok) {
+        throw new Error(responseData?.error || `Answer failed with status: ${response.status}`);
+      }
       
-      if (data.error) {
+      console.log('Answer API response:', responseData);
+      
+      if (responseData.error) {
         // Handle cases like "Not enough on-record context yet"
-        setAnswerError(data.error);
+        setAnswerError(responseData.error);
       } else {
-        setAnswerData(data);
+        setAnswerData(responseData);
       }
       
     } catch (err) {
       console.error('Answer error:', err);
-      setAnswerError(err instanceof Error ? err.message : 'Failed to generate answer');
+      const errorMessage = err instanceof Error ? err.message : 
+                          typeof err === 'string' ? err : 
+                          'Failed to generate answer';
+      setAnswerError(errorMessage);
     } finally {
       setAnswerLoading(false);
     }
@@ -156,18 +189,40 @@ export default function Home() {
       
       const data = await response.json();
       console.log('API response:', data);
+      console.log('Raw results length:', data.results ? data.results.length : 'undefined');
       
       const results = data.results || [];
-      const years = extractYears(results);
-      const grouped = groupResultsByVideo(results);
+      console.log('Processed results:', results.length);
+      
+      let years: string[] = [];
+      let grouped: VideoGroup[] = [];
+      
+      try {
+        years = extractYears(results);
+        console.log('Extracted years:', years);
+      } catch (yearError) {
+        console.error('Error extracting years:', yearError);
+      }
+      
+      try {
+        grouped = groupResultsByVideo(results);
+        console.log('Grouped results:', grouped.length);
+      } catch (groupError) {
+        console.error('Error grouping results:', groupError);
+      }
       
       // Update state all at once with new results
+      console.log('Updating state with:', { 
+        resultsLength: results.length, 
+        groupedLength: grouped.length 
+      });
+      
       setResults(results);
       setTotalResults(results.length);
       setAvailableYears(years);
       setGroupedResults(grouped);
       
-      console.log('State updated - results:', results.length, 'groups:', grouped.length);
+      console.log('State update complete');
       
     } catch (err) {
       console.error('Search error:', err);
@@ -180,43 +235,44 @@ export default function Home() {
     }
   }, [extractYears, groupResultsByVideo]);
 
-  // Debounced search effect for typing (only triggers on query changes)
-  const currentFiltersRef = useRef({ sourceFilter, yearFilter });
-  useEffect(() => {
-    currentFiltersRef.current = { sourceFilter, yearFilter };
-  }, [sourceFilter, yearFilter]);
-
+  // Clear results when query is empty (no debouncing)
   useEffect(() => {
     if (!query.trim()) {
-      // Clear results when query is empty
       setResults([]);
       setGroupedResults([]);
       setTotalResults(0);
       setAnswerData(null);
       setAnswerError('');
-      return;
     }
-
-    // Debounce search while typing - use current filter values at time of execution
-    const debounceTimer = setTimeout(() => {
-      console.log('Debounced search triggered for query:', query);
-      const filters = currentFiltersRef.current;
-      
-      // Call both search and answer APIs in parallel
-      performSearch(query, filters.sourceFilter, filters.yearFilter);
-      performAnswer(query);
-    }, 300); // 300ms delay
-
-    return () => {
-      clearTimeout(debounceTimer);
-    };
-  }, [query, performSearch, performAnswer]); // Only depend on query for debouncing
+  }, [query]);
 
   // Function to handle search form submission
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    await performSearch(query, sourceFilter, yearFilter);
-    await performAnswer(query);
+    
+    // Run search and answer in parallel, independently with full error isolation
+    Promise.resolve().then(async () => {
+      try {
+        await performSearch(query, sourceFilter, yearFilter);
+      } catch (err) {
+        console.error('Search failed:', err);
+        setError(err instanceof Error ? err.message : 'Search failed');
+      }
+    }).catch(err => {
+      console.error('Search promise failed:', err);
+      setError('Search encountered an error');
+    });
+    
+    Promise.resolve().then(async () => {
+      try {
+        await performAnswer(query);
+      } catch (err) {
+        console.error('Answer failed:', err);
+        // Answer failure doesn't affect search results
+      }
+    }).catch(err => {
+      console.error('Answer promise failed:', err);
+    });
   }, [query, sourceFilter, yearFilter, performSearch, performAnswer]);
 
   // Function to highlight search terms in text
@@ -314,20 +370,7 @@ export default function Home() {
     };
   }, [selectedResultIndex, results, groupedResults]);
 
-  // Re-run search immediately when filters change (no debouncing for filters)
-  const prevFilters = useRef({ sourceFilter, yearFilter });
-  useEffect(() => {
-    const filtersChanged = prevFilters.current.sourceFilter !== sourceFilter || 
-                          prevFilters.current.yearFilter !== yearFilter;
-    
-    if (query.trim() && filtersChanged) {
-      console.log('Filter change triggered immediate search');
-      performSearch(query, sourceFilter, yearFilter);
-      performAnswer(query);
-    }
-    
-    prevFilters.current = { sourceFilter, yearFilter };
-  }, [sourceFilter, yearFilter, query, performSearch, performAnswer]);
+  // Note: Filters are applied when user explicitly searches (no auto-search)
 
   return (
     <>
@@ -342,22 +385,30 @@ export default function Home() {
         <div className="header">
           <h1>Ask Dr. Chaffee</h1>
           <p>Search through Dr. Anthony Chaffee's YouTube videos and Zoom recordings</p>
+          <div className="search-hint">
+            💡 <strong>Tip:</strong> Enter your medical question and press Enter or click Search. 
+            Each query uses AI analysis (~2-5 seconds) for the most accurate answers.
+          </div>
         </div>
 
-        <SearchBar 
-          query={query} 
-          setQuery={handleSetQuery} 
-          handleSearch={handleSearch} 
-          loading={loading} 
-        />
+        <ErrorBoundary>
+          <SearchBar 
+            query={query} 
+            setQuery={handleSetQuery} 
+            handleSearch={handleSearch} 
+            loading={loading} 
+          />
+        </ErrorBoundary>
 
-        <FilterPills 
-          sourceFilter={sourceFilter} 
-          setSourceFilter={setSourceFilter} 
-          yearFilter={yearFilter} 
-          setYearFilter={setYearFilter} 
-          availableYears={availableYears} 
-        />
+        <ErrorBoundary>
+          <FilterPills 
+            sourceFilter={sourceFilter} 
+            setSourceFilter={setSourceFilter} 
+            yearFilter={yearFilter} 
+            setYearFilter={setYearFilter} 
+            availableYears={availableYears} 
+          />
+        </ErrorBoundary>
 
         {loading && <LoadingSkeleton />}
 
@@ -367,25 +418,29 @@ export default function Home() {
           </div>
         )}
 
-        <AnswerCard
-          answer={answerData}
-          loading={answerLoading}
-          error={answerError}
-          onPlayClip={(videoId, timestamp) => seekToTimestamp(videoId, timestamp)}
-          onCopyLink={copyTimestampLink}
-        />
+        <ErrorBoundary>
+          <AnswerCard
+            answer={answerData}
+            loading={answerLoading}
+            error={answerError}
+            onPlayClip={(videoId, timestamp) => seekToTimestamp(videoId, timestamp)}
+            onCopyLink={copyTimestampLink}
+          />
+        </ErrorBoundary>
 
-        <SearchResults 
-          results={results}
-          query={query}
-          loading={loading}
-          totalResults={totalResults}
-          groupedResults={groupedResults}
-          sourceFilter={sourceFilter}
-          highlightSearchTerms={highlightSearchTerms}
-          seekToTimestamp={seekToTimestamp}
-          copyTimestampLink={copyTimestampLink}
-        />
+        <ErrorBoundary>
+          <SearchResults 
+            results={results}
+            query={query}
+            loading={loading}
+            totalResults={totalResults}
+            groupedResults={groupedResults}
+            sourceFilter={sourceFilter}
+            highlightSearchTerms={highlightSearchTerms}
+            seekToTimestamp={seekToTimestamp}
+            copyTimestampLink={copyTimestampLink}
+          />
+        </ErrorBoundary>
 
         <Footer />
 
@@ -416,6 +471,21 @@ export default function Home() {
           .header p {
             font-size: 1.2rem;
             color: #4a5568;
+          }
+
+          .search-hint {
+            background-color: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #2d3748;
+            text-align: center;
+          }
+
+          .search-hint strong {
+            color: #2b6cb0;
           }
           
           .error-message {
