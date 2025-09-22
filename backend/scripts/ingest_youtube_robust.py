@@ -31,10 +31,12 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.common.list_videos_yt_dlp import YtDlpVideoLister, VideoInfo
 from scripts.common.list_videos_api import YouTubeAPILister
-from scripts.common.transcript_fetch import TranscriptFetcher, TranscriptSegment
+from scripts.common.transcript_fetch import TranscriptFetcher
 from scripts.common.database_upsert import DatabaseUpserter, ChunkData
 from scripts.common.embeddings import EmbeddingGenerator
 from scripts.common.transcript_processor import TranscriptProcessor
+from scripts.common.downloader import AudioDownloader
+
 
 # Load environment variables
 load_dotenv()
@@ -235,7 +237,7 @@ class RobustYouTubeIngester:
             self.db.upsert_ingest_state(video_id, video_info, status='pending')
             
             # Step 1: Fetch transcript
-            segments, method = self.transcript_fetcher.fetch_transcript(
+            segments, method, metadata = self.transcript_fetcher.fetch_transcript(
                 video_id,
                 max_duration_s=self.config.max_duration
             )
@@ -320,7 +322,7 @@ class RobustYouTubeIngester:
                 logger.info(f"DRY RUN: Would process {video.video_id}: {video.title}")
             return stats
         
-        # Use ThreadPoolExecutor for I/O bound tasks
+        # Use ThreadPoolExecutor with thread-safe database connections
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.concurrency) as executor:
             with tqdm.tqdm(total=len(videos), desc=f"Batch {batch_num}") as pbar:
                 # Submit all tasks
@@ -379,47 +381,64 @@ class RobustYouTubeIngester:
             else:
                 logger.warning("No videos found from source - check your JSON file or API configuration")
             
-            # Now process in batches from the queue
-            batch_size = self.config.limit or 50  # Default batch size
+            # Get ALL pending videos and process concurrently
+            all_pending = self.get_pending_videos(self.config.limit or 999999)
             
-            while True:
-                # Get next batch of pending videos
-                pending = self.get_pending_videos(batch_size)
-                
-                if not pending:
-                    logger.info("No more videos to process")
-                    break
-                
-                # Convert to VideoInfo objects for processing
-                video_batch = []
-                for video_data in pending:
-                    video_info = VideoInfo(
-                        video_id=video_data['video_id'],
-                        title=video_data.get('title', ''),
-                        published_at=video_data.get('published_at'),
-                        duration_s=video_data.get('duration_s'),
-                        view_count=video_data.get('view_count'),
-                        description=video_data.get('description')
-                    )
-                    video_batch.append(video_info)
-                
-                logger.info(f"Processing batch {batch_num} with {len(video_batch)} videos")
-                
-                # Process batch
-                batch_stats = self.process_batch_concurrent(video_batch, batch_num)
-                
-                # Update total stats
-                total_stats.total += batch_stats.total
-                total_stats.processed += batch_stats.processed
-                total_stats.done += batch_stats.done
-                total_stats.errors += batch_stats.errors
-                total_stats.skipped += batch_stats.skipped
-                
-                batch_num += 1
-                
-                # Optional delay between batches to be nice to services
-                if batch_num > 1:
-                    time.sleep(2)
+            if not all_pending:
+                logger.info("No pending videos to process")
+                return
+            
+            logger.info(f"Processing {len(all_pending)} videos with {self.config.concurrency} concurrent workers")
+            
+            # Convert to VideoInfo objects
+            video_batch = []
+            for video_data in all_pending:
+                video_info = VideoInfo(
+                    video_id=video_data['video_id'],
+                    title=video_data.get('title', ''),
+                    published_at=video_data.get('published_at'),
+                    duration_s=video_data.get('duration_s'),
+                    view_count=video_data.get('view_count'),
+                    description=video_data.get('description')
+                )
+                video_batch.append(video_info)
+            
+            # Process ALL videos concurrently with thread-safe database connections
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.concurrency) as executor:
+                with tqdm.tqdm(total=len(video_batch), desc="Processing Videos") as pbar:
+                    # Submit all videos at once
+                    future_to_video = {
+                        executor.submit(self.process_single_video, video): video
+                        for video in video_batch
+                    }
+                    
+                    # Process as they complete
+                    for future in concurrent.futures.as_completed(future_to_video):
+                        video = future_to_video[future]
+                        video_id = video.video_id
+                        try:
+                            success = future.result()
+                            if success:
+                                # Check final status
+                                state = self.db.get_ingest_state(video_id)
+                                if state and state['status'] == 'done':
+                                    total_stats.done += 1
+                                    logger.info(f"COMPLETED {video_id}")
+                                else:
+                                    total_stats.processed += 1
+                            else:
+                                total_stats.errors += 1
+                                logger.error(f"FAILED {video_id}")
+                        except Exception as e:
+                            logger.error(f"ERROR {video_id}: {e}")
+                            total_stats.errors += 1
+                        
+                        total_stats.total += 1
+                        pbar.update(1)
+                        pbar.set_postfix({
+                            'done': total_stats.done,
+                            'errors': total_stats.errors
+                        })
                     
         except KeyboardInterrupt:
             logger.info("\nReceived interrupt signal - pipeline is resumable")

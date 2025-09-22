@@ -5,18 +5,17 @@ Database upsert operations for video ingestion pipeline
 
 import logging
 import hashlib
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Tuple
+import numpy as np
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-
 import psycopg2
 import psycopg2.extras
-import psycopg2.sql
 from psycopg2.extras import execute_values
-import numpy as np
+import threading
+from datetime import datetime, timezone
 
 from .list_videos_yt_dlp import VideoInfo
-from .transcript_fetch import TranscriptSegment
+from .transcripts import TranscriptSegment
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +40,8 @@ class ChunkData:
             chunk_hash=chunk_hash,
             source_id=source_id,
             text=segment.text,
-            t_start_s=segment.start,
-            t_end_s=segment.end
+            t_start_s=float(segment.start),  # Ensure Python float
+            t_end_s=float(segment.end)       # Ensure Python float
         )
 
 class DatabaseUpserter:
@@ -50,19 +49,19 @@ class DatabaseUpserter:
     
     def __init__(self, db_url: str):
         self.db_url = db_url
-        self._connection = None
+        self._local = threading.local()
     
     def get_connection(self):
-        """Get database connection with lazy initialization"""
-        if self._connection is None or self._connection.closed:
-            self._connection = psycopg2.connect(self.db_url)
-            self._connection.autocommit = False
-        return self._connection
+        """Get thread-local database connection"""
+        if not hasattr(self._local, 'connection') or self._local.connection.closed:
+            self._local.connection = psycopg2.connect(self.db_url)
+            self._local.connection.autocommit = False
+        return self._local.connection
     
     def close_connection(self):
-        """Close database connection"""
-        if self._connection and not self._connection.closed:
-            self._connection.close()
+        """Close thread-local database connection"""
+        if hasattr(self._local, 'connection') and not self._local.connection.closed:
+            self._local.connection.close()
     
     def __enter__(self):
         return self
@@ -130,19 +129,22 @@ class DatabaseUpserter:
     def get_videos_by_status(
         self, 
         status: str, 
-        limit: Optional[int] = None,
-        order_by: str = 'published_at DESC'
+        limit: int = None,
+        order_by: str = "created_at DESC"
     ) -> List[Dict[str, Any]]:
-        """Get videos filtered by status"""
-        conn = self.get_connection()
-        
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            query = f"SELECT * FROM ingest_state WHERE status = %s ORDER BY {order_by}"
-            if limit:
-                query += f" LIMIT {limit}"
-            
-            cur.execute(query, (status,))
-            return [dict(row) for row in cur.fetchall()]
+        """Get videos by ingest status"""
+        try:
+            with self.get_connection().cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                query = f"SELECT * FROM ingest_state WHERE status = %s ORDER BY {order_by}"
+                if limit:
+                    query += f" LIMIT {limit}"
+                
+                cur.execute(query, (status,))
+                return [dict(row) for row in cur.fetchall()]
+        except Exception as e:
+            self.get_connection().rollback()  # Reset transaction on error
+            logger.warning(f"Database query failed, rolling back: {e}")
+            return []
     
     def update_ingest_status(
         self, 
@@ -266,11 +268,21 @@ class DatabaseUpserter:
             # Prepare data for batch insert
             chunk_data = []
             for i, chunk in enumerate(chunks):
-                embedding_list = chunk.embedding.tolist() if chunk.embedding is not None and hasattr(chunk.embedding, 'tolist') else chunk.embedding
+                # Ensure embedding is properly converted to list format
+                embedding_list = None
+                if chunk.embedding is not None:
+                    if hasattr(chunk.embedding, 'tolist'):
+                        embedding_list = chunk.embedding.tolist()
+                    elif isinstance(chunk.embedding, list):
+                        embedding_list = chunk.embedding
+                    else:
+                        # Convert any other array-like object
+                        embedding_list = list(chunk.embedding)
+                
                 chunk_data.append((
                     chunk.source_id,
                     i,  # chunk_index
-                    chunk.t_start_s,  # start_time_seconds
+                    chunk.t_start_s,  # start_time_seconds  
                     chunk.t_end_s,    # end_time_seconds
                     chunk.text,
                     embedding_list,

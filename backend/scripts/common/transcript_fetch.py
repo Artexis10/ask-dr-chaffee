@@ -362,8 +362,9 @@ class TranscriptFetcher:
                 audio_file = audio_files[0]
                 logger.debug(f"Audio downloaded: {audio_file}")
                 
-                # Transcribe with Whisper
-                return self.transcribe_with_whisper(audio_file)
+                # Transcribe with parallel Whisper (bypasses GIL)
+                segments, metadata = self.transcribe_with_whisper_parallel(audio_file)
+                return segments
                 
             except subprocess.TimeoutExpired:
                 logger.error(f"Audio download timeout for {video_id}")
@@ -372,7 +373,27 @@ class TranscriptFetcher:
                 logger.error(f"Error downloading audio for {video_id}: {e}")
                 return None
     
-    def transcribe_with_whisper(self, audio_path: Path, model_name: str = None, enable_silence_removal: bool = False) -> Tuple[Optional[List[TranscriptSegment]], Dict[str, Any]]:
+    def transcribe_with_whisper_parallel(self, audio_path: Path, model_name: str = None) -> Tuple[Optional[List[TranscriptSegment]], Dict[str, Any]]:
+        """
+        Transcribe audio using multi-model Whisper pool for maximum RTX 5080 utilization
+        """
+        try:
+            from .multi_model_whisper import get_multi_model_manager
+            
+            # Get the global multi-model manager
+            manager = get_multi_model_manager(num_models=16, model_size="base")
+            
+            # Use multi-model transcription
+            segments, metadata = manager.transcribe_with_multi_model(audio_path, model_name)
+            
+            return segments, metadata
+            
+        except Exception as e:
+            logger.error(f"Multi-model Whisper failed for {audio_path}: {e}")
+            # Fallback to single model
+            return self.transcribe_with_whisper_fallback(audio_path, model_name)
+    
+    def transcribe_with_whisper_fallback(self, audio_path: Path, model_name: str = None, enable_silence_removal: bool = False) -> Tuple[Optional[List[TranscriptSegment]], Dict[str, Any]]:
         """
         Transcribe audio using Whisper with enhanced VAD settings and quality assessment
         
@@ -414,8 +435,7 @@ class TranscriptFetcher:
                 str(audio_path),
                 beam_size=5,
                 word_timestamps=True,
-                vad_filter=True,  # Voice activity detection
-                vad_parameters=vad_parameters,
+                vad_filter=False,  # Disable aggressive VAD that removes all audio
                 language="en"  # Force English for better performance
             )
             
@@ -489,11 +509,10 @@ class TranscriptFetcher:
                 metadata["error"] = "audio_download_failed"
                 return None, 'failed', metadata
             
-            # First attempt with default model
-            whisper_segments, whisper_metadata = self.transcribe_with_whisper(
+            # First attempt with parallel processing
+            whisper_segments, whisper_metadata = self.transcribe_with_whisper_parallel(
                 Path(audio_path), 
-                model_name=self.whisper_model,
-                enable_silence_removal=enable_silence_removal
+                model_name=self.whisper_model
             )
             
             method = 'whisper'
@@ -514,8 +533,8 @@ class TranscriptFetcher:
                     logger.info(f"Quality issues detected ({quality_info['issues']}). "
                                f"Upgrading to {self.whisper_upgrade} for {video_id}")
                     
-                    # Try with upgraded model
-                    upgrade_segments, upgrade_metadata = self.transcribe_with_whisper(
+                    # Try with upgraded model (fallback method for quality upgrade)
+                    upgrade_segments, upgrade_metadata = self.transcribe_with_whisper_fallback(
                         Path(audio_path),
                         model_name=self.whisper_upgrade,
                         enable_silence_removal=enable_silence_removal
