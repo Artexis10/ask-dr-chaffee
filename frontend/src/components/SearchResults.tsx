@@ -2,6 +2,7 @@ import React from 'react';
 import { VideoGroup } from '../types';
 import { VideoCard } from './VideoCard';
 import { NoResults } from './NoResults';
+import './SearchResults.css';
 
 interface SearchResultsProps {
   results: any[];
@@ -51,19 +52,23 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
 
   return (
     <div className="results" role="main">
-      <h2 aria-live="polite">
-        🎯 Found {totalResults} relevant clip{totalResults !== 1 ? 's' : ''} in {safeGroupedResults.length} video{safeGroupedResults.length !== 1 ? 's' : ''}
-      </h2>
-      {safeGroupedResults.map((group) => (
-        <VideoCard
-          key={group.videoId}
-          group={group}
-          query={query}
-          highlightSearchTerms={highlightSearchTerms}
-          seekToTimestamp={seekToTimestamp}
-          copyTimestampLink={copyTimestampLink}
-        />
-      ))}
+      <div className="results-summary">
+        <span aria-live="polite">
+          {totalResults} clip{totalResults !== 1 ? 's' : ''} from {safeGroupedResults.length} video{safeGroupedResults.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+      <div className="video-cards-grid">
+        {safeGroupedResults.map((group) => (
+          <VideoCard
+            key={group.videoId}
+            group={group}
+            query={query}
+            highlightSearchTerms={highlightSearchTerms}
+            seekToTimestamp={seekToTimestamp}
+            copyTimestampLink={copyTimestampLink}
+          />
+        ))}
+      </div>
     </div>
   );
 };

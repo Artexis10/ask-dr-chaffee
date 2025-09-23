@@ -656,21 +656,28 @@ export default function Home() {
           </Suspense>
         </ErrorBoundary>
 
-        <ErrorBoundary>
-          <Suspense fallback={loading ? <LoadingSkeleton /> : <LazyLoadFallback />}>
-            <SearchResults 
-              results={results}
-              query={query}
-              loading={loading}
-              totalResults={totalResults}
-              groupedResults={groupedResults}
-              sourceFilter={sourceFilter}
-              highlightSearchTerms={highlightSearchTerms}
-              seekToTimestamp={seekToTimestamp}
-              copyTimestampLink={copyTimestampLink}
-            />
-          </Suspense>
-        </ErrorBoundary>
+        {/* Only show search results when answer is ready and not loading */}
+        {answerData && !answerLoading && (
+          <ErrorBoundary>
+            <Suspense fallback={loading ? <LoadingSkeleton /> : <LazyLoadFallback />}>
+              <div className="supporting-clips-section">
+                <h2>Supporting Video Clips</h2>
+                <p className="supporting-clips-info">These clips were used to generate the answer above.</p>
+                <SearchResults 
+                  results={results}
+                  query={query}
+                  loading={loading}
+                  totalResults={totalResults}
+                  groupedResults={groupedResults}
+                  sourceFilter={sourceFilter}
+                  highlightSearchTerms={highlightSearchTerms}
+                  seekToTimestamp={seekToTimestamp}
+                  copyTimestampLink={copyTimestampLink}
+                />
+              </div>
+            </Suspense>
+          </ErrorBoundary>
+        )}
 
         <Footer />
 
@@ -873,6 +880,24 @@ export default function Home() {
           @keyframes shimmer {
             0% { background-position: -200% 0; }
             100% { background-position: 200% 0; }
+          }
+          
+          .supporting-clips-section {
+            margin-top: var(--space-8);
+            padding-top: var(--space-6);
+            border-top: 1px solid var(--color-border);
+          }
+          
+          .supporting-clips-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: var(--space-2);
+            color: var(--color-text);
+          }
+          
+          .supporting-clips-info {
+            color: var(--color-text-light);
+            margin-bottom: var(--space-4);
+            font-size: 0.95rem;
           }
         `}</style>
       </main>

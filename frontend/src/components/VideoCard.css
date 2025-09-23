@@ -1,0 +1,112 @@
+.video-card {
+  background: var(--color-card, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-lg, 0.75rem);
+  margin-bottom: var(--space-4, 1rem);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal, 0.25s ease);
+}
+
+.video-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.video-header {
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.video-header h3 {
+  font-size: 1rem;
+  margin: 0;
+  color: var(--color-text, #1e293b);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+}
+
+.video-icon {
+  flex-shrink: 0;
+}
+
+.clips-container {
+  padding: 0;
+}
+
+.clip-card {
+  padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+  border-bottom: 1px solid var(--color-border-light, #f1f5f9);
+}
+
+.clip-card:last-child {
+  border-bottom: none;
+}
+
+.clip-content {
+  margin-bottom: var(--space-2, 0.5rem);
+}
+
+.transcript-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text, #1e293b);
+}
+
+.transcript-text mark {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.clip-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.timestamp {
+  color: var(--color-text-light, #64748b);
+  font-weight: 500;
+  background: var(--color-border-light, #f1f5f9);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.clip-actions {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+}
+
+.watch-link {
+  display: inline-block;
+  background-color: var(--color-primary, #3b82f6);
+  color: white;
+  padding: 4px 10px;
+  border-radius: var(--radius-md, 0.5rem);
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: all var(--transition-normal, 0.25s ease);
+}
+
+.watch-link:hover {
+  background-color: var(--color-primary-dark, #2563eb);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .clip-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2, 0.5rem);
+  }
+  
+  .clip-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

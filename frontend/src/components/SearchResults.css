@@ -1,0 +1,22 @@
+.results {
+  margin-top: var(--space-4, 1rem);
+}
+
+.results-summary {
+  margin-bottom: var(--space-4, 1rem);
+  color: var(--color-text-light, #64748b);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.video-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4, 1rem);
+}
+
+@media (max-width: 640px) {
+  .video-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
