@@ -104,3 +104,17 @@ models/
 *.wav
 *.m4a
 *.aac
+
+# FFmpeg binaries
+backend/ffmpeg/
+backend/ffmpeg.zip
+
+# Temporary development files
+backend/scripts/common/voice_enrollment_fixed.py
+backend/scripts/enroll_chaffee.py
+check-syntax.js
+test-api.js
+test-endpoint.js
+test-json-parsing.js
+frontend/src/pages/api/milk-answer.ts
+frontend/src/pages/api/test-answer.ts
