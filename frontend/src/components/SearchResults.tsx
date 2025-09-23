@@ -2,7 +2,7 @@ import React from 'react';
 import { VideoGroup } from '../types';
 import { VideoCard } from './VideoCard';
 import { NoResults } from './NoResults';
-import './SearchResults.css';
+import styles from './SearchResults.module.css';
 
 interface SearchResultsProps {
   results: any[];
@@ -51,13 +51,13 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
   }
 
   return (
-    <div className="results" role="main">
-      <div className="results-summary">
+    <div className={styles.results} role="main">
+      <div className={styles['results-summary']}>
         <span aria-live="polite">
           {totalResults} clip{totalResults !== 1 ? 's' : ''} from {safeGroupedResults.length} video{safeGroupedResults.length !== 1 ? 's' : ''}
         </span>
       </div>
-      <div className="video-cards-grid">
+      <div className={styles['video-cards-grid']}>
         {safeGroupedResults.map((group) => (
           <VideoCard
             key={group.videoId}

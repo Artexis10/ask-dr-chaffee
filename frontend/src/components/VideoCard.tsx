@@ -1,6 +1,6 @@
 import React from 'react';
 import { VideoGroup, SearchResult } from '../types';
-import './VideoCard.css';
+import styles from './VideoCard.module.css';
 
 interface VideoCardProps {
   group: VideoGroup;
@@ -18,36 +18,36 @@ export const VideoCard: React.FC<VideoCardProps> = ({
   copyTimestampLink 
 }) => {
   return (
-    <div key={group.videoId} className="video-card">
-      <div className="video-header">
+    <div key={group.videoId} className={styles['video-card']}>
+      <div className={styles['video-header']}>
         <h3>
-          <span className="video-icon">{group.source_type === 'youtube' ? '📺' : '💼'}</span>
+          <span className={styles['video-icon']}>{group.source_type === 'youtube' ? '📺' : '💼'}</span>
           {group.videoTitle}
         </h3>
       </div>
       
-      <div className="clips-container">
+      <div className={styles['clips-container']}>
         {group.clips.map((clip: SearchResult) => (
-          <div key={clip.id} className="clip-card">
-            <div className="clip-content">
+          <div key={clip.id} className={styles['clip-card']}>
+            <div className={styles['clip-content']}>
               <p 
-                className="transcript-text"
+                className={styles['transcript-text']}
                 dangerouslySetInnerHTML={{
                   __html: highlightSearchTerms(clip.text, query)
                 }}
               ></p>
             </div>
-            <div className="clip-footer">
-              <span className="timestamp">
+            <div className={styles['clip-footer']}>
+              <span className={styles.timestamp}>
                 {formatTime(clip.start_time_seconds)}
               </span>
-              <div className="clip-actions">
+              <div className={styles['clip-actions']}>
                 {group.source_type === 'youtube' && (
                   <a 
                     href={clip.url} 
                     target="_blank" 
                     rel="noopener noreferrer" 
-                    className="watch-link"
+                    className={styles['watch-link']}
                     onClick={() => {
                       if (typeof window !== 'undefined') {
                         window.dispatchEvent(new CustomEvent('analytics', {
