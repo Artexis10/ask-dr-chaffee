@@ -1,0 +1,2 @@
+# Ignore voice profile files but keep the directory structure
+*.json

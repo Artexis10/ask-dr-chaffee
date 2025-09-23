@@ -10,8 +10,8 @@ import logging
 import argparse
 from pathlib import Path
 
-# Add backend scripts to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add parent directory to path for proper imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 def setup_logging(verbose: bool = False):
     """Setup logging configuration"""
@@ -37,35 +37,36 @@ def enroll_command(args):
             audio_sources.extend(args.url)
         
         if not audio_sources:
-            print("❌ No audio sources provided. Use --audio or --url")
+            print("[ERROR] No audio sources provided. Use --audio or --url")
             return 1
         
-        print(f"🎤 Enrolling speaker: {args.name}")
-        print(f"📁 Audio sources: {len(audio_sources)}")
+        print(f"[SPEAKER] Enrolling speaker: {args.name}")
+        print(f"[FILES] Audio sources: {len(audio_sources)}")
         
         profile = enrollment.enroll_speaker(
             name=args.name,
             audio_sources=audio_sources,
             overwrite=args.overwrite,
+            update=args.update,
             min_duration=args.min_duration
         )
         
         if profile:
-            print(f"✅ Successfully enrolled speaker: {args.name}")
-            print(f"   📊 Embeddings: {profile.metadata['num_embeddings']}")
-            print(f"   ⏱️  Duration: {profile.metadata['total_duration_seconds']:.1f}s")
-            print(f"   🎯 Recommended threshold: {profile.metadata['recommended_threshold']:.3f}")
+            print(f"[SUCCESS] Successfully enrolled speaker: {args.name}")
+            print(f"   [STATS] Embeddings: {profile.metadata['num_embeddings']}")
+            print(f"   [TIME]  Duration: {profile.metadata['total_duration_seconds']:.1f}s")
+            print(f"   [TARGET] Recommended threshold: {profile.metadata['recommended_threshold']:.3f}")
             return 0
         else:
-            print(f"❌ Failed to enroll speaker: {args.name}")
+            print(f"[ERROR] Failed to enroll speaker: {args.name}")
             return 1
             
     except ImportError as e:
-        print(f"❌ Missing dependencies: {e}")
-        print("📦 Install required packages: pip install speechbrain librosa soundfile")
+        print(f"[ERROR] Missing dependencies: {e}")
+        print("[PACKAGE] Install required packages: pip install speechbrain librosa soundfile")
         return 1
     except Exception as e:
-        print(f"❌ Enrollment failed: {e}")
+        print(f"[ERROR] Enrollment failed: {e}")
         return 1
 
 def list_voices_command(args):
@@ -77,7 +78,7 @@ def list_voices_command(args):
         profiles = enrollment.list_profiles()
         
         if profiles:
-            print("🎤 Enrolled speakers:")
+            print("[SPEAKER] Enrolled speakers:")
             for profile_name in profiles:
                 profile = enrollment.load_profile(profile_name.lower())
                 if profile:
@@ -86,13 +87,13 @@ def list_voices_command(args):
                     print(f"     Embeddings: {profile.metadata['num_embeddings']}")
                     print(f"     Threshold: {profile.metadata['recommended_threshold']:.3f}")
         else:
-            print("📭 No enrolled speakers found.")
-            print(f"💡 Use 'asr.py enroll --name <name> --audio <files>' to enroll speakers")
+            print("[EMPTY] No enrolled speakers found.")
+            print(f"[TIP] Use 'asr.py enroll --name <name> --audio <files>' to enroll speakers")
         
         return 0
         
     except Exception as e:
-        print(f"❌ Failed to list voices: {e}")
+        print(f"[ERROR] Failed to list voices: {e}")
         return 1
 
 def voice_info_command(args):
@@ -104,22 +105,22 @@ def voice_info_command(args):
         profile = enrollment.load_profile(args.name)
         
         if profile:
-            print(f"🎤 Speaker: {profile.name}")
-            print(f"📅 Created: {profile.created_at}")
-            print(f"📊 Embeddings: {profile.metadata['num_embeddings']}")
-            print(f"⏱️  Total duration: {profile.metadata['total_duration_seconds']:.1f}s")
-            print(f"🎯 Recommended threshold: {profile.metadata['recommended_threshold']:.3f}")
-            print(f"🔧 Model: {profile.metadata['model']}")
-            print(f"📁 Audio sources ({len(profile.audio_sources)}):")
+            print(f"[SPEAKER] Speaker: {profile.name}")
+            print(f"[DATE] Created: {profile.created_at}")
+            print(f"[STATS] Embeddings: {profile.metadata['num_embeddings']}")
+            print(f"[TIME]  Total duration: {profile.metadata['total_duration_seconds']:.1f}s")
+            print(f"[TARGET] Recommended threshold: {profile.metadata['recommended_threshold']:.3f}")
+            print(f"[TOOL] Model: {profile.metadata['model']}")
+            print(f"[FILES] Audio sources ({len(profile.audio_sources)}):")
             for i, source in enumerate(profile.audio_sources, 1):
                 print(f"   {i}. {source}")
             return 0
         else:
-            print(f"❌ Speaker '{args.name}' not found.")
+            print(f"[ERROR] Speaker '{args.name}' not found.")
             return 1
             
     except Exception as e:
-        print(f"❌ Failed to get voice info: {e}")
+        print(f"[ERROR] Failed to get voice info: {e}")
         return 1
 
 def transcribe_command(args):
@@ -127,7 +128,7 @@ def transcribe_command(args):
     try:
         from backend.scripts.common.enhanced_asr import EnhancedASR, EnhancedASRConfig
         
-        print(f"🎙️  Starting enhanced ASR transcription: {args.audio_file}")
+        print(f"[MIC]  Starting enhanced ASR transcription: {args.audio_file}")
         
         # Create config with CLI overrides
         config = EnhancedASRConfig()
@@ -151,12 +152,12 @@ def transcribe_command(args):
         if args.whisper_model:
             config.whisper_model = args.whisper_model
         
-        print(f"⚙️  Configuration:")
-        print(f"   🎯 Chaffee threshold: {config.chaffee_min_sim:.3f}")
-        print(f"   👥 Guest threshold: {config.guest_min_sim:.3f}")
-        print(f"   📏 Attribution margin: {config.attr_margin:.3f}")
-        print(f"   🔄 Assume monologue: {config.assume_monologue}")
-        print(f"   📝 Word alignment: {config.align_words}")
+        print(f"[CONFIG]  Configuration:")
+        print(f"   [TARGET] Chaffee threshold: {config.chaffee_min_sim:.3f}")
+        print(f"   [GUESTS] Guest threshold: {config.guest_min_sim:.3f}")
+        print(f"   [MARGIN] Attribution margin: {config.attr_margin:.3f}")
+        print(f"   [SYNC] Assume monologue: {config.assume_monologue}")
+        print(f"   [NOTES] Word alignment: {config.align_words}")
         
         # Initialize ASR system
         asr = EnhancedASR(config)
@@ -165,7 +166,7 @@ def transcribe_command(args):
         result = asr.transcribe_with_speaker_id(args.audio_file)
         
         if not result:
-            print("❌ Transcription failed")
+            print("[ERROR] Transcription failed")
             return 1
         
         # Handle output
@@ -185,14 +186,14 @@ def transcribe_command(args):
         elif args.format == 'summary':
             output = formatter.generate_summary_report(result)
         else:
-            print(f"❌ Unknown format: {args.format}")
+            print(f"[ERROR] Unknown format: {args.format}")
             return 1
         
         # Save or print output
         if args.output:
             with open(args.output, 'w', encoding='utf-8') as f:
                 f.write(output)
-            print(f"✅ Results saved to: {args.output}")
+            print(f"[SUCCESS] Results saved to: {args.output}")
         else:
             print("\n" + "="*50)
             print(output)
@@ -205,11 +206,11 @@ def transcribe_command(args):
         return 0
         
     except ImportError as e:
-        print(f"❌ Missing dependencies: {e}")
-        print("📦 Install required packages: pip install whisperx pyannote.audio speechbrain")
+        print(f"[ERROR] Missing dependencies: {e}")
+        print("[PACKAGE] Install required packages: pip install whisperx pyannote.audio speechbrain")
         return 1
     except Exception as e:
-        print(f"❌ Transcription failed: {e}")
+        print(f"[ERROR] Transcription failed: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()
@@ -243,21 +244,21 @@ def convert_command(args):
         elif args.format == 'summary':
             output = formatter.generate_summary_report(result_data)
         else:
-            print(f"❌ Unknown format: {args.format}")
+            print(f"[ERROR] Unknown format: {args.format}")
             return 1
         
         # Write output
         if args.output:
             with open(args.output, 'w', encoding='utf-8') as f:
                 f.write(output)
-            print(f"✅ Output written to: {args.output}")
+            print(f"[SUCCESS] Output written to: {args.output}")
         else:
             print(output)
         
         return 0
         
     except Exception as e:
-        print(f"❌ Conversion failed: {e}")
+        print(f"[ERROR] Conversion failed: {e}")
         return 1
 
 def main():
@@ -299,6 +300,7 @@ Examples:
     enroll_parser.add_argument('--audio', nargs='+', help='Audio file paths')
     enroll_parser.add_argument('--url', nargs='+', help='YouTube URLs')
     enroll_parser.add_argument('--overwrite', action='store_true', help='Overwrite existing profile')
+    enroll_parser.add_argument('--update', action='store_true', help='Update existing profile with new audio')
     enroll_parser.add_argument('--min-duration', type=float, default=30.0, help='Minimum audio duration (seconds)')
     
     # List voices command
@@ -362,7 +364,7 @@ Examples:
     elif args.command == 'convert':
         return convert_command(args)
     else:
-        print(f"❌ Unknown command: {args.command}")
+        print(f"[ERROR] Unknown command: {args.command}")
         return 1
 
 if __name__ == '__main__':
