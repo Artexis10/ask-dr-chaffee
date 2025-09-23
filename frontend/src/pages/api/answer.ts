@@ -376,6 +376,15 @@ export default async function handler(
   if (!ANSWER_ENABLED) {
     return res.status(503).json({ error: 'Answer endpoint is disabled' });
   }
+  
+  // Check if database connection string is configured
+  if (!process.env.DATABASE_URL) {
+    return res.status(503).json({
+      error: 'Database configuration missing',
+      message: 'The database connection string is not configured. Please check your environment variables.',
+      code: 'DB_CONFIG_MISSING'
+    });
+  }
 
   // Parse parameters
   const params = req.method === 'POST' ? req.body : req.query;
@@ -548,6 +557,7 @@ export default async function handler(
     console.error('Answer generation error:', error);
     
     if (error instanceof Error) {
+      // Rate limit errors
       if (error.message.includes('429')) {
         return res.status(429).json({
           error: 'Rate limit exceeded',
@@ -556,6 +566,7 @@ export default async function handler(
         });
       }
       
+      // Authentication errors
       if (error.message.includes('401')) {
         return res.status(401).json({
           error: 'API authentication failed',
@@ -563,8 +574,22 @@ export default async function handler(
           code: 'INVALID_API_KEY'
         });
       }
+      
+      // Database connection errors
+      if (error.message.includes('connect') || 
+          error.message.includes('ECONNREFUSED') || 
+          error.message.includes('database') ||
+          error.message.includes('Connection') ||
+          error.message.includes('pool')) {
+        return res.status(503).json({
+          error: 'Database connection failed',
+          message: 'Unable to connect to the database. The service may be temporarily unavailable.',
+          code: 'DB_CONNECTION_ERROR'
+        });
+      }
     }
     
+    // Generic error handler
     res.status(500).json({ 
       error: 'Answer generation failed',
       message: error instanceof Error ? error.message : 'An unexpected error occurred.',
