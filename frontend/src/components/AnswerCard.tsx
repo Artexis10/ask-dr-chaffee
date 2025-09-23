@@ -130,7 +130,7 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink }: A
   if (error) {
     return (
       <div className="modern-answer-card error">
-        <div className="error-content">
+        <div className="error-header">
           <div className="error-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="#ef4444" strokeWidth="2"/>
@@ -138,45 +138,158 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink }: A
               <path d="m9 9 6 6" stroke="#ef4444" strokeWidth="2"/>
             </svg>
           </div>
-          <div className="error-text">
+          <div className="error-title">
             <h3>Unable to Generate Answer</h3>
-            <p>{error}</p>
           </div>
         </div>
+        
+        <div className="error-content">
+          <div className="error-message">
+            <p>{error}</p>
+            
+            {error.toLowerCase().includes('rate limit') && (
+              <div className="error-tips">
+                <h4>Why this happens:</h4>
+                <ul>
+                  <li>Our AI service has usage limits to ensure fair access for all users</li>
+                  <li>The system will automatically retry your request</li>
+                  <li>If you see this message repeatedly, please wait a few minutes before trying again</li>
+                </ul>
+              </div>
+            )}
+          </div>
+          
+          <div className="error-actions">
+            <button className="retry-button" onClick={() => window.location.reload()}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <path d="M12 3C13.5 3 16.5 4 16.5 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <path d="M21 3L17 7M21 3V7M21 3H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Refresh Page
+            </button>
+          </div>
+        </div>
+        
         <style jsx>{`
           .modern-answer-card.error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            border-radius: 16px;
+            background: var(--color-error, #fef2f2);
+            border: 1px solid var(--color-border, #fecaca);
+            border-radius: var(--radius-xl, 16px);
             padding: 24px;
             margin-bottom: 32px;
+            animation: pulse 2s infinite;
           }
-          .error-content {
+          
+          @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
+            70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+          }
+          
+          .error-header {
             display: flex;
-            align-items: flex-start;
+            align-items: center;
             gap: 16px;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--color-border, #fecaca);
           }
+          
           .error-icon {
             flex-shrink: 0;
             width: 48px;
             height: 48px;
-            border-radius: 12px;
-            background: #fee2e2;
+            border-radius: var(--radius-lg, 12px);
+            background: rgba(239, 68, 68, 0.2);
             display: flex;
             align-items: center;
             justify-content: center;
           }
-          .error-text h3 {
-            margin: 0 0 8px 0;
+          
+          .error-title h3 {
+            margin: 0;
             font-size: 18px;
             font-weight: 600;
-            color: #dc2626;
+            color: var(--color-error, #dc2626);
           }
-          .error-text p {
-            margin: 0;
-            font-size: 14px;
-            color: #7f1d1d;
+          
+          .error-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+          }
+          
+          .error-message p {
+            margin: 0 0 16px 0;
+            font-size: 16px;
+            color: var(--color-text, #7f1d1d);
             line-height: 1.5;
+            font-weight: 500;
+          }
+          
+          .error-tips {
+            background: var(--color-card, #fff);
+            border: 1px solid var(--color-border, #fecaca);
+            border-radius: var(--radius-lg, 12px);
+            padding: 16px;
+            margin-top: 16px;
+          }
+          
+          .error-tips h4 {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-error, #dc2626);
+          }
+          
+          .error-tips ul {
+            margin: 0;
+            padding-left: 20px;
+          }
+          
+          .error-tips li {
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--color-text, #7f1d1d);
+          }
+          
+          .error-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 8px;
+          }
+          
+          .retry-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--color-error, #dc2626);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md, 8px);
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-normal, 0.2s ease);
+          }
+          
+          .retry-button:hover {
+            background: #b91c1c;
+            transform: translateY(-1px);
+          }
+          
+          @media (max-width: 640px) {
+            .error-header {
+              flex-direction: column;
+              align-items: flex-start;
+              gap: 12px;
+            }
+            
+            .error-actions {
+              justify-content: center;
+            }
           }
         `}</style>
       </div>
