@@ -175,7 +175,16 @@ export default function Home() {
         
         console.log('Answer API call URL:', `/api/answer?${params}`);
         
-        const response = await fetch(`/api/answer?${params}`);
+        // Add timeout to the fetch request
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await fetch(`/api/answer?${params}`, {
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
         let responseData;
         
         try {
@@ -184,8 +193,19 @@ export default function Home() {
         } catch (error) {
           const jsonError = error as Error;
           console.error('Failed to parse response as JSON:', jsonError);
-          // Don't throw, just set the error state
-          setAnswerError(`Failed to parse response: ${jsonError.message}`);
+          
+          // Check if this is an AbortError (timeout)
+          if (jsonError.name === 'AbortError' || jsonError.message.includes('abort')) {
+            setAnswerError('Request timed out. The server might be unavailable or overloaded.');
+            
+            // If we're in development, show a more helpful message
+            if (process.env.NODE_ENV === 'development') {
+              setAnswerError('API request timed out. Make sure your backend services are running properly.');
+            }
+          } else {
+            setAnswerError(`Failed to parse response: ${jsonError.message}`);
+          }
+          
           return; // Exit the function
         }
         
@@ -226,7 +246,20 @@ export default function Home() {
       } catch (err) {
         console.error(`Answer API error (attempt ${attempt + 1}):`, err);
         
-        const errorMessage = err instanceof Error ? err.message : 'Answer request failed';
+        const error = err as Error;
+        const errorMessage = error.message || 'Answer request failed';
+        
+        // Handle network/connection errors specifically
+        if (error.name === 'TypeError' && errorMessage.includes('fetch')) {
+          setAnswerError('Unable to connect to the server. Please check your internet connection.');
+          
+          // If we're in development, show a more helpful message
+          if (process.env.NODE_ENV === 'development') {
+            setAnswerError('API connection failed. Make sure your backend services are running properly.');
+          }
+          
+          return; // Exit the function
+        }
         
         // If it's the last attempt or not a retryable error, set final error
         if (attempt === maxRetries - 1 || !errorMessage.toLowerCase().includes('rate limit')) {
