@@ -184,7 +184,9 @@ export default function Home() {
         } catch (error) {
           const jsonError = error as Error;
           console.error('Failed to parse response as JSON:', jsonError);
-          throw new Error(`Failed to parse response: ${jsonError.message}`);
+          // Don't throw, just set the error state
+          setAnswerError(`Failed to parse response: ${jsonError.message}`);
+          return; // Exit the function
         }
         
         if (!response.ok) {
@@ -198,11 +200,15 @@ export default function Home() {
               attempt++;
               continue;
             } else {
-              throw new Error('Service is currently experiencing high demand. Please try again in a few minutes.');
+              // Don't throw, just set the error state
+              setAnswerError('Service is currently experiencing high demand. Please try again in a few minutes.');
+              return; // Exit the function
             }
           }
           
-          throw new Error(responseData?.error || `Answer failed with status: ${response.status}`);
+          // Don't throw, just set the error state
+          setAnswerError(responseData?.error || `Answer failed with status: ${response.status}`);
+          return; // Exit the function
         }
         
         console.log('Answer API response:', responseData);
@@ -212,7 +218,9 @@ export default function Home() {
           setAnswerError(''); // Clear any previous error messages
           break; // Success, exit retry loop
         } else {
-          throw new Error('No answer data received');
+          // Don't throw, just set the error state
+          setAnswerError('No answer data received');
+          return; // Exit the function
         }
         
       } catch (err) {
@@ -222,10 +230,12 @@ export default function Home() {
         
         // If it's the last attempt or not a retryable error, set final error
         if (attempt === maxRetries - 1 || !errorMessage.toLowerCase().includes('rate limit')) {
-          setAnswerError(errorMessage);
-          break;
+          setAnswerError(`Something went wrong: ${errorMessage}`);
+          return; // Exit the function instead of breaking
         }
         
+        // Show a user-friendly message during retries
+        setAnswerError(`Retrying... (attempt ${attempt + 1} of ${maxRetries})`);
         attempt++;
       }
     }
