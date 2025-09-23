@@ -231,9 +231,36 @@ export default async function handler(
 
   } catch (error) {
     console.error('Search error:', error);
-    res.status(500).json({ 
-      error: `Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-    });
+    
+    // Handle different types of errors
+    if (error instanceof Error) {
+      // Database connection errors
+      if (error.message.includes('connect') || 
+          error.message.includes('ECONNREFUSED') || 
+          error.message.includes('database') ||
+          error.message.includes('Connection') ||
+          error.message.includes('pool')) {
+        return res.status(503).json({
+          error: 'Database service unavailable',
+          message: 'The database service is currently unavailable. Please try again later.',
+          code: 'SERVICE_UNAVAILABLE'
+        });
+      }
+      
+      // Generic error with message
+      res.status(500).json({ 
+        error: 'Search service error',
+        message: `The search service encountered an error: ${error.message}`,
+        code: 'SEARCH_ERROR'
+      });
+    } else {
+      // Unknown error type
+      res.status(500).json({ 
+        error: 'Search service error',
+        message: 'The search service encountered an unknown error.',
+        code: 'UNKNOWN_ERROR'
+      });
+    }
   }
 }
 

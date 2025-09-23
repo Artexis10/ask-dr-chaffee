@@ -324,11 +324,41 @@ export default function Home() {
       
       const response = await fetch(`/api/search?${params}`);
       
-      if (!response.ok) {
-        throw new Error(`Search failed with status: ${response.status}`);
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse search response as JSON:', jsonError);
+        setError('Failed to parse search results. Please try again.');
+        setResults([]);
+        setGroupedResults([]);
+        setTotalResults(0);
+        return;
       }
       
-      const data = await response.json();
+      if (!response.ok) {
+        // Handle error but don't throw
+        console.error(`Search failed with status: ${response.status}`, data);
+        
+        // Show a user-friendly error message based on status code
+        if (response.status === 503) {
+          setError('Database service is currently unavailable. Please try again later.');
+        } else if (response.status === 500) {
+          setError('Search service encountered an error. Our team has been notified.');
+        } else if (data && data.message) {
+          setError(data.message);
+        } else if (data && data.error) {
+          setError(data.error);
+        } else {
+          setError('Search service error. Please try again later.');
+        }
+        
+        // Set empty results but don't stop the answer generation
+        setResults([]);
+        setGroupedResults([]);
+        setTotalResults(0);
+        return;
+      }
       console.log('API response:', data);
       console.log('Raw results length:', data.results ? data.results.length : 'undefined');
       
