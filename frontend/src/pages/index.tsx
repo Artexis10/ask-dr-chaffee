@@ -1,13 +1,20 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import Head from 'next/head';
 import { SearchBar } from '../components/SearchBar';
 import { FilterPills } from '../components/FilterPills';
-import { SearchResults } from '../components/SearchResults';
 import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { Footer } from '../components/Footer';
-import { AnswerCard } from '../components/AnswerCard';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { DarkModeToggle } from '../components/DarkModeToggle';
 import { SearchResult, VideoGroup } from '../types';
+import { analytics, setupAnalyticsListeners, trackEvent } from '../utils/analytics';
+
+// Lazy load components that aren't needed for initial render
+const SearchResults = lazy(() => import('../components/SearchResults').then(mod => ({ default: mod.SearchResults })));
+const AnswerCard = lazy(() => import('../components/AnswerCard').then(mod => ({ default: mod.AnswerCard })));
+
+// Simple fallback component for lazy-loaded components
+const LazyLoadFallback = () => <div className="lazy-load-placeholder"></div>;
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -48,6 +55,26 @@ export default function Home() {
     return () => {
       window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+  
+  // Initialize analytics
+  useEffect(() => {
+    // Initialize analytics with debug mode in development
+    analytics.init({ debug: process.env.NODE_ENV === 'development' });
+    
+    // Set up event listeners for tracking user interactions
+    setupAnalyticsListeners();
+    
+    // Track page load event
+    trackEvent('page_loaded', {
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent
+    });
+    
+    return () => {
+      // Track page unload event
+      trackEvent('page_unloaded');
     };
   }, []);
 
@@ -134,7 +161,8 @@ export default function Home() {
       try {
         // Read the response body only once
         responseData = await response.json();
-      } catch (jsonError) {
+      } catch (error) {
+        const jsonError = error as Error;
         console.error('Failed to parse response as JSON:', jsonError);
         throw new Error(`Failed to parse response: ${jsonError.message}`);
       }
@@ -250,13 +278,37 @@ export default function Home() {
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Track search event with analytics
+    trackEvent('search_submitted', {
+      query,
+      sourceFilter,
+      yearFilter,
+      timestamp: new Date().toISOString()
+    });
+    
     // Run search and answer in parallel, independently with full error isolation
     Promise.resolve().then(async () => {
       try {
         await performSearch(query, sourceFilter, yearFilter);
+        
+        // Track successful search
+        trackEvent('search_results_loaded', {
+          query,
+          resultCount: totalResults,
+          sourceFilter,
+          yearFilter
+        });
       } catch (err) {
         console.error('Search failed:', err);
         setError(err instanceof Error ? err.message : 'Search failed');
+        
+        // Track search error
+        trackEvent('search_error', {
+          query,
+          error: err instanceof Error ? err.message : 'Unknown error',
+          sourceFilter,
+          yearFilter
+        });
       }
     }).catch(err => {
       console.error('Search promise failed:', err);
@@ -266,14 +318,30 @@ export default function Home() {
     Promise.resolve().then(async () => {
       try {
         await performAnswer(query);
+        
+        // Track successful answer generation
+        if (answerData) {
+          trackEvent('answer_generated', {
+            query,
+            confidence: answerData.confidence,
+            citationCount: answerData.citations?.length || 0,
+            cached: answerData.cached || false
+          });
+        }
       } catch (err) {
         console.error('Answer failed:', err);
         // Answer failure doesn't affect search results
+        
+        // Track answer error
+        trackEvent('answer_error', {
+          query,
+          error: err instanceof Error ? err.message : 'Unknown error'
+        });
       }
     }).catch(err => {
       console.error('Answer promise failed:', err);
     });
-  }, [query, sourceFilter, yearFilter, performSearch, performAnswer]);
+  }, [query, sourceFilter, yearFilter, performSearch, performAnswer, totalResults, answerData]);
 
   // Function to highlight search terms in text
   const highlightSearchTerms = (text: string, query: string): string => {
@@ -383,11 +451,31 @@ export default function Home() {
 
       <main className="container">
         <div className="header">
-          <h1>Ask Dr. Chaffee</h1>
-          <p>Search through Dr. Anthony Chaffee's YouTube videos and Zoom recordings</p>
-          <div className="search-hint">
-            💡 <strong>Tip:</strong> Enter your medical question and press Enter or click Search. 
-            Each query uses AI analysis (~2-5 seconds) for the most accurate answers.
+          <div className="header-content">
+            <div className="logo-container">
+              <div className="logo">AC</div>
+            </div>
+            <h1>Ask Dr. Chaffee</h1>
+            <p>Search through Dr. Anthony Chaffee's medical knowledge base</p>
+            <div className="search-hint">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 16V12M12 8H12.01M22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12Z" 
+                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>
+                <strong>How it works:</strong> Enter your medical question and get AI-generated answers based on Dr. Chaffee's content, with direct links to video clips.
+              </span>
+            </div>
+          </div>
+          <div className="topics-container">
+            <div className="topics-title">Popular topics:</div>
+            <div className="topics">
+              <button onClick={() => setQuery('carnivore diet benefits')}>Carnivore Diet</button>
+              <button onClick={() => setQuery('autoimmune conditions treatment')}>Autoimmune Conditions</button>
+              <button onClick={() => setQuery('ketosis explained')}>Ketosis</button>
+              <button onClick={() => setQuery('plant toxins in food')}>Plant Toxins</button>
+              <button onClick={() => setQuery('optimal human diet')}>Optimal Human Diet</button>
+            </div>
           </div>
         </div>
 
@@ -419,27 +507,31 @@ export default function Home() {
         )}
 
         <ErrorBoundary>
-          <AnswerCard
-            answer={answerData}
-            loading={answerLoading}
-            error={answerError}
-            onPlayClip={(videoId, timestamp) => seekToTimestamp(videoId, timestamp)}
-            onCopyLink={copyTimestampLink}
-          />
+          <Suspense fallback={loading ? <LoadingSkeleton /> : <LazyLoadFallback />}>
+            <AnswerCard
+              answer={answerData}
+              loading={answerLoading}
+              error={answerError}
+              onPlayClip={(videoId, timestamp) => seekToTimestamp(videoId, timestamp)}
+              onCopyLink={copyTimestampLink}
+            />
+          </Suspense>
         </ErrorBoundary>
 
         <ErrorBoundary>
-          <SearchResults 
-            results={results}
-            query={query}
-            loading={loading}
-            totalResults={totalResults}
-            groupedResults={groupedResults}
-            sourceFilter={sourceFilter}
-            highlightSearchTerms={highlightSearchTerms}
-            seekToTimestamp={seekToTimestamp}
-            copyTimestampLink={copyTimestampLink}
-          />
+          <Suspense fallback={loading ? <LoadingSkeleton /> : <LazyLoadFallback />}>
+            <SearchResults 
+              results={results}
+              query={query}
+              loading={loading}
+              totalResults={totalResults}
+              groupedResults={groupedResults}
+              sourceFilter={sourceFilter}
+              highlightSearchTerms={highlightSearchTerms}
+              seekToTimestamp={seekToTimestamp}
+              copyTimestampLink={copyTimestampLink}
+            />
+          </Suspense>
         </ErrorBoundary>
 
         <Footer />
@@ -449,6 +541,8 @@ export default function Home() {
             {copySuccess}
           </div>
         )}
+        
+        <DarkModeToggle />
 
         <style jsx>{`
           .container {
@@ -459,33 +553,144 @@ export default function Home() {
           
           .header {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: var(--space-6);
+            padding: var(--space-6) 0;
+            position: relative;
+          }
+          
+          .header-content {
+            max-width: 800px;
+            margin: 0 auto var(--space-6) auto;
+          }
+          
+          .logo-container {
+            margin-bottom: var(--space-4);
+            display: flex;
+            justify-content: center;
+          }
+          
+          .logo {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 700;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+          }
+          
+          .logo::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0) 70%);
           }
           
           .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            color: #2d3748;
+            font-size: 2.8rem;
+            margin-bottom: var(--space-3);
+            color: var(--color-text);
+            font-weight: 800;
+            background: linear-gradient(to right, var(--color-primary), var(--color-accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-fill-color: transparent;
           }
           
           .header p {
-            font-size: 1.2rem;
-            color: #4a5568;
+            font-size: 1.3rem;
+            color: var(--color-text-light);
+            margin-bottom: var(--space-5);
           }
 
           .search-hint {
-            background-color: #f7fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 0.5rem;
-            padding: 0.75rem 1rem;
-            margin-top: 1rem;
-            font-size: 0.9rem;
-            color: #2d3748;
-            text-align: center;
+            background-color: rgba(59, 130, 246, 0.05);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-xl);
+            padding: var(--space-4);
+            font-size: 1rem;
+            color: var(--color-text);
+            text-align: left;
+            display: flex;
+            align-items: flex-start;
+            gap: var(--space-3);
+          }
+
+          .search-hint svg {
+            flex-shrink: 0;
+            margin-top: 3px;
+            color: var(--color-primary);
           }
 
           .search-hint strong {
-            color: #2b6cb0;
+            color: var(--color-primary-dark);
+            font-weight: 600;
+          }
+          
+          .topics-container {
+            margin-top: var(--space-6);
+            padding-top: var(--space-4);
+          }
+          
+          .topics-title {
+            font-size: 1rem;
+            color: var(--color-text-light);
+            margin-bottom: var(--space-3);
+            font-weight: 500;
+          }
+          
+          .topics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            justify-content: center;
+          }
+          
+          .topics button {
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-lg);
+            padding: var(--space-2) var(--space-3);
+            font-size: 0.9rem;
+            color: var(--color-text);
+            cursor: pointer;
+            transition: all var(--transition-normal);
+          }
+          
+          .topics button:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: var(--color-primary-light);
+            transform: translateY(-1px);
+          }
+          
+          @media (max-width: 768px) {
+            .header h1 {
+              font-size: 2.2rem;
+            }
+            
+            .header p {
+              font-size: 1.1rem;
+            }
+            
+            .topics {
+              gap: var(--space-2);
+            }
+            
+            .topics button {
+              font-size: 0.8rem;
+              padding: var(--space-1) var(--space-2);
+              margin-bottom: var(--space-2);
+            }
           }
           
           .error-message {
@@ -516,6 +721,20 @@ export default function Home() {
           @keyframes fadeOut {
             from { opacity: 1; transform: translateY(0); }
             to { opacity: 0; transform: translateY(20px); }
+          }
+          
+          .lazy-load-placeholder {
+            min-height: 200px;
+            width: 100%;
+            background: linear-gradient(90deg, var(--color-background), var(--color-border-light), var(--color-background));
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+            border-radius: var(--radius-xl);
+          }
+          
+          @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
           }
         `}</style>
       </main>

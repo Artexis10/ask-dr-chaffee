@@ -103,16 +103,22 @@ def get_youtube_transcript_fixed(video_id):
         # Get available transcripts for the video
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         
-        # Try to get English transcript
+        # MEDICAL-GRADE QUALITY: Only use manual transcripts, skip auto-generated
+        manual_transcripts = [t for t in transcript_list if not t.is_generated]
+        
+        if not manual_transcripts:
+            return None, {"error": "No manual transcripts available - skipping auto-generated for medical accuracy"}
+        
+        # Try to get English manual transcript first
         try:
-            transcript = transcript_list.find_transcript(['en'])
+            english_manual = [t for t in manual_transcripts if t.language_code == 'en']
+            if english_manual:
+                transcript = english_manual[0]
+            else:
+                transcript = manual_transcripts[0]  # Use first available manual
             transcript_data = transcript.fetch()
         except:
-            # If no English, get the first available
-            transcripts = list(transcript_list)
-            if not transcripts:
-                return None, None
-            transcript_data = transcripts[0].fetch()
+            return None, {"error": "Failed to fetch manual transcript"}
         
         # Convert to our format
         segments = []
