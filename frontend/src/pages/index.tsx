@@ -78,6 +78,10 @@ export default function Home() {
     };
   }, []);
 
+  // Throttling mechanism to prevent rate limits
+  const lastRequestTime = useRef<number>(0);
+  const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
+  
   // Debug query state changes
   const handleSetQuery = useCallback((newQuery: string) => {
     console.log('Home: setQuery called with:', newQuery);
@@ -140,56 +144,99 @@ export default function Home() {
     });
   }, []);
 
-  const performAnswer = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) return;
+  // Function to handle answer API call with retry logic and rate limiting
+  const performAnswerWithRetry = useCallback(async (query: string, maxRetries: number = 3) => {
+    if (!query.trim()) return;
+    
+    // Check if enough time has passed since last request
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime.current;
+    
+    if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+      const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+      console.log(`Throttling: waiting ${waitTime}ms before next request`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    lastRequestTime.current = Date.now();
     
     setAnswerLoading(true);
     setAnswerError('');
-    setAnswerData(null);
     
-    try {
-      const params = new URLSearchParams({
-        q: searchQuery,
-        style: 'concise'
-      });
-      
-      console.log('Answer API call URL:', `/api/answer?${params}`);
-      
-      const response = await fetch(`/api/answer?${params}`);
-      let responseData;
-      
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
       try {
-        // Read the response body only once
-        responseData = await response.json();
-      } catch (error) {
-        const jsonError = error as Error;
-        console.error('Failed to parse response as JSON:', jsonError);
-        throw new Error(`Failed to parse response: ${jsonError.message}`);
+        console.log(`Answer API attempt ${attempt + 1}/${maxRetries}...`);
+        
+        const params = new URLSearchParams({
+          query: query.trim()
+        });
+        
+        console.log('Answer API call URL:', `/api/answer?${params}`);
+        
+        const response = await fetch(`/api/answer?${params}`);
+        let responseData;
+        
+        try {
+          // Read the response body only once
+          responseData = await response.json();
+        } catch (error) {
+          const jsonError = error as Error;
+          console.error('Failed to parse response as JSON:', jsonError);
+          throw new Error(`Failed to parse response: ${jsonError.message}`);
+        }
+        
+        if (!response.ok) {
+          // Handle rate limit specifically
+          if (response.status === 429 || (responseData?.error && responseData.error.toLowerCase().includes('rate limit'))) {
+            if (attempt < maxRetries - 1) {
+              const backoffTime = Math.pow(2, attempt) * 3000; // Exponential backoff: 3s, 6s, 12s
+              console.log(`Rate limited. Retrying in ${backoffTime}ms...`);
+              setAnswerError(`Rate limited. Retrying in ${Math.ceil(backoffTime / 1000)} seconds...`);
+              await new Promise(resolve => setTimeout(resolve, backoffTime));
+              attempt++;
+              continue;
+            } else {
+              throw new Error('Service is currently experiencing high demand. Please try again in a few minutes.');
+            }
+          }
+          
+          throw new Error(responseData?.error || `Answer failed with status: ${response.status}`);
+        }
+        
+        console.log('Answer API response:', responseData);
+        
+        if (responseData && (responseData.answer || responseData.citations)) {
+          setAnswerData(responseData);
+          setAnswerError(''); // Clear any previous error messages
+          break; // Success, exit retry loop
+        } else {
+          throw new Error('No answer data received');
+        }
+        
+      } catch (err) {
+        console.error(`Answer API error (attempt ${attempt + 1}):`, err);
+        
+        const errorMessage = err instanceof Error ? err.message : 'Answer request failed';
+        
+        // If it's the last attempt or not a retryable error, set final error
+        if (attempt === maxRetries - 1 || !errorMessage.toLowerCase().includes('rate limit')) {
+          setAnswerError(errorMessage);
+          break;
+        }
+        
+        attempt++;
       }
-      
-      if (!response.ok) {
-        throw new Error(responseData?.error || `Answer failed with status: ${response.status}`);
-      }
-      
-      console.log('Answer API response:', responseData);
-      
-      if (responseData.error) {
-        // Handle cases like "Not enough on-record context yet"
-        setAnswerError(responseData.error);
-      } else {
-        setAnswerData(responseData);
-      }
-      
-    } catch (err) {
-      console.error('Answer error:', err);
-      const errorMessage = err instanceof Error ? err.message : 
-                          typeof err === 'string' ? err : 
-                          'Failed to generate answer';
-      setAnswerError(errorMessage);
-    } finally {
-      setAnswerLoading(false);
     }
+    
+    setAnswerLoading(false);
   }, []);
+
+  // Legacy function for backward compatibility
+  const performAnswer = useCallback(async (query: string) => {
+    return performAnswerWithRetry(query);
+  }, [performAnswerWithRetry]);
 
   // Function to perform search API call
   const performSearch = useCallback(async (searchQuery: string, currentSourceFilter: string, currentYearFilter: string) => {
@@ -274,9 +321,19 @@ export default function Home() {
     }
   }, [query]);
 
-  // Function to handle search form submission
+  // Function to handle search form submission with throttling
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check if we should throttle this request
+    const now = Date.now();
+    const timeSinceLastRequest = now - lastRequestTime.current;
+    
+    if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+      const waitTime = Math.ceil((MIN_REQUEST_INTERVAL - timeSinceLastRequest) / 1000);
+      setError(`Please wait ${waitTime} seconds before searching again to avoid rate limits.`);
+      return;
+    }
     
     // Track search event with analytics
     trackEvent('search_submitted', {
@@ -317,7 +374,7 @@ export default function Home() {
     
     Promise.resolve().then(async () => {
       try {
-        await performAnswer(query);
+        await performAnswerWithRetry(query); // Use the retry version directly
         
         // Track successful answer generation
         if (answerData) {
@@ -341,7 +398,7 @@ export default function Home() {
     }).catch(err => {
       console.error('Answer promise failed:', err);
     });
-  }, [query, sourceFilter, yearFilter, performSearch, performAnswer, totalResults, answerData]);
+  }, [query, sourceFilter, yearFilter, performSearch, performAnswerWithRetry, totalResults, answerData]);
 
   // Function to highlight search terms in text
   const highlightSearchTerms = (text: string, query: string): string => {
