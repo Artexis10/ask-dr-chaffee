@@ -81,7 +81,7 @@ export default function Home() {
 
   // Throttling mechanism to prevent rate limits
   const lastRequestTime = useRef<number>(0);
-  const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
+  const MIN_REQUEST_INTERVAL = 5000; // 5 seconds between requests to stay well under the 500 RPM limit
   
   // Loading timeout to prevent infinite loading
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -149,7 +149,7 @@ export default function Home() {
   }, []);
 
   // Function to handle answer API call with retry logic and rate limiting
-  const performAnswerWithRetry = useCallback(async (query: string, maxRetries: number = 3) => {
+  const performAnswerWithRetry = useCallback(async (query: string, maxRetries: number = 5) => {
     if (!query.trim()) return;
     
     // Check if enough time has passed since last request
@@ -217,7 +217,8 @@ export default function Home() {
           // Handle rate limit specifically
           if (response.status === 429 || (responseData?.error && responseData.error.toLowerCase().includes('rate limit'))) {
             if (attempt < maxRetries - 1) {
-              const backoffTime = Math.pow(2, attempt) * 3000; // Exponential backoff: 3s, 6s, 12s
+              // More aggressive exponential backoff: 5s, 10s, 20s, 40s, 80s
+              const backoffTime = Math.pow(2, attempt) * 5000;
               console.log(`Rate limited. Retrying in ${backoffTime}ms...`);
               setAnswerError(`Rate limited. Retrying in ${Math.ceil(backoffTime / 1000)} seconds...`);
               await new Promise(resolve => setTimeout(resolve, backoffTime));
@@ -225,7 +226,7 @@ export default function Home() {
               continue;
             } else {
               // Don't throw, just set the error state
-              setAnswerError('Service is currently experiencing high demand. Please try again in a few minutes.');
+              setAnswerError('OpenAI API rate limit reached. The service is limited to 500 requests per minute. Please try again in a few minutes.');
               return; // Exit the function
             }
           }
