@@ -32,6 +32,7 @@ export default function Home() {
   const [answerData, setAnswerData] = useState<any>(null);
   const [answerLoading, setAnswerLoading] = useState(false);
   const [answerError, setAnswerError] = useState('');
+  const [answerCancelled, setAnswerCancelled] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const copyNotificationTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -285,6 +286,19 @@ export default function Home() {
     }
   }, []);
 
+  // Handler for cancelling answer generation
+  const handleCancelAnswer = useCallback(() => {
+    setAnswerLoading(false);
+    setAnswerCancelled(true);
+    setAnswerError('Answer generation cancelled by user.');
+    
+    // Track cancellation in analytics
+    trackEvent('answer_cancelled', {
+      query,
+      timeElapsed: Date.now() - lastRequestTime.current
+    });
+  }, [query, trackEvent]);
+  
   // Legacy function for backward compatibility
   const performAnswer = useCallback(async (query: string) => {
     return performAnswerWithRetry(query);
@@ -382,6 +396,9 @@ export default function Home() {
   // Function to handle search form submission with throttling
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Reset cancelled state when starting a new search
+    setAnswerCancelled(false);
     
     // Check if we should throttle this request
     const now = Date.now();
@@ -652,17 +669,22 @@ export default function Home() {
               error={answerError}
               onPlayClip={(videoId, timestamp) => seekToTimestamp(videoId, timestamp)}
               onCopyLink={copyTimestampLink}
+              onCancel={handleCancelAnswer}
             />
           </Suspense>
         </ErrorBoundary>
 
-        {/* Only show search results when answer is ready and not loading */}
-        {answerData && !answerLoading && (
+        {/* Show search results when answer is ready or when cancelled */}
+        {((answerData && !answerLoading) || answerCancelled) && (
           <ErrorBoundary>
             <Suspense fallback={loading ? <LoadingSkeleton /> : <LazyLoadFallback />}>
               <div className="supporting-clips-section">
-                <h2>Supporting Video Clips</h2>
-                <p className="supporting-clips-info">These clips were used to generate the answer above.</p>
+                <h2>{answerCancelled ? "Search Results" : "Supporting Video Clips"}</h2>
+                <p className="supporting-clips-info">
+                  {answerCancelled 
+                    ? "Here are the search results for your query." 
+                    : "These clips were used to generate the answer above."}
+                </p>
                 <SearchResults 
                   results={results}
                   query={query}

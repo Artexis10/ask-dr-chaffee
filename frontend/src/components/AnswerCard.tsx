@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Citation {
   video_id: string;
@@ -35,12 +35,55 @@ interface AnswerCardProps {
   error?: string;
   onPlayClip?: (videoId: string, timestamp: number) => void;
   onCopyLink?: (url: string) => void;
+  onCancel?: () => void;
 }
 
-export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink }: AnswerCardProps) {
+export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink, onCancel }: AnswerCardProps) {
   const [showSources, setShowSources] = useState(false);
+  const [loadingTime, setLoadingTime] = useState(0);
+  
+  // Track loading time
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (loading) {
+      // Start the timer when loading begins
+      const startTime = Date.now();
+      interval = setInterval(() => {
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        setLoadingTime(elapsedSeconds);
+      }, 1000);
+    } else {
+      // Reset timer when loading ends
+      setLoadingTime(0);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [loading]);
 
   if (loading) {
+    // Loading messages that change based on elapsed time
+    const loadingMessages = [
+      { threshold: 0, message: "Searching through Dr. Chaffee's knowledge base..." },
+      { threshold: 5, message: "Finding relevant clips from videos..." },
+      { threshold: 10, message: "Analyzing transcript content..." },
+      { threshold: 15, message: "Synthesizing information from multiple sources..." },
+      { threshold: 20, message: "Generating comprehensive answer..." },
+      { threshold: 25, message: "This is taking longer than usual. Still working..." },
+      { threshold: 35, message: "Complex question! Finalizing your detailed answer..." },
+      { threshold: 45, message: "Almost there! Putting finishing touches on your answer..." }
+    ];
+    
+    // Get appropriate message based on loading time
+    const currentMessage = loadingMessages
+      .filter(item => loadingTime >= item.threshold)
+      .pop()?.message || loadingMessages[0].message;
+    
+    // Calculate progress percentage (capped at 90% to indicate it's still working)
+    const progressPercentage = Math.min(90, loadingTime * 2);
+    
     return (
       <div className="modern-answer-card loading">
         <div className="loading-header">
@@ -49,12 +92,33 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink }: A
           </div>
           <div className="loading-text">
             <h3>Dr. Chaffee's AI Assistant</h3>
-            <p>Analyzing transcripts and generating personalized answer...</p>
+            <p>{currentMessage}</p>
+            <div className="loading-timer">{loadingTime}s</div>
           </div>
         </div>
         <div className="loading-progress">
-          <div className="progress-bar"></div>
+          <div className="progress-bar" style={{ width: `${progressPercentage}%`, animation: 'none' }}></div>
         </div>
+        <div className="loading-tips">
+          <p>While you wait:</p>
+          <ul>
+            <li>Complex medical questions may take longer to process</li>
+            <li>Answers are generated from Dr. Chaffee's video content</li>
+            <li>You'll see supporting video clips once the answer is ready</li>
+          </ul>
+        </div>
+        
+        {/* Show cancel button after 15 seconds */}
+        {loadingTime >= 15 && onCancel && (
+          <div className="loading-actions">
+            <button onClick={onCancel} className="cancel-button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 18L18 6M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Cancel and show search results
+            </button>
+          </div>
+        )}
         <style jsx>{`
           .modern-answer-card {
             background: #ffffff;
@@ -101,17 +165,79 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink }: A
             color: #6b7280;
             line-height: 1.4;
           }
+          .loading-timer {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-top: 8px;
+          }
           .loading-progress {
             height: 4px;
             background: #f3f4f6;
             border-radius: 2px;
             overflow: hidden;
+            margin-bottom: 24px;
           }
           .progress-bar {
             height: 100%;
             background: linear-gradient(90deg, #3b82f6, #1d4ed8);
             border-radius: 2px;
-            animation: loading-progress 2s ease-in-out infinite;
+            transition: width 0.5s ease;
+          }
+          .loading-tips {
+            background: rgba(59, 130, 246, 0.05);
+            border: 1px solid rgba(59, 130, 246, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 24px;
+          }
+          .loading-tips p {
+            margin: 0 0 8px 0;
+            font-weight: 600;
+            color: #4b5563;
+          }
+          .loading-tips ul {
+            margin: 0;
+            padding-left: 20px;
+          }
+          .loading-tips li {
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: #6b7280;
+          }
+          .loading-tips li:last-child {
+            margin-bottom: 0;
+          }
+          .loading-actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 24px;
+          }
+          .cancel-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: transparent;
+            border: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+          }
+          .cancel-button:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
+            color: #4b5563;
+          }
+          .cancel-button svg {
+            color: #9ca3af;
           }
           @keyframes spin {
             from { transform: rotate(0deg); }
