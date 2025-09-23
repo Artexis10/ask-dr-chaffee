@@ -82,6 +82,9 @@ export default function Home() {
   const lastRequestTime = useRef<number>(0);
   const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
   
+  // Loading timeout to prevent infinite loading
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Debug query state changes
   const handleSetQuery = useCallback((newQuery: string) => {
     console.log('Home: setQuery called with:', newQuery);
@@ -274,6 +277,12 @@ export default function Home() {
     }
     
     setAnswerLoading(false);
+    
+    // Clear loading timeout when answer generation completes
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
   }, []);
 
   // Legacy function for backward compatibility
@@ -350,6 +359,12 @@ export default function Home() {
       setTotalResults(0);
     } finally {
       setLoading(false);
+      
+      // Clear loading timeout when search completes
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
     }
   }, [extractYears, groupResultsByVideo]);
 
@@ -377,6 +392,23 @@ export default function Home() {
       setError(`Please wait ${waitTime} seconds before searching again to avoid rate limits.`);
       return;
     }
+    
+    // Clear any existing loading timeout
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+    
+    // Set a timeout to clear loading state after 30 seconds
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (loading) {
+        setLoading(false);
+        setError('Request timed out. Please try again or refresh the page.');
+      }
+      if (answerLoading) {
+        setAnswerLoading(false);
+        setAnswerError('Answer generation timed out. Please try again or refresh the page.');
+      }
+    }, 30000); // 30 seconds timeout
     
     // Track search event with analytics
     trackEvent('search_submitted', {
@@ -503,11 +535,17 @@ export default function Home() {
     }
   };
 
-  // Cleanup timeout on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
+      // Clear copy notification timeout
       if (copyNotificationTimeout.current) {
         clearTimeout(copyNotificationTimeout.current);
+      }
+      
+      // Clear loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
       }
     };
   }, []);
