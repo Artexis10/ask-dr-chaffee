@@ -94,14 +94,36 @@ class TestVoiceEnrollment(unittest.TestCase):
         self.assertAlmostEqual(similarity, -1.0, places=5)
 
 class TestEnhancedASRConfig(unittest.TestCase):
-    """Test ASR configuration"""
+    """Test enhanced ASR configuration system"""
     
     def test_default_config(self):
         """Test default configuration values"""
-        from backend.scripts.common.enhanced_asr import EnhancedASRConfig
+        from backend.scripts.common.enhanced_asr_config import EnhancedASRConfig
         
         config = EnhancedASRConfig()
         
+        # Test Whisper defaults (quality-first)
+        self.assertEqual(config.whisper.model, "large-v3")
+        self.assertEqual(config.whisper.device, "cuda")
+        self.assertEqual(config.whisper.compute_type, "float16")
+        self.assertEqual(config.whisper.beam_size, 6)
+        self.assertEqual(config.whisper.chunk_length, 45)
+        self.assertTrue(config.whisper.vad_filter)
+        self.assertEqual(config.whisper.language, "en")
+        self.assertEqual(config.whisper.task, "transcribe")
+        self.assertIn("ketogenesis", config.whisper.initial_prompt)
+        
+        # Test quality assurance defaults
+        self.assertTrue(config.quality.enable_two_pass)
+        self.assertEqual(config.quality.low_conf_avg_logprob, -0.35)
+        self.assertEqual(config.quality.low_conf_compression_ratio, 2.4)
+        self.assertEqual(config.quality.retry_beam_size, 8)
+        
+        # Test alignment defaults
+        self.assertTrue(config.alignment.enable_alignment)
+        self.assertFalse(config.alignment.enable_diarization)
+        
+        # Test legacy compatibility
         self.assertEqual(config.chaffee_min_sim, 0.82)
         self.assertEqual(config.guest_min_sim, 0.82)
         self.assertEqual(config.attr_margin, 0.05)
@@ -111,6 +133,19 @@ class TestEnhancedASRConfig(unittest.TestCase):
         self.assertEqual(config.unknown_label, "Unknown")
     
     @patch.dict(os.environ, {
+        'WHISPER_MODEL': 'large-v3-turbo',
+        'WHISPER_DEVICE': 'cpu',
+        'WHISPER_COMPUTE': 'int8',
+        'WHISPER_BEAM': '8',
+        'WHISPER_CHUNK': '30',
+        'WHISPER_VAD': 'false',
+        'WHISPER_LANG': 'es',
+        'WHISPER_TASK': 'translate',
+        'WHISPER_TEMPS': '0.0,0.3,0.6',
+        'DOMAIN_PROMPT': 'medical terminology',
+        'QA_TWO_PASS': 'false',
+        'ALIGN_WORDS': 'false',
+        'DIARIZE': 'true',
         'CHAFFEE_MIN_SIM': '0.85',
         'GUEST_MIN_SIM': '0.80',
         'ATTR_MARGIN': '0.10',
@@ -118,14 +153,106 @@ class TestEnhancedASRConfig(unittest.TestCase):
     })
     def test_config_from_env(self):
         """Test configuration from environment variables"""
-        from backend.scripts.common.enhanced_asr import EnhancedASRConfig
+        from backend.scripts.common.enhanced_asr_config import EnhancedASRConfig
         
         config = EnhancedASRConfig()
         
+        # Test Whisper configuration from env
+        self.assertEqual(config.whisper.model, 'large-v3-turbo')
+        self.assertEqual(config.whisper.device, 'cpu')
+        self.assertEqual(config.whisper.compute_type, 'int8')
+        self.assertEqual(config.whisper.beam_size, 8)
+        self.assertEqual(config.whisper.chunk_length, 30)
+        self.assertFalse(config.whisper.vad_filter)
+        self.assertEqual(config.whisper.language, 'es')
+        self.assertEqual(config.whisper.task, 'translate')
+        self.assertEqual(config.whisper.temperature, [0.0, 0.3, 0.6])
+        self.assertEqual(config.whisper.initial_prompt, 'medical terminology')
+        
+        # Test quality and alignment from env
+        self.assertFalse(config.quality.enable_two_pass)
+        self.assertFalse(config.alignment.enable_alignment)
+        self.assertTrue(config.alignment.enable_diarization)
+        
+        # Test legacy config from env
         self.assertEqual(config.chaffee_min_sim, 0.85)
         self.assertEqual(config.guest_min_sim, 0.80)
         self.assertEqual(config.attr_margin, 0.10)
         self.assertFalse(config.assume_monologue)
+    
+    def test_config_overrides(self):
+        """Test configuration with explicit overrides"""
+        from backend.scripts.common.enhanced_asr_config import EnhancedASRConfig
+        
+        overrides = {
+            'model': 'distil-large-v3',
+            'compute_type': 'int8_float16',
+            'beam_size': 4,
+            'enable_two_pass': False,
+            'chaffee_min_sim': 0.90
+        }
+        
+        config = EnhancedASRConfig(**overrides)
+        
+        self.assertEqual(config.whisper.model, 'distil-large-v3')
+        self.assertEqual(config.whisper.compute_type, 'int8_float16')
+        self.assertEqual(config.whisper.beam_size, 4)
+        self.assertFalse(config.quality.enable_two_pass)
+        self.assertEqual(config.chaffee_min_sim, 0.90)
+    
+    def test_fallback_models(self):
+        """Test model fallback hierarchy"""
+        from backend.scripts.common.enhanced_asr_config import EnhancedASRConfig
+        
+        # Test large-v3 fallbacks
+        config = EnhancedASRConfig(model='large-v3')
+        fallbacks = config.get_fallback_models()
+        expected = ['large-v3-turbo', 'distil-large-v3', 'large-v2', 'medium.en']
+        self.assertEqual(fallbacks, expected)
+        
+        # Test small.en fallbacks
+        config = EnhancedASRConfig(model='small.en')
+        fallbacks = config.get_fallback_models()
+        self.assertEqual(fallbacks, ['base.en'])
+    
+    def test_fallback_compute_types(self):
+        """Test compute type fallback hierarchy"""
+        from backend.scripts.common.enhanced_asr_config import EnhancedASRConfig
+        
+        # Test float16 fallbacks
+        config = EnhancedASRConfig(compute_type='float16')
+        fallbacks = config.get_fallback_compute_types()
+        self.assertEqual(fallbacks, ['int8_float16', 'int8'])
+        
+        # Test int8_float16 fallbacks
+        config = EnhancedASRConfig(compute_type='int8_float16')
+        fallbacks = config.get_fallback_compute_types()
+        self.assertEqual(fallbacks, ['int8'])
+        
+        # Test int8 (no fallbacks)
+        config = EnhancedASRConfig(compute_type='int8')
+        fallbacks = config.get_fallback_compute_types()
+        self.assertEqual(fallbacks, [])
+    
+    def test_model_recommendations(self):
+        """Test model recommendation system"""
+        from backend.scripts.common.enhanced_asr_config import get_recommended_model
+        
+        # Test quality recommendations
+        self.assertEqual(get_recommended_model('quality', vram_gb=16), 'large-v3')
+        self.assertEqual(get_recommended_model('quality', vram_gb=2), 'medium.en')
+        
+        # Test speed recommendations  
+        self.assertEqual(get_recommended_model('speed', vram_gb=16), 'large-v3-turbo')
+        self.assertEqual(get_recommended_model('speed', vram_gb=2), 'small.en')
+        
+        # Test efficiency recommendations
+        self.assertEqual(get_recommended_model('efficiency', vram_gb=16), 'distil-large-v3')
+        self.assertEqual(get_recommended_model('efficiency', vram_gb=2), 'base.en')
+        
+        # Test realtime recommendations
+        self.assertEqual(get_recommended_model('realtime', vram_gb=16), 'small.en')
+        self.assertEqual(get_recommended_model('realtime', vram_gb=0.5), 'tiny.en')
 
 class TestOutputFormatters(unittest.TestCase):
     """Test output format generation"""
@@ -219,6 +346,54 @@ class TestOutputFormatters(unittest.TestCase):
         self.assertIn('Chaffee: 50.0% of audio', summary)
         self.assertIn('Guest: 50.0% of audio', summary)
         self.assertIn('High confidence: 50.0% attributed to Dr. Chaffee', summary)
+
+class TestQualityAssurance(unittest.TestCase):
+    """Test two-pass quality assurance functionality"""
+    
+    def test_low_confidence_detection(self):
+        """Test detection of low-confidence segments"""
+        from backend.scripts.common.enhanced_asr import TranscriptionResult, WordSegment, SpeakerSegment
+        
+        # Create mock segments with varying quality
+        segments = [
+            {'start': 0.0, 'end': 2.0, 'text': 'Good quality', 'avg_logprob': -0.2, 'compression_ratio': 1.5},
+            {'start': 2.0, 'end': 4.0, 'text': 'Poor quality', 'avg_logprob': -0.5, 'compression_ratio': 3.0},
+            {'start': 4.0, 'end': 6.0, 'text': 'Bad compression', 'avg_logprob': -0.3, 'compression_ratio': 2.8},
+            {'start': 6.0, 'end': 8.0, 'text': 'Good segment', 'avg_logprob': -0.1, 'compression_ratio': 1.2}
+        ]
+        
+        result = TranscriptionResult(
+            text='Test transcription',
+            segments=segments,
+            words=[],
+            speakers=[],
+            metadata={}
+        )
+        
+        # Test low confidence detection
+        low_conf = result.get_low_confidence_segments(avg_logprob_threshold=-0.35, compression_ratio_threshold=2.4)
+        
+        # Should detect 2 segments: poor quality (logprob) and bad compression (compression ratio)
+        self.assertEqual(len(low_conf), 2)
+        self.assertEqual(low_conf[0]['text'], 'Poor quality')
+        self.assertEqual(low_conf[1]['text'], 'Bad compression')
+    
+    def test_quality_metrics_calculation(self):
+        """Test quality metrics calculation"""
+        segments = [
+            {'avg_logprob': -0.2, 'compression_ratio': 1.5, 'no_speech_prob': 0.1},
+            {'avg_logprob': -0.4, 'compression_ratio': 2.0, 'no_speech_prob': 0.2},
+            {'avg_logprob': -0.3, 'compression_ratio': 1.8, 'no_speech_prob': 0.15}
+        ]
+        
+        import numpy as np
+        avg_logprob = np.mean([s['avg_logprob'] for s in segments])
+        avg_compression = np.mean([s['compression_ratio'] for s in segments])
+        avg_no_speech = np.mean([s['no_speech_prob'] for s in segments])
+        
+        self.assertAlmostEqual(avg_logprob, -0.3, places=2)
+        self.assertAlmostEqual(avg_compression, 1.77, places=2)
+        self.assertAlmostEqual(avg_no_speech, 0.15, places=2)
 
 class TestSpeakerIdentification(unittest.TestCase):
     """Test speaker identification logic"""
@@ -371,6 +546,7 @@ def run_test_suite():
         TestVoiceEnrollment,
         TestEnhancedASRConfig,
         TestOutputFormatters,
+        TestQualityAssurance,
         TestSpeakerIdentification,
         TestGuardrails,
         TestIntegrationScenarios,
