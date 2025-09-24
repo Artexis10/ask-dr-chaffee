@@ -167,11 +167,19 @@ class EnhancedASR:
                         
                         logger.info(f"Using cache directory: {cache_dir}")
                         
-                        self._diarization_pipeline = Pipeline.from_pretrained(
-                            self.config.diarization_model,
-                            use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN'),  # Required for some models
-                            cache_dir=cache_dir
-                        )
+                        # Try both token parameter names depending on pyannote.audio version
+                        try:
+                            self._diarization_pipeline = Pipeline.from_pretrained(
+                                self.config.diarization_model,
+                                use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
+                                cache_dir=cache_dir
+                            )
+                        except TypeError:
+                            self._diarization_pipeline = Pipeline.from_pretrained(
+                                self.config.diarization_model,
+                                token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
+                                cache_dir=cache_dir
+                            )
                         
                         if self._device == "cuda":
                             self._diarization_pipeline = self._diarization_pipeline.to(torch.device("cuda"))
