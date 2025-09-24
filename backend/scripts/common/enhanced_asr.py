@@ -134,6 +134,14 @@ class EnhancedASR:
         """Lazy load diarization pipeline"""
         if self._diarization_pipeline is None:
             try:
+                # Debug environment variables
+                logger.info("=== Diarization Environment Variables ===")
+                logger.info(f"USE_SIMPLE_DIARIZATION={os.getenv('USE_SIMPLE_DIARIZATION', 'true')}")
+                logger.info(f"DIARIZE={os.getenv('DIARIZE', 'false')}")
+                logger.info(f"MIN_SPEAKERS={os.getenv('MIN_SPEAKERS', 'None')}")
+                logger.info(f"MAX_SPEAKERS={os.getenv('MAX_SPEAKERS', 'None')}")
+                logger.info(f"HUGGINGFACE_HUB_TOKEN={os.getenv('HUGGINGFACE_HUB_TOKEN', 'None')[:5] if os.getenv('HUGGINGFACE_HUB_TOKEN') else 'None'}...")
+                
                 # Check if we should use simple diarization
                 use_simple = os.getenv('USE_SIMPLE_DIARIZATION', 'true').lower() == 'true'
                 
