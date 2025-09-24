@@ -10,13 +10,17 @@ import logging
 import argparse
 from pathlib import Path
 from typing import Dict, Any, Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add backend scripts to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import existing ingestion components
-from backend.scripts.common.database import get_db_connection
-from backend.scripts.common.database_upsert import DatabaseUpserter
+from backend.scripts.common.database import DatabaseManager
+from backend.scripts.common.database_upsert import DatabaseUpserter, ChunkData
 from backend.scripts.common.embeddings import EmbeddingGenerator
 from backend.scripts.common.transcript_processor import TranscriptProcessor
 
@@ -32,7 +36,7 @@ class EnhancedYouTubeIngestion:
                  enable_speaker_id: bool = True,
                  voices_dir: str = "voices",
                  chaffee_min_sim: float = 0.82,
-                 source_type: str = "youtube_enhanced"):
+                 source_type: str = "youtube"):
         
         self.enable_speaker_id = enable_speaker_id
         self.voices_dir = voices_dir
@@ -50,7 +54,12 @@ class EnhancedYouTubeIngestion:
         
         self.transcript_processor = TranscriptProcessor(chunk_duration_seconds=45)
         self.embedding_generator = EmbeddingGenerator()
-        self.db_upserter = DatabaseUpserter()
+        
+        # Initialize database components
+        db_url = os.getenv('DATABASE_URL')
+        if not db_url:
+            raise ValueError("DATABASE_URL environment variable is required")
+        self.db_upserter = DatabaseUpserter(db_url)
         
         logger.info(f"Enhanced YouTube Ingestion initialized (speaker_id={enable_speaker_id})")
     
@@ -136,7 +145,12 @@ class EnhancedYouTubeIngestion:
             logger.info(f"Generating embeddings for {len(chunks)} chunks")
             for chunk in chunks:
                 try:
-                    embedding = self.embedding_generator.generate_embedding(chunk['text'])
+                    embedding = self.embedding_generator.generate_single_embedding(chunk['text'])
+                    # Ensure embedding is a Python list, not numpy array 
+                    if hasattr(embedding, 'tolist'):
+                        embedding = embedding.tolist()
+                    elif hasattr(embedding, '__iter__'):
+                        embedding = list(embedding)
                     chunk['embedding'] = embedding
                 except Exception as e:
                     logger.warning(f"Failed to generate embedding for chunk {chunk['chunk_index']}: {e}")
@@ -165,40 +179,56 @@ class EnhancedYouTubeIngestion:
             logger.info(f"Upserting {len(chunks)} chunks to database")
             
             # Create source entry
-            source_data = {
-                'title': f"YouTube Video {video_id}",  # Could be enhanced with actual title
-                'url': f"https://www.youtube.com/watch?v={video_id}",
-                'content_type': 'video',
-                'metadata': source_metadata
-            }
+            from backend.scripts.common.list_videos_yt_dlp import VideoInfo
             
-            source_id = self.db_upserter.upsert_source(source_data, source_type=self.source_type)
+            # Create a VideoInfo object with the required fields
+            video_info = VideoInfo(
+                video_id=video_id,
+                title=f"YouTube Video {video_id}",
+                description="",
+                duration_s=0,  # We don't have this info yet
+                published_at=None
+            )
             
-            # Upsert chunks
+            # Use 'whisper' as provenance since Enhanced ASR is AI transcription
+            provenance = 'whisper' if method in ['enhanced_asr', 'whisper'] else method
+            
+            source_id = self.db_upserter.upsert_source(
+                video_info=video_info,
+                source_type=self.source_type,
+                provenance=provenance,
+                extra_metadata=source_metadata
+            )
+            
+            # Prepare chunks for database upsert
+            db_chunks = []
             for chunk in chunks:
                 if chunk['embedding'] is not None:
-                    chunk_data = {
-                        'source_id': source_id,
-                        'chunk_index': chunk['chunk_index'],
-                        'start_time_seconds': chunk['start_time_seconds'],
-                        'end_time_seconds': chunk['end_time_seconds'],
-                        'text': chunk['text'],
-                        'word_count': chunk['word_count'],
-                        'embedding': chunk['embedding']
-                    }
+                    # Ensure all values are native Python types, not numpy types
+                    t_start = float(chunk['start_time_seconds']) if chunk['start_time_seconds'] is not None else 0.0
+                    t_end = float(chunk['end_time_seconds']) if chunk['end_time_seconds'] is not None else 0.0
                     
-                    # Add speaker metadata to chunk if available
-                    chunk_metadata = {}
-                    if 'speaker_metadata' in chunk:
-                        chunk_metadata['speaker'] = chunk['speaker_metadata']
+                    # Convert embedding to list if needed
+                    embedding = chunk['embedding']
+                    if embedding is not None:
+                        if hasattr(embedding, 'tolist'):
+                            embedding = embedding.tolist()
+                        elif hasattr(embedding, '__iter__') and not isinstance(embedding, list):
+                            embedding = list(embedding)
                     
-                    if metadata.get('enhanced_asr_used'):
-                        chunk_metadata['enhanced_asr'] = True
-                    
-                    if chunk_metadata:
-                        chunk_data['metadata'] = chunk_metadata
-                    
-                    self.db_upserter.upsert_chunk(chunk_data)
+                    db_chunk = ChunkData(
+                        chunk_hash=f"{video_id}:{chunk['chunk_index']}",
+                        source_id=source_id,
+                        text=chunk['text'],
+                        t_start_s=t_start,
+                        t_end_s=t_end,
+                        embedding=embedding
+                    )
+                    db_chunks.append(db_chunk)
+            
+            # Upsert chunks
+            if db_chunks:
+                self.db_upserter.upsert_chunks(db_chunks)
             
             results['success'] = True
             logger.info(f"Successfully processed video {video_id}: {results['chunks_count']} chunks upserted")
@@ -303,7 +333,7 @@ def main():
     parser.add_argument('--voices-dir', default='voices', help='Voice profiles directory')
     parser.add_argument('--chaffee-min-sim', type=float, default=0.82,
                        help='Minimum similarity threshold for Chaffee')
-    parser.add_argument('--source-type', default='youtube_enhanced',
+    parser.add_argument('--source-type', default='youtube',
                        help='Source type for database')
     
     # Chaffee profile setup
@@ -344,22 +374,22 @@ def main():
         if success:
             print("✅ Chaffee voice profile setup successful")
         else:
-            print("❌ Chaffee voice profile setup failed")
+            print("Chaffee voice profile setup failed")
             return 1
     
     # Check Enhanced ASR status
     asr_status = ingestion.transcript_fetcher.get_enhanced_asr_status()
-    print(f"🎤 Enhanced ASR Status:")
+    print(f"[ASR] Enhanced ASR Status:")
     print(f"   Enabled: {asr_status['enabled']}")
     print(f"   Available: {asr_status['available']}")
     print(f"   Voice Profiles: {asr_status['voice_profiles']}")
     
     if not asr_status['available'] and args.enable_speaker_id:
-        print("⚠️  Enhanced ASR not available - install dependencies:")
+        print("Enhanced ASR not available - install dependencies:")
         print("   pip install whisperx pyannote.audio speechbrain")
     
     # Process videos
-    print(f"\n🎬 Processing {len(args.video_ids)} videos...")
+    print(f"\n[VIDEO] Processing {len(args.video_ids)} videos...")
     
     batch_results = ingestion.process_video_batch(
         video_ids=args.video_ids,
@@ -367,7 +397,7 @@ def main():
     )
     
     # Print results
-    print(f"\n📊 Processing Results:")
+    print(f"\n[RESULTS] Processing Results:")
     print(f"   Successful: {batch_results['successful']}/{batch_results['total_videos']}")
     print(f"   Failed: {batch_results['failed']}/{batch_results['total_videos']}")
     print(f"   Total chunks: {batch_results['summary']['total_chunks_processed']}")
@@ -375,7 +405,7 @@ def main():
     
     # Show individual results
     for video_id, result in batch_results['video_results'].items():
-        status = "✅" if result['success'] else "❌"
+        status = "[SUCCESS]" if result['success'] else "[FAILED]"
         method = result.get('method', 'unknown')
         chunks = result.get('chunks_count', 0)
         
@@ -388,17 +418,17 @@ def main():
             unknown_segs = speaker_meta.get('unknown_segments', 0)
             
             if chaffee_pct > 0:
-                print(f"      🎯 Chaffee: {chaffee_pct:.1f}%, Unknown segments: {unknown_segs}")
+                print(f"      [SPEAKER] Chaffee: {chaffee_pct:.1f}%, Unknown segments: {unknown_segs}")
         
         if result.get('error'):
-            print(f"      ❌ Error: {result['error']}")
+            print(f"      [ERROR] Error: {result['error']}")
     
     # Save results if requested
     if args.output:
         import json
         with open(args.output, 'w') as f:
             json.dump(batch_results, f, indent=2, default=str)
-        print(f"\n💾 Results saved to: {args.output}")
+        print(f"\n[SAVED] Results saved to: {args.output}")
     
     # Return appropriate exit code
     return 0 if batch_results['failed'] == 0 else 1

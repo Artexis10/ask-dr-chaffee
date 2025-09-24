@@ -6,8 +6,9 @@ Multi-Model Whisper Manager for Maximum RTX 5080 Utilization
 import logging
 import threading
 import time
-from typing import List, Optional, Tuple, Dict, Any
+import os
 from pathlib import Path
+from typing import List, Optional, Tuple, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +18,11 @@ class MultiModelWhisperManager:
     Thread-safe round-robin assignment of models to transcription tasks
     """
     
-    def __init__(self, num_models: int = 16, model_size: str = "base"):
+    def __init__(self, num_models: int = 2, model_size: str = None):
+        # Use environment variable or default to large-v3
+        self.model_size = model_size or os.getenv('WHISPER_MODEL_ENHANCED', 'large-v3')
         self.num_models = num_models
-        self.model_size = model_size
+        # model_size is set above
         self.models = {}
         self.model_locks = {}
         self.model_assignment_lock = threading.Lock()
@@ -39,17 +42,23 @@ class MultiModelWhisperManager:
             for i in range(self.num_models):
                 logger.info(f"Loading model {i+1}/{self.num_models}...")
                 
+                # Get compute type from environment or default to float16
+                compute_type = os.getenv('WHISPER_COMPUTE', 'float16')
+                device = os.getenv('WHISPER_DEVICE', 'cuda')
+                
+                logger.info(f"Loading model {i+1}/{self.num_models} ({self.model_size}) on {device} with {compute_type}")
+                
                 model = faster_whisper.WhisperModel(
                     self.model_size,
-                    device="cuda",
-                    compute_type="float16"
+                    device=device,
+                    compute_type=compute_type
                 )
                 
                 self.models[i] = model
                 self.model_locks[i] = threading.Lock()
             
             self.initialized = True
-            logger.info(f"✅ ALL {self.num_models} MODELS LOADED - RTX 5080 READY FOR MAXIMUM UTILIZATION!")
+            logger.info(f"✅ ALL {self.num_models} MODELS LOADED - GPU READY FOR MAXIMUM UTILIZATION!")
             return True
             
         except Exception as e:
@@ -136,7 +145,7 @@ class MultiModelWhisperManager:
 _global_multi_model_manager = None
 _global_manager_lock = threading.Lock()
 
-def get_multi_model_manager(num_models: int = 16, model_size: str = "base") -> MultiModelWhisperManager:
+def get_multi_model_manager(num_models: int = 2, model_size: str = None) -> MultiModelWhisperManager:
     """Get or create the global multi-model manager"""
     global _global_multi_model_manager
     

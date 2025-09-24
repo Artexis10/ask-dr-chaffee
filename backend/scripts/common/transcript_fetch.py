@@ -381,7 +381,10 @@ class TranscriptFetcher:
             from .multi_model_whisper import get_multi_model_manager
             
             # Get the global multi-model manager
-            manager = get_multi_model_manager(num_models=16, model_size="base")
+            # Use environment variable for model size and number of models
+            num_models = int(os.getenv('WHISPER_PARALLEL_MODELS', '2'))
+            model_size = os.getenv('WHISPER_MODEL_ENHANCED', 'large-v3')
+            manager = get_multi_model_manager(num_models=num_models, model_size=model_size)
             
             # Use multi-model transcription
             segments, metadata = manager.transcribe_with_multi_model(audio_path, model_name)

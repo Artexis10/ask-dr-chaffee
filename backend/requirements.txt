@@ -29,11 +29,13 @@ transformers==4.33.2
 # Cross-encoder reranking
 sentence-transformers[cross-encoder]==2.2.2
 
-# Audio transcription with Whisper
-faster-whisper>=1.0.0
-# Ensure GPU-compatible Torch for better performance
-torch>=2.0.1,<2.3.0
-torchaudio>=2.0.1,<2.3.0
+# Enhanced Audio transcription with latest Whisper models
+faster-whisper>=1.0.2  # Supports large-v3, distil-large-v3, large-v3-turbo
+# Ensure GPU-compatible Torch for RTX 5080 optimization
+torch>=2.1.0,<2.4.0
+torchaudio>=2.1.0,<2.4.0
+# System monitoring for VRAM tracking
+psutil>=5.9.0
 
 # Advanced ASR with speaker identification
 whisperx>=3.1.1

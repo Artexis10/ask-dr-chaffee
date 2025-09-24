@@ -214,7 +214,7 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         # Check if Enhanced ASR is available and should be used
         use_enhanced_asr = (
             self.enable_speaker_id and 
-            (force_enhanced_asr or not self._check_speaker_profiles_available())
+            (force_enhanced_asr or self._check_speaker_profiles_available())
         )
         
         if use_enhanced_asr:
@@ -294,19 +294,17 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
             import tempfile
             import subprocess
             
-            # Create temporary file
-            temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
-            output_path = temp_file.name
-            temp_file.close()
+            # Create temporary directory for download
+            temp_dir = tempfile.mkdtemp()
+            output_template = os.path.join(temp_dir, f'{video_id}.%(ext)s')
             
-            # Use yt-dlp to download audio
+            # Use yt-dlp to download audio - use webm format and let yt-dlp handle conversion
             cmd = [
                 self.yt_dlp_path,
-                '--extract-audio',
-                '--audio-format', 'wav',
-                '--audio-quality', '0',
+                '--format', 'bestaudio',
                 '--no-playlist',
-                '-o', output_path.replace('.wav', '.%(ext)s'),
+                '--ignore-errors',
+                '-o', output_template,
                 f'https://www.youtube.com/watch?v={video_id}'
             ]
             
@@ -319,28 +317,42 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                 elif isinstance(self.proxies, str):
                     cmd.extend(['--proxy', self.proxies])
             
+            logger.info(f"Running yt-dlp command: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             
+            logger.info(f"yt-dlp stdout: {result.stdout}")
+            if result.stderr:
+                logger.warning(f"yt-dlp stderr: {result.stderr}")
+            
             if result.returncode == 0:
-                # Find the actual output file
-                output_dir = Path(output_path).parent
-                for ext in ['.wav', '.mp3', '.m4a']:
-                    potential_path = output_dir / f"{video_id}{ext}"
-                    if potential_path.exists():
-                        return str(potential_path)
+                # Find the actual output file (various audio formats)
+                for ext in ['.webm', '.mp4', '.m4a', '.mp3', '.wav', '.opus']:
+                    potential_path = os.path.join(temp_dir, f"{video_id}{ext}")
+                    if os.path.exists(potential_path):
+                        logger.info(f"Audio downloaded successfully: {potential_path}")
+                        return potential_path
                 
-                # Check if the exact path exists
-                if os.path.exists(output_path):
-                    return output_path
+                # List all files in temp directory for debugging
+                files_in_dir = os.listdir(temp_dir)
+                logger.error(f"Audio download succeeded but file not found. Files in {temp_dir}: {files_in_dir}")
                 
-                logger.error(f"Audio download succeeded but file not found: {output_path}")
+                # Clean up temp directory
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
                 return None
             else:
                 logger.error(f"Audio download failed: {result.stderr}")
+                # Clean up temp directory
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
                 return None
                 
         except Exception as e:
             logger.error(f"Failed to download audio for Enhanced ASR: {e}")
+            # Clean up temp directory if it exists
+            if 'temp_dir' in locals():
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
             return None
     
     def _fallback_to_standard_whisper(self, video_id: str, metadata: Dict[str, Any]) -> Tuple[Optional[List[TranscriptSegment]], str, Dict[str, Any]]:
@@ -358,7 +370,7 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
             metadata.update(whisper_metadata)
             metadata['enhanced_asr_fallback'] = True
             
-            return segments, f"whisper_fallback_{method}", metadata
+            return segments, "whisper", metadata
             
         except Exception as e:
             logger.error(f"Standard Whisper fallback also failed: {e}")
