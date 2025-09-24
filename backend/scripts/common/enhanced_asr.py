@@ -143,7 +143,11 @@ class EnhancedASR:
                 logger.info(f"HUGGINGFACE_HUB_TOKEN={os.getenv('HUGGINGFACE_HUB_TOKEN', 'None')[:5] if os.getenv('HUGGINGFACE_HUB_TOKEN') else 'None'}...")
                 
                 # Check if we should use simple diarization
-                use_simple = os.getenv('USE_SIMPLE_DIARIZATION', 'true').lower() == 'true'
+                use_simple_str = os.getenv('USE_SIMPLE_DIARIZATION', 'true')
+                use_simple = use_simple_str.lower() == 'true'
+                logger.info(f"USE_SIMPLE_DIARIZATION={use_simple_str} (parsed as {use_simple})")
+                logger.info(f"DIARIZE={os.getenv('DIARIZE', 'false')}")
+                logger.info(f"HUGGINGFACE_HUB_TOKEN={os.getenv('HUGGINGFACE_HUB_TOKEN', 'None')[:5] if os.getenv('HUGGINGFACE_HUB_TOKEN') else 'None'}...")
                 
                 if use_simple:
                     # Use our simple diarization that doesn't require authentication
