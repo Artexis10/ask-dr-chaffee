@@ -1,0 +1,3363 @@
+1
+00:00:06,100 --> 00:00:08,800
+Okay, hi everyone, welcome back.
+
+2
+00:00:09,100 --> 00:00:13,600
+I appreciate you still following along and hanging in there with us.
+
+3
+00:00:13,940 --> 00:00:17,240
+So there we have the pleasure of having Dr. Anthony Chafey on.
+
+4
+00:00:18,320 --> 00:00:19,900
+Dr. Chafey, thanks for joining the time.
+
+5
+00:00:20,700 --> 00:00:22,960
+I'm not a problem, thank you for having me.
+
+6
+00:00:24,000 --> 00:00:25,520
+You've got a really interesting background.
+
+7
+00:00:26,700 --> 00:00:30,920
+I mean, in my research, I got stumps on, you went to university at 15.
+
+8
+00:00:31,180 --> 00:00:31,540
+Is that right?
+
+9
+00:00:32,720 --> 00:00:34,640
+By a 16, yeah, started at 16.
+
+10
+00:00:35,540 --> 00:00:35,900
+Right.
+
+11
+00:00:36,160 --> 00:00:36,940
+I can't.
+
+12
+00:00:36,940 --> 00:00:38,580
+Super, that's not commonly a problem, right?
+
+13
+00:00:38,860 --> 00:00:40,800
+That's not completely away from my phone standing.
+
+14
+00:00:41,220 --> 00:00:41,600
+It's correct.
+
+15
+00:00:43,040 --> 00:00:44,720
+Yeah, I know it's, um, you know,
+
+16
+00:00:44,720 --> 00:00:45,580
+there were different programs.
+
+17
+00:00:45,840 --> 00:00:46,320
+I could my school.
+
+18
+00:00:46,460 --> 00:00:47,600
+You could take the SATs early.
+
+19
+00:00:47,760 --> 00:00:48,560
+And if you did well enough,
+
+20
+00:00:48,700 --> 00:00:51,260
+you could start getting taken classes as a,
+
+21
+00:00:51,260 --> 00:00:52,880
+as like a non-metric related student.
+
+22
+00:00:53,000 --> 00:00:55,840
+And you just sort of, and then you get sort of high school and
+
+23
+00:00:55,840 --> 00:00:57,600
+university credits at the same time.
+
+24
+00:00:58,280 --> 00:01:00,900
+So, um, I would, yeah, I would go to university
+
+25
+00:01:01,580 --> 00:01:04,900
+during the day and then I go and play sports at the, at the school,
+
+26
+00:01:04,980 --> 00:01:06,060
+at the high school.
+
+27
+00:01:06,400 --> 00:01:06,720
+After that.
+
+28
+00:01:06,720 --> 00:01:07,540
+I don't want to think that.
+
+29
+00:01:08,180 --> 00:01:08,540
+Yeah, okay.
+
+30
+00:01:08,920 --> 00:01:09,280
+So good.
+
+31
+00:01:09,320 --> 00:01:11,240
+So you've been a bit of a brain box for a while then.
+
+32
+00:01:11,760 --> 00:01:13,900
+Um, so you're a medical doctor.
+
+33
+00:01:14,260 --> 00:01:16,080
+You're a neurosurgical registrar.
+
+34
+00:01:16,460 --> 00:01:17,900
+Um, over and perth, where you are.
+
+35
+00:01:18,180 --> 00:01:19,260
+Former professional rugby player.
+
+36
+00:01:19,720 --> 00:01:22,300
+And you spent years dissecting the science of human nutrition.
+
+37
+00:01:23,660 --> 00:01:26,660
+Most no, you argue that my own toxins are a hidden
+
+38
+00:01:26,660 --> 00:01:27,920
+factor in chronic disease.
+
+39
+00:01:28,400 --> 00:01:31,420
+And that a strict animal based diet may be the key to unlocking
+
+40
+00:01:31,420 --> 00:01:33,300
+best blood health longevity and performance.
+
+41
+00:01:34,460 --> 00:01:36,820
+So, do you mind just walking us through your background education and
+
+42
+00:01:36,820 --> 00:01:40,500
+handle you ended up believing what you believe about nutrition and
+
+43
+00:01:40,500 --> 00:01:40,740
+balance?
+
+44
+00:01:42,780 --> 00:01:46,300
+Well, so when I, when I started university, I always wanted,
+
+45
+00:01:46,380 --> 00:01:49,320
+I was always interested in the sciences, map and science where I was my,
+
+46
+00:01:49,320 --> 00:01:50,160
+my favorite subjects.
+
+47
+00:01:50,420 --> 00:01:51,640
+I was wanted to be a doctor.
+
+48
+00:01:51,860 --> 00:01:54,120
+And so I was looking at my prerequisites.
+
+49
+00:01:54,120 --> 00:01:59,800
+I'm for premed and, um, and I was also an athlete.
+
+50
+00:02:00,060 --> 00:02:03,220
+And so I also wanted to know what was the right nutrition.
+
+51
+00:02:03,820 --> 00:02:05,100
+You know, how to be as healthy as possible.
+
+52
+00:02:05,820 --> 00:02:09,500
+I'm, you know, I never separated those two things that that eating
+
+53
+00:02:09,500 --> 00:02:10,900
+health, lean, living a healthy life.
+
+54
+00:02:10,920 --> 00:02:13,600
+Obviously, I was going to make you healthier and as a doctor.
+
+55
+00:02:13,720 --> 00:02:14,820
+You want to know how the body works.
+
+56
+00:02:14,900 --> 00:02:17,440
+You want to know how to keep people as healthy as possible.
+
+57
+00:02:17,640 --> 00:02:20,920
+Using diet and lifestyle measures and not just medications and things like
+
+58
+00:02:20,920 --> 00:02:21,860
+that to treat symptoms.
+
+59
+00:02:22,440 --> 00:02:26,840
+So that was always something that that I thought was important thing to know about
+
+60
+00:02:26,840 --> 00:02:29,860
+as a as a future doctor.
+
+61
+00:02:32,180 --> 00:02:34,380
+And took nutrition classes took biology,
+
+62
+00:02:35,200 --> 00:02:37,780
+botany, cancer biology, all these sorts of things.
+
+63
+00:02:38,560 --> 00:02:42,300
+And, you know, was getting the sort of the standard, you know,
+
+64
+00:02:42,760 --> 00:02:44,660
+sort of training that that everybody else gets.
+
+65
+00:02:44,920 --> 00:02:48,320
+You know, that bad vegetables good.
+
+66
+00:02:48,540 --> 00:02:51,440
+You know, maybe limit me to know that sort of stuff.
+
+67
+00:02:52,520 --> 00:02:54,220
+Clustrel is a bad thing or whatever.
+
+68
+00:02:54,440 --> 00:02:57,720
+It's all just a sort of a trope now, but.
+
+69
+00:02:57,760 --> 00:03:00,800
+When I was taking cancer, but I never bought that meat was bad for us.
+
+70
+00:03:00,960 --> 00:03:02,900
+You know, I always knew that, you know, he was rape ex predators.
+
+71
+00:03:03,200 --> 00:03:04,900
+And then we just we've always evolved eating meat.
+
+72
+00:03:05,000 --> 00:03:07,180
+There was there were really important things in me.
+
+73
+00:03:07,340 --> 00:03:11,480
+You know, I think it was thankfully my, my family.
+
+74
+00:03:13,280 --> 00:03:14,780
+You know, studied nutrition.
+
+75
+00:03:15,100 --> 00:03:17,280
+And like there was a nutritionist of Del Davis 100 years ago.
+
+76
+00:03:17,400 --> 00:03:20,340
+We have her books for like generations in my family.
+
+77
+00:03:20,340 --> 00:03:23,860
+And they were, you know, so that was those sort of things that we, we more followed.
+
+78
+00:03:25,880 --> 00:03:29,880
+And, and, you know, if you were going to like cook vegetables and things like that,
+
+79
+00:03:29,920 --> 00:03:30,660
+you would read vegetables.
+
+80
+00:03:30,880 --> 00:03:31,600
+You wouldn't eat them raw.
+
+81
+00:03:31,700 --> 00:03:34,180
+You'd prepare them in certain way because they had chemicals.
+
+82
+00:03:34,440 --> 00:03:38,640
+And then like a del Davis even said, you don't ever eat raw spinach because they have oxalates,
+
+83
+00:03:38,780 --> 00:03:39,700
+which would be very harmful.
+
+84
+00:03:39,860 --> 00:03:45,180
+We know this in Western medicine, 75% of kidney stones are calcium oxalates stones.
+
+85
+00:03:45,200 --> 00:03:48,400
+So these oxalates from plants get in bind to the calcium in your bloodstream,
+
+86
+00:03:48,400 --> 00:03:50,300
+form stones and can block up your kidneys.
+
+87
+00:03:50,720 --> 00:03:53,880
+But they do a lot of other things in your body too that are deleterious to your health.
+
+88
+00:03:54,920 --> 00:03:59,120
+And a del Davis 100 years ago was saying, well, this is how you, this is how you traditionally eat spinach.
+
+89
+00:03:59,260 --> 00:04:00,240
+You don't just eat it raw.
+
+90
+00:04:00,380 --> 00:04:04,380
+You, you poach it or cook it with milk or dairy.
+
+91
+00:04:04,880 --> 00:04:07,700
+So cream milk or cheese.
+
+92
+00:04:07,780 --> 00:04:11,420
+So you're going to think of that the classic dishes with spinach, like spanacopita,
+
+93
+00:04:11,920 --> 00:04:15,140
+which is fed a cheese with cooked spinach with fed a cheese,
+
+94
+00:04:15,340 --> 00:04:17,200
+cream spinach those sorts of things.
+
+95
+00:04:17,200 --> 00:04:22,980
+And that calcium would leach out and neutralize the oxalates so that it would say for it eat.
+
+96
+00:04:23,420 --> 00:04:24,960
+So a group knowing all that stuff.
+
+97
+00:04:25,660 --> 00:04:28,960
+And, but at the same time, you're sort of told, you're supposed to eat this balanced diet.
+
+98
+00:04:29,060 --> 00:04:31,640
+You're supposed to have carbs, veggies, and meat, and all that sort of stuff.
+
+99
+00:04:31,680 --> 00:04:32,660
+And that gives this balance.
+
+100
+00:04:34,700 --> 00:04:43,160
+And then I had a professor of cancer biology who basically told us that this wasn't exactly true.
+
+101
+00:04:43,160 --> 00:04:48,220
+That plants have a lot more defensive chemicals than we really realize.
+
+102
+00:04:48,720 --> 00:04:52,020
+That we know this intuitively, you get lost in the woods.
+
+103
+00:04:52,380 --> 00:04:54,800
+You can't, and you run out of food, you can't just eat any random plant.
+
+104
+00:04:54,980 --> 00:04:56,880
+Most of them will get making very sick or even kill you.
+
+105
+00:04:57,460 --> 00:05:01,380
+So, you know, we understood about this concept of edible plants and inedible plants,
+
+106
+00:05:01,480 --> 00:05:04,300
+ones that were so toxic that you would die if you ate them.
+
+107
+00:05:04,460 --> 00:05:06,200
+Or you get very, very sick if you ate them.
+
+108
+00:05:07,040 --> 00:05:09,700
+You know, socrates died from drinking hemlock, right?
+
+109
+00:05:09,700 --> 00:05:12,960
+So, this is, you know, just, you know,
+
+110
+00:05:13,140 --> 00:05:17,360
+North American water hemlock half a leaf will kill you from intractable seizures,
+
+111
+00:05:17,380 --> 00:05:19,200
+but then one or two minutes, right?
+
+112
+00:05:19,500 --> 00:05:21,300
+And you can't really reverse that.
+
+113
+00:05:21,500 --> 00:05:22,460
+It's extremely toxic.
+
+114
+00:05:24,120 --> 00:05:26,820
+So, these are things that, that I knew growing up.
+
+115
+00:05:26,820 --> 00:05:32,500
+This is things that I knew studying botany, that every living organism has a defense mechanism.
+
+116
+00:05:32,680 --> 00:05:36,260
+And plants because they're stationary, they can't run away or fight back like an animal can.
+
+117
+00:05:36,260 --> 00:05:38,820
+Their main defense is chemical in nature.
+
+118
+00:05:38,940 --> 00:05:44,040
+They have about a million different defensive chemicals that we have categorized classified and even named.
+
+119
+00:05:45,920 --> 00:05:51,800
+And so, this professor was basically pointing out that just because something is an edible plant,
+
+120
+00:05:52,020 --> 00:05:53,420
+doesn't mean that it doesn't have these toxins.
+
+121
+00:05:54,180 --> 00:06:06,240
+And just because they're not fatal toxins, doesn't mean that they can't cause a build-up of
+
+122
+00:06:07,500 --> 00:06:10,500
+carcinogens, so that these things could cause stress to the system,
+
+123
+00:06:10,880 --> 00:06:16,120
+damage amount of conduit, cause DNA damages, and then eventually precipitate cancer.
+
+124
+00:06:16,820 --> 00:06:22,200
+And he said that, this is back in 2000, that
+
+125
+00:06:22,200 --> 00:06:27,100
+Brussels sprouts had 136 known carcinogens, and that mushrooms had over 100.
+
+126
+00:06:27,660 --> 00:06:30,500
+That spinach and kale, lettuce, celery, cabbage, cucumber, broccoli,
+
+127
+00:06:30,600 --> 00:06:33,200
+every single produce item that you've ever eaten.
+
+128
+00:06:33,200 --> 00:06:39,320
+We were given lists of these, and they had dozens if not over 100 known carcinogens in them.
+
+129
+00:06:40,200 --> 00:06:45,540
+You know, we know this intuitively as well, right, because we eat things like tomatoes,
+
+130
+00:06:45,880 --> 00:06:50,300
+or we eat avocados, or we eat grapes, and we think, oh, no, those are fine,
+
+131
+00:06:50,440 --> 00:06:55,280
+but they actually will kill cats and dogs, right, because there are toxins in them.
+
+132
+00:06:55,480 --> 00:06:59,920
+It's just that we have more defenses towards those toxins than cats and dogs do.
+
+133
+00:06:59,920 --> 00:07:03,300
+And so all plants are toxic.
+
+134
+00:07:03,500 --> 00:07:08,760
+It's just that certain animals have evolved the ability to detoxify them to a greater
+
+135
+00:07:08,760 --> 00:07:14,300
+or lesser extent, but even herbivore, strict herbivores that only eat plants,
+
+136
+00:07:14,320 --> 00:07:16,320
+only eat very specific plants.
+
+137
+00:07:16,540 --> 00:07:21,220
+So a cow can't just go around any random plant, that eat very specific ones,
+
+138
+00:07:21,540 --> 00:07:25,140
+because they've had that, that's their evolutionary niche, they can eat those plants.
+
+139
+00:07:25,240 --> 00:07:26,660
+They don't have to compete for resources.
+
+140
+00:07:26,660 --> 00:07:32,880
+That's a very common theme that assuring animals will evolve to be able to handle
+
+141
+00:07:32,880 --> 00:07:36,740
+the toxins in a certain plant, such as koala with eucalyptus.
+
+142
+00:07:37,780 --> 00:07:40,700
+There's almost nothing else to eucalyptus besides the koala, but the koala doesn't
+
+143
+00:07:40,700 --> 00:07:42,580
+need any other plants either.
+
+144
+00:07:43,480 --> 00:07:46,780
+And so that's their evolutionary niche, and that's their, you know,
+
+145
+00:07:46,840 --> 00:07:48,400
+they have that sort of protected resource.
+
+146
+00:07:49,360 --> 00:07:53,420
+So we were very taken back by this, who's saying that there was all these toxins,
+
+147
+00:07:53,420 --> 00:07:54,660
+all these carcinogens.
+
+148
+00:07:54,660 --> 00:08:01,360
+They're quite abundant that there were about 10,000 times the amount of toxic elements
+
+149
+00:08:02,340 --> 00:08:06,400
+in vegetables, and then the pesticides we spray on them by weight,
+
+150
+00:08:06,840 --> 00:08:09,100
+and that that was hundreds of times we're likely to cause cancer,
+
+151
+00:08:09,660 --> 00:08:13,260
+then the pesticides we spray on these things, which are sprayed on 2B toxic
+
+152
+00:08:13,760 --> 00:08:17,180
+and fatal to animals that insects trying to eat them.
+
+153
+00:08:17,580 --> 00:08:19,760
+So we can't, you know, and the plants are worse.
+
+154
+00:08:19,760 --> 00:08:23,420
+And this was a work from Professor Bruce Aims in the 1980s when you see Berkeley.
+
+155
+00:08:24,300 --> 00:08:27,640
+Aims then concluded that obviously these pesticides aren't that bad,
+
+156
+00:08:27,920 --> 00:08:32,400
+because obviously fruits and vegetables are good for you, because that was the
+
+157
+00:08:32,400 --> 00:08:35,940
+wisdom of the time, because if fruits and vegetables are good for you,
+
+158
+00:08:36,160 --> 00:08:39,120
+and they're way more toxic than the pesticides we spray on them,
+
+159
+00:08:39,460 --> 00:08:43,960
+therefore the toxic pesticides can't be that big of a deal.
+
+160
+00:08:44,100 --> 00:08:49,480
+Well, that's an assumption, but the data show that there's 10,000 times more toxins,
+
+161
+00:08:49,480 --> 00:08:55,200
+in the plant than the pesticides, and that plant toxins were hundreds of times
+
+162
+00:08:55,200 --> 00:08:57,720
+we're likely to cause cancer than the pesticides.
+
+163
+00:08:58,560 --> 00:09:00,960
+So that's what the data actually showed.
+
+164
+00:09:01,480 --> 00:09:08,940
+And so our professor was basically very much in that camp that these plant toxins were not a good thing.
+
+165
+00:09:09,800 --> 00:09:13,860
+And so he ended up basically saying that he didn't eat salad or vegetables,
+
+166
+00:09:14,120 --> 00:09:16,820
+and he wouldn't let his kids eat vegetables, because in his words,
+
+167
+00:09:16,820 --> 00:09:18,480
+plants are trying to kill you.
+
+168
+00:09:18,660 --> 00:09:20,040
+And why would you eat these things?
+
+169
+00:09:20,100 --> 00:09:22,240
+Why would you step into that defense?
+
+170
+00:09:22,940 --> 00:09:26,480
+You know, it's like getting into a pen with a raging bowl,
+
+171
+00:09:26,640 --> 00:09:27,940
+and pissing it off.
+
+172
+00:09:28,080 --> 00:09:29,800
+You're asking for trouble, right?
+
+173
+00:09:30,160 --> 00:09:32,720
+That bowl doesn't want hunch you and kill you in each of you,
+
+174
+00:09:32,760 --> 00:09:36,520
+but if it feels that you're a threat, he will absolutely try to kill you.
+
+175
+00:09:36,800 --> 00:09:38,620
+And that's what plants do as well.
+
+176
+00:09:38,780 --> 00:09:41,900
+They have no problem with you dying if they get to live.
+
+177
+00:09:42,060 --> 00:09:44,400
+I mean, latex, we use latex clothes.
+
+178
+00:09:45,460 --> 00:09:49,340
+Latex is a sap that when an animal choose a particular plant,
+
+179
+00:09:49,360 --> 00:09:52,980
+it starts releasing latex that's so tacky.
+
+180
+00:09:53,140 --> 00:09:55,620
+It's like a glue and it includes their mouth shut,
+
+181
+00:09:56,140 --> 00:09:58,920
+which is a pretty elegant way to stop something from eating you.
+
+182
+00:09:59,040 --> 00:10:00,580
+It was glued their mouth shut, right?
+
+183
+00:10:00,580 --> 00:10:03,860
+And they can't chew you, but the problem is they can't eat it all.
+
+184
+00:10:04,480 --> 00:10:08,860
+And they often die from starvation or from getting eaten because they can't,
+
+185
+00:10:08,860 --> 00:10:10,680
+they can't get food after that.
+
+186
+00:10:10,680 --> 00:10:15,780
+So again, the plants have no problem with you dying if they get to live.
+
+187
+00:10:16,580 --> 00:10:20,560
+So that was in my, I think I was about 20 years old,
+
+188
+00:10:20,880 --> 00:10:23,980
+and I just stopped eating plants altogether.
+
+189
+00:10:24,160 --> 00:10:25,960
+I was like, right, not doing that.
+
+190
+00:10:26,580 --> 00:10:28,660
+And I just defaulted into just eating meat and eggs.
+
+191
+00:10:28,740 --> 00:10:31,080
+I felt better than I ever have in my entire life.
+
+192
+00:10:31,700 --> 00:10:34,660
+And it wasn't actually until five years later when I was 25,
+
+193
+00:10:34,900 --> 00:10:36,800
+and I was playing rugby in England, actually,
+
+194
+00:10:36,800 --> 00:10:39,160
+that had new braves we were talking about earlier,
+
+195
+00:10:41,640 --> 00:10:42,980
+that I sort of fell off of that,
+
+196
+00:10:43,660 --> 00:10:45,840
+because the meat that I could get there,
+
+197
+00:10:45,840 --> 00:10:49,160
+you know, wasn't sort of the same as I could get in the U.S.,
+
+198
+00:10:49,160 --> 00:10:50,900
+a lot of it was breaded.
+
+199
+00:10:51,280 --> 00:10:54,420
+I even found there was just going to, like, a sainsbury or something like that.
+
+200
+00:10:55,200 --> 00:10:58,760
+I found out later that they could like inject the meat with water
+
+201
+00:10:58,760 --> 00:11:02,880
+to like bring the poundage up so it could charge you steak prices for water.
+
+202
+00:11:02,880 --> 00:11:07,240
+And whatever is happening, I couldn't make these things brown.
+
+203
+00:11:07,420 --> 00:11:10,420
+They would cook all the way through and they'd just be Korean sweaty.
+
+204
+00:11:10,680 --> 00:11:11,720
+And like, what the hell is going on?
+
+205
+00:11:11,740 --> 00:11:13,840
+Why doesn't meat cook like it doesn't America?
+
+206
+00:11:14,820 --> 00:11:16,180
+And then you go to a butcher, you're fine,
+
+207
+00:11:16,360 --> 00:11:18,620
+but you know, that stuff that I was getting wasn't good.
+
+208
+00:11:19,540 --> 00:11:21,440
+And so I ended up defaulting over,
+
+209
+00:11:21,520 --> 00:11:22,860
+like, okay, well, I'll just get this,
+
+210
+00:11:22,860 --> 00:11:25,500
+this, these chicken drumsticks and things like that,
+
+211
+00:11:25,700 --> 00:11:27,780
+that are already pre-cooked because this is just,
+
+212
+00:11:27,780 --> 00:11:29,040
+and this is just getting stupid,
+
+213
+00:11:29,120 --> 00:11:31,060
+but they had bread crumbs on it and I was like, okay,
+
+214
+00:11:31,060 --> 00:11:33,580
+well, you know, is that going to be a problem?
+
+215
+00:11:33,780 --> 00:11:34,840
+I mean, dose makes the poison.
+
+216
+00:11:35,060 --> 00:11:36,040
+There's not that much of it.
+
+217
+00:11:36,080 --> 00:11:37,340
+Maybe that's not that big of a deal.
+
+218
+00:11:37,680 --> 00:11:39,220
+And yeah, it's true, dose does make the poison,
+
+219
+00:11:39,260 --> 00:11:40,880
+but the dose is really small.
+
+220
+00:11:40,900 --> 00:11:42,100
+They'll don't realize that.
+
+221
+00:11:42,260 --> 00:11:47,160
+And I felt that my athleticism and my endurance
+
+222
+00:11:47,160 --> 00:11:50,860
+and my ability to recover was seriously impacted by that.
+
+223
+00:11:51,020 --> 00:11:52,160
+And I remember thinking, like, why don't I feel
+
+224
+00:11:52,160 --> 00:11:55,140
+it's just superhuman amazing as I have before.
+
+225
+00:11:55,440 --> 00:11:56,200
+You know, I'm not working out.
+
+226
+00:11:56,300 --> 00:11:58,820
+I'm not pushing myself 25 now.
+
+227
+00:11:58,820 --> 00:12:00,740
+I just old and I just dying now.
+
+228
+00:12:00,880 --> 00:12:02,220
+And so that's what I just chalked it up to.
+
+229
+00:12:02,280 --> 00:12:03,800
+I was like, I guess I'm just old now.
+
+230
+00:12:04,020 --> 00:12:05,220
+Yeah, it's 25 is it, you know?
+
+231
+00:12:05,500 --> 00:12:07,460
+But at 25, I felt like a super hero,
+
+232
+00:12:07,840 --> 00:12:09,180
+25 and a half, I did not.
+
+233
+00:12:09,860 --> 00:12:12,660
+And I didn't put two and two together until,
+
+234
+00:12:12,660 --> 00:12:14,960
+you know, 12 years later, 13 years later,
+
+235
+00:12:15,060 --> 00:12:18,240
+when I was just back from doing humanitarian working
+
+236
+00:12:18,240 --> 00:12:18,720
+Bangladesh.
+
+237
+00:12:19,780 --> 00:12:22,460
+And then came across your information that just showed pretty clear
+
+238
+00:12:22,460 --> 00:12:24,400
+that humans actually are carnivores as a species,
+
+239
+00:12:24,440 --> 00:12:25,820
+that's just the kind of animal we are.
+
+240
+00:12:27,180 --> 00:12:29,740
+And I looked back on the early,
+
+241
+00:12:29,740 --> 00:12:32,520
+my early 20s when I felt like an absolute superhero.
+
+242
+00:12:32,820 --> 00:12:33,460
+I couldn't get tired.
+
+243
+00:12:33,600 --> 00:12:34,520
+I couldn't run out of energy.
+
+244
+00:12:35,200 --> 00:12:37,740
+I had this massive athletic potential.
+
+245
+00:12:38,240 --> 00:12:40,040
+And I never felt like that again.
+
+246
+00:12:40,120 --> 00:12:41,740
+Even at 25 and a half or 26,
+
+247
+00:12:41,880 --> 00:12:44,180
+27 still playing professional rugby.
+
+248
+00:12:44,700 --> 00:12:47,400
+I did not feel like I did at that time.
+
+249
+00:12:47,520 --> 00:12:49,620
+I could never figure out how to get back to that.
+
+250
+00:12:49,920 --> 00:12:51,040
+And then all of a sudden that I clicked.
+
+251
+00:12:51,180 --> 00:12:52,320
+It was like, that's what I was doing.
+
+252
+00:12:52,540 --> 00:12:54,880
+I was eating as a carnivore and we are carnivores.
+
+253
+00:12:54,880 --> 00:12:57,040
+And that's our biology and all animals.
+
+254
+00:12:57,300 --> 00:12:59,560
+If you feed them something that they're not designed to eat,
+
+255
+00:12:59,560 --> 00:13:00,580
+they don't perform as well.
+
+256
+00:13:00,580 --> 00:13:01,420
+They don't feel as well.
+
+257
+00:13:01,420 --> 00:13:02,100
+They get sick.
+
+258
+00:13:02,640 --> 00:13:03,380
+They get diseases.
+
+259
+00:13:03,580 --> 00:13:04,680
+They get autoimmune diseases.
+
+260
+00:13:04,720 --> 00:13:05,560
+They get diabetes.
+
+261
+00:13:05,580 --> 00:13:06,420
+They get cancer.
+
+262
+00:13:06,520 --> 00:13:07,900
+They get all those same things that we get.
+
+263
+00:13:08,240 --> 00:13:10,840
+But only when eating an incorrect diet.
+
+264
+00:13:12,020 --> 00:13:15,440
+And so that just sort of flash for me and I said,
+
+265
+00:13:15,720 --> 00:13:16,100
+okay, right?
+
+266
+00:13:16,360 --> 00:13:16,820
+I knew it.
+
+267
+00:13:16,820 --> 00:13:18,060
+I knew plants were trying to kill me.
+
+268
+00:13:18,060 --> 00:13:19,300
+Get rid of these stupid things.
+
+269
+00:13:19,540 --> 00:13:20,660
+And I just cut them out.
+
+270
+00:13:21,500 --> 00:13:24,680
+And at the time, I was eating just green veggies.
+
+271
+00:13:24,680 --> 00:13:27,840
+And lean meat because I was trying to lean up for.
+
+272
+00:13:27,840 --> 00:13:29,300
+For rugby, try to get back into rugby.
+
+273
+00:13:30,520 --> 00:13:31,460
+And it wasn't working.
+
+274
+00:13:31,660 --> 00:13:32,600
+I was fully inflamed.
+
+275
+00:13:32,740 --> 00:13:33,560
+My back hurt all the time.
+
+276
+00:13:33,680 --> 00:13:34,600
+I joined sort of all the time.
+
+277
+00:13:34,680 --> 00:13:35,820
+I was retaining water.
+
+278
+00:13:36,020 --> 00:13:36,960
+I couldn't lose weight.
+
+279
+00:13:37,180 --> 00:13:37,920
+Didn't feel good.
+
+280
+00:13:37,920 --> 00:13:38,760
+Didn't have much energy.
+
+281
+00:13:39,320 --> 00:13:42,780
+And then when I just cut out the greens and started eating a lot more fatty meat.
+
+282
+00:13:42,800 --> 00:13:45,680
+And really went went focused on the fatty as cuts.
+
+283
+00:13:46,680 --> 00:13:47,960
+That because at this point I had already,
+
+284
+00:13:47,960 --> 00:13:51,680
+you know, come across research showing that the whole idea about saturated fat and cholesterol was
+
+285
+00:13:51,680 --> 00:13:52,860
+completely hocome.
+
+286
+00:13:53,840 --> 00:13:55,160
+And it wasn't absolutely not true.
+
+287
+00:13:55,200 --> 00:13:59,560
+And it was not the cause of any disease or poor health outcomes.
+
+288
+00:13:59,560 --> 00:14:01,000
+Certainly not cardiovascular disease.
+
+289
+00:14:01,960 --> 00:14:04,000
+And so I started eating more fatty meat.
+
+290
+00:14:04,000 --> 00:14:05,060
+And I cut out all the veggies.
+
+291
+00:14:05,740 --> 00:14:08,160
+And I, I massively improved my health.
+
+292
+00:14:08,300 --> 00:14:09,680
+I started losing weight immediately.
+
+293
+00:14:10,200 --> 00:14:11,120
+I also was water weight.
+
+294
+00:14:11,120 --> 00:14:12,860
+Information is drained out of my body.
+
+295
+00:14:13,100 --> 00:14:14,560
+And within two weeks, I felt so good.
+
+296
+00:14:14,660 --> 00:14:16,980
+I said, right, it's time to go back and play some rugby.
+
+297
+00:14:17,020 --> 00:14:19,720
+And that's what I went back out for the 38 years old.
+
+298
+00:14:19,720 --> 00:14:23,980
+I went back out and started playing for the professional team in Seattle at, you know,
+
+299
+00:14:24,020 --> 00:14:24,660
+Seattle C bulls.
+
+300
+00:14:24,680 --> 00:14:25,540
+That was the first year.
+
+301
+00:14:26,140 --> 00:14:30,140
+And so I started playing with them, getting back into it, getting shape.
+
+302
+00:14:30,280 --> 00:14:30,760
+It was feeling great.
+
+303
+00:14:31,800 --> 00:14:32,580
+I ended up hurting my knees.
+
+304
+00:14:32,760 --> 00:14:34,740
+So I couldn't actually play out that season.
+
+305
+00:14:35,160 --> 00:14:36,700
+But my body felt amazing.
+
+306
+00:14:39,040 --> 00:14:42,580
+And, you know, it was, and so I got really interested in that.
+
+307
+00:14:42,980 --> 00:14:48,380
+And I started looking at this from a medical perspective that human beings are biologically
+
+308
+00:14:48,380 --> 00:14:51,140
+carnivores, but we are not eating and living as carnivores.
+
+309
+00:14:51,640 --> 00:14:55,560
+And so is that having a negative affected impact on our health?
+
+310
+00:14:55,680 --> 00:14:58,880
+Is that the cause of all these chronic diseases that we're seeing nowadays?
+
+311
+00:14:59,460 --> 00:15:01,360
+And so I started digging into the research.
+
+312
+00:15:02,120 --> 00:15:04,180
+And spending, you know, I had some time off at that point.
+
+313
+00:15:04,280 --> 00:15:11,520
+So I was just still taking a bit of time off after coming back from Bangladesh before I started my new role in Australia, actually.
+
+314
+00:15:13,200 --> 00:15:14,700
+And I, so I had time.
+
+315
+00:15:14,700 --> 00:15:19,700
+I was spending eight to ten hours a day just reading studies and looking things up and asking questions and trying to find
+
+316
+00:15:20,660 --> 00:15:22,600
+Literature to answer those questions.
+
+317
+00:15:22,960 --> 00:15:27,200
+You know, if this is a problem, if plants are a problem, then we should see this.
+
+318
+00:15:28,460 --> 00:15:34,100
+You know, if autism is related to diet and from not eating meat, you know, we should see, you know,
+
+319
+00:15:34,240 --> 00:15:36,280
+or do vegans of vegetarians have higher rates of autism.
+
+320
+00:15:36,780 --> 00:15:37,820
+Yes, they do, actually.
+
+321
+00:15:38,120 --> 00:15:44,160
+And Texas A and M found that there was actually a causative link between carnitine deficiencies.
+
+322
+00:15:44,160 --> 00:15:54,740
+And vegans of vegetarians and the development of autism because you require carnitine for proper development of your neurons and your brain and proper functioning of the mitochondria.
+
+323
+00:15:56,480 --> 00:16:04,920
+And we, we make carnitine, but and so it's considered non-essential amino acid, but at the same time, we don't actually make enough of it all the time.
+
+324
+00:16:05,160 --> 00:16:10,860
+70% of people can make enough, but that means fully 30% of people almost want 30% of the planet.
+
+325
+00:16:10,860 --> 00:16:18,820
+Don't make enough carnitine and need that from their diet and carnitine only exists in animal animal proteins.
+
+326
+00:16:19,820 --> 00:16:27,880
+So if you're raising a kid vegan or vegetarian and they're not getting enough carnitine, their brain will be able to develop properly if they don't make enough of this stuff.
+
+327
+00:16:28,340 --> 00:16:40,840
+So things like that, and I just started asking questions and reading studies, and I just found that there's this entire body of evidence and literature that was not even mentioned to us.
+
+328
+00:16:40,840 --> 00:16:46,360
+And it's not even a medical school or beyond because as I realized later, it did not.
+
+329
+00:16:46,380 --> 00:16:56,180
+Well, it didn't have a marketing budget behind it playing in simple union. You have a drug that comes out and some sort of mechanism that you can assign a drug to, you know, you make these drug companies make billions of dollars off of that.
+
+330
+00:16:56,240 --> 00:17:06,100
+And so they can, they can spend millions of dollars on a marketing campaign and getting that into literature, getting it into the textbooks, getting that into medical schools and things like that, getting it on the news even.
+
+331
+00:17:06,100 --> 00:17:20,180
+And whereas just these these studies on ketogenic diets showing that this can reverse diabetes, it can reverse auto immunity that it can reverse heart failure that it can reverse Alzheimer's or at least improve these things.
+
+332
+00:17:20,520 --> 00:17:25,540
+Those don't have a product behind it, so they don't have a marketing budget behind it to push this out there, but it's there.
+
+333
+00:17:25,780 --> 00:17:32,240
+It's there for anybody to see there's a massive body of literature that we just haven't looked at.
+
+334
+00:17:32,240 --> 00:17:39,700
+And so the more I found the more supported this idea that we really shouldn't be eating plants, we really should just be eating fatty meat.
+
+335
+00:17:40,220 --> 00:17:44,360
+And I remember thinking, I'm like, okay, well, everything I'm looking at is just coming up stakes.
+
+336
+00:17:45,800 --> 00:17:54,120
+But, you know, maybe I don't want to be a victim of confirmation bias. I don't want to just be stalking in an echo chamber. Okay, what am I missing?
+
+337
+00:17:54,120 --> 00:18:05,040
+You got all these vegans of vegetarians out there. You got doctors and researchers of PhDs saying that that no meat is the way to go. Okay, so I'm I'm seeing only me just the way to go. They're saying no meat is the way to go.
+
+338
+00:18:05,620 --> 00:18:16,660
+So which one is it? What am I missing? What are they seeing that I'm not seeing? And so I went and started looking at at their talks at their lectures and asking them questions and looking at their blogs and writings and literature and all that sort of stuff.
+
+339
+00:18:16,660 --> 00:18:23,700
+And I just found that everything that they've been basing in soil was essentially came down to the idea that saturated fat cholesterol causes heart disease. It doesn't.
+
+340
+00:18:24,560 --> 00:18:34,680
+Or just misunderstanding about chemistry or just flat out wise, like, trying to say that humans evolved as herbivores, which is nonsense. There's no evidence to even suggest that.
+
+341
+00:18:35,240 --> 00:18:44,040
+And, you know, you can't even get B12 from plants too. So, and there's dozens of other essential nutrients that only come from meat that you can't get from plants.
+
+342
+00:18:44,040 --> 00:18:59,160
+So the idea that we evolved as herbivores is is honestly laughable, but that's what you see. You see people just completely making things up or basing basing their assumptions on this this faulty dogma about red meat and saturated fat.
+
+343
+00:18:59,720 --> 00:19:09,840
+And so even that helped confirm for me that that this was the way to go and since I've been applying that to my patient population over the last seven years or so.
+
+344
+00:19:09,840 --> 00:19:18,780
+I've just seen untold improvements and massive benefits and people's health. It's absolutely, I mean, it looks miraculous.
+
+345
+00:19:19,000 --> 00:19:31,040
+I mean, it sounds far-fetched because this is reversing diseases that are still to this day considered irreversible, like congested part failure, like diabetes, like auto immunity.
+
+346
+00:19:31,040 --> 00:19:39,000
+The auto immunity just melts away. That one's the easiest one because what I think of the auto immunity is it's really just an exposure issue. It's not an actual disease.
+
+347
+00:19:39,240 --> 00:19:52,400
+No, this one isn't disease. It's that they're being they're being afflicted by some sort of these exterior toxins either from plants or agrochemicals or whatever that this is actually triggering that immune response.
+
+348
+00:19:52,400 --> 00:20:07,400
+So I'm not the first one to think that I found papers going back to the 1990s from a doctor freed 1991 who argued that the body actually can't attack itself. And I was certainly taught that in immunology postgraduate immunology back 20 years ago.
+
+349
+00:20:08,020 --> 00:20:15,940
+And and he was saying that for the body to actually attack itself it has to meet certain criteria, which are not that have never been shown to have been that.
+
+350
+00:20:15,940 --> 00:20:29,760
+But every single one of these criteria to listen to this particular immunological response are all satisfied by the known effects of plant lectins in the body, lectins being toxins that plants make to defend themselves.
+
+351
+00:20:30,300 --> 00:20:44,000
+So I'm not the first person to think that it goes back even further in the 1800s. There's a doctor, Jay H. Saul's Barry, who actually was curing auto immune diseases like rheumatoid arthritis, crones, ulcerate colitis.
+
+352
+00:20:44,980 --> 00:20:53,040
+You know, all the others as well by putting people on a pure beef and water diet and that was and he again thought the same thing. This is a problem of digestion.
+
+353
+00:20:53,040 --> 00:21:05,980
+You were eating certain things. It was causing harmful chemicals inside the body. It was causing these reactions. And you eliminate those out. You do a 30 year research project on this. It wasn't just like an overnight assumption that he made a 30 year research project on this.
+
+354
+00:21:06,360 --> 00:21:17,780
+And then he started treating people with just beef and water diets and he was reversing rheumatoid. He was reversing crones and ulceraclides and there's even literature on this that randomized controlled trials and crones disease patients.
+
+355
+00:21:17,780 --> 00:21:26,560
+Where if you remove carbohydrates and fiber, that can keep people in remission from crones disease without medication for over four years.
+
+356
+00:21:27,180 --> 00:21:41,020
+And contrasted with the control group that didn't remove carbs and fiber and they didn't remission. They couldn't even say remission one month without medications. Right. So we already know that there's a massive impact and role that that food has to play.
+
+357
+00:21:41,020 --> 00:21:49,920
+So that sort of as a causative nature you take away something and all of a sudden the problem goes away. That means if you bring it back and the problem comes back and that's a cause and effect relationship.
+
+358
+00:21:50,600 --> 00:22:01,340
+There's another study with crones as well that put people on elemental diet, which is sort of a very processed diet, sort of like a shake, but has all the macro micronutrients you need and nothing else.
+
+359
+00:22:02,140 --> 00:22:05,960
+They're generally key to genetic because they're for kids with epilepsy largely.
+
+360
+00:22:06,620 --> 00:22:20,900
+And. And so when you put some one of crones disease on this on this elemental diet, they found that that's a better treatment for an acute flare up of crones disease.
+
+361
+00:22:21,720 --> 00:22:31,080
+Then prednisone or prednisone steroids, right, which is the gold standard right just shuts down your immune system and your body can't can't cause this damage.
+
+362
+00:22:32,280 --> 00:22:44,380
+And so just not eating certain things is a better treatment than steroids in the gold standard, right. So that again suggests a cause and effect relationship between things that we're eating and auto immunity.
+
+363
+00:22:44,920 --> 00:22:56,820
+So applying this to my patient population has been has been very rewarding has been very staggering. I have you know, I've been working as a neurosurgical registrar, sort of transitioned into a prevented medicine practice and.
+
+364
+00:22:56,820 --> 00:23:12,300
+And where I'm able to apply this diet and lifestyle sort of interventions and actually reverse diseases, which is crazy. So we're and we're going to be, you know, publishing a lot of our results we're getting ready to publish a case series for 10 to 12 patients who have actually reversed.
+
+365
+00:23:12,300 --> 00:23:22,300
+A multiple sclerosis and not only from a symptomatic point of view, but you know, there's a neurodegenerative process de mile and 80 disease that damages your brain and spinal cord.
+
+366
+00:23:23,620 --> 00:23:31,120
+But not only have they, you know, somebody's people are bedridden and wheelchairs and things like that and a lot of people are leading basically normal lives now somewhere still in transition.
+
+367
+00:23:31,120 --> 00:23:41,000
+But the most interesting part of that is that on MRIs, their lesions are actually shrinking, which has never been reported ever not with any medication, not with any any sort of intervention.
+
+368
+00:23:41,800 --> 00:23:55,340
+That I that I've ever heard of. I haven't come across anything in the literature. I think this will be a first to publish actual MRI before and after is showing that there's actually resolution of lesions not even just stopping progression, but actually shrinking the lesions.
+
+369
+00:23:56,040 --> 00:24:09,340
+So that I think that's a first as far as I know anyway, and if it's not a first it's an early and as pretty dramatic so you know, I found that that's it's one of the more.
+
+370
+00:24:09,340 --> 00:24:23,000
+Chaffee: I've ever found for my patients that it's certainly better than anything I've ever been taught and it goes back to topocrates, you know, left food be that medicine and medicine my food, right, and and then there's another one sort of attributed to him, but you know, who knows.
+
+371
+00:24:23,540 --> 00:24:32,720
+That said before before you try to heal somebody first asked them if they're willing to give up that which is making them sick, you know, understanding that we're naturally healthy.
+
+372
+00:24:33,400 --> 00:24:42,040
+We should we should be healthy by design and so if you're sick and your body's falling apart, it's it's something that's in your environment something that you're either doing to yourself or being done to you.
+
+373
+00:24:42,040 --> 00:24:46,700
+And if you figure that out and you remove that, it's just like a toxic exposure, letter poisoning, etc.
+
+374
+00:24:47,400 --> 00:24:52,500
+If you're able to just eliminate that out, your body should get better on its own and that's what I'm trying to do.
+
+375
+00:24:53,220 --> 00:24:57,200
+Unbelievable and so many super clear. Thank you for that and so many jumping on points.
+
+376
+00:24:57,980 --> 00:25:07,120
+My first being, I can hear it in my, uh, she produces this podcast, my partners, well, I'll always I can hear her question might it already, which she'll have in here.
+
+377
+00:25:07,120 --> 00:25:07,460
+Okay.
+
+378
+00:25:07,700 --> 00:25:17,920
+Which is what about this idea of a little bit of stress is a great thing for us, the sort of Zeno or me to affect from different plants and compare.
+
+379
+00:25:18,940 --> 00:25:22,680
+And specific plants, how do you think about that?
+
+380
+00:25:23,740 --> 00:25:40,280
+Well, the thing is is that again, there's about a million different defense chemicals, so which ones are hermetic at what doses and are they at the same doses is all the other toxins in that same plant that you're going to get right so let's say that there was.
+
+381
+00:25:40,280 --> 00:25:48,060
+You know, I've talked some that gave a hermetic effect, you know, you know why every people say that there's certain certain plants or anti inflammatory.
+
+382
+00:25:49,420 --> 00:25:58,280
+It's sort of an argument of hormesis, which is, you know, some of these things like, you know, tumor and things like that trigger your body to.
+
+383
+00:25:58,280 --> 00:26:09,220
+Pretty glue the phyome, which is a really strong antioxidant and so they think, oh look at this, it's your body's releasing all these great antioxidants, okay, that's great, so you have this anti inflammatory sort of effect.
+
+384
+00:26:10,080 --> 00:26:17,980
+Why is it making the glue to the phyome though, it's making the glue to the phyome to try to detoxify all the poisons in the tumor, right, so that's like.
+
+385
+00:26:18,520 --> 00:26:20,980
+So, you know, almost so easy to point.
+
+386
+00:26:21,780 --> 00:26:36,380
+Sorry, it's in response to the negative effect of the tumor that that's it that's exactly it so you know, we know that these things are toxins because because our body tries to detoxify them, right, and that's what the glue to find on is doing.
+
+387
+00:26:36,880 --> 00:26:45,380
+And so your body is, so we say that, oh look, you have this anti inflammatory effect, your body is creating more who to find on, but is doing that in order to.
+
+388
+00:26:47,040 --> 00:26:52,440
+Address the toxins that you just brought into it. Okay, so is that a traumatic effect or your body just responding to a toxin.
+
+389
+00:26:52,440 --> 00:27:02,200
+Is there an overarching reduction in inflammation on top of what it gets from detoxifying the poison that you just gave yourself maybe maybe not.
+
+390
+00:27:02,540 --> 00:27:09,500
+But no one's proven that no one's actually shown one way or the other that this actually has a beneficial effect past that.
+
+391
+00:27:09,500 --> 00:27:12,700
+You know, the thing with hormesis is that.
+
+392
+00:27:14,520 --> 00:27:25,720
+It's the definition of hormesis is this is something harmful and if it's too much, it's toxic and can hurt you or kill you and so you have to keep it below that level, right.
+
+393
+00:27:26,880 --> 00:27:37,940
+Chemical hormesis is a very different thing than like exercise from me says, you're stressing your body, you're exercising and this gives a benefit in the long term, but there are good reasons for that.
+
+394
+00:27:38,920 --> 00:27:51,720
+And with the chemical sort of the chemical issues are there really more the responses you get or like this this detoxifying effect like an anti inflammatory sort of effect, which is trying to.
+
+395
+00:27:52,360 --> 00:28:08,860
+Uninflame D inflame you from the things that you just did yourself, but also tolerance, right, so you could say that alcohol has a traumatic effect because it helps you build up a resistance and a tolerance to alcohol, but is that giving you an overarching benefit.
+
+396
+00:28:09,360 --> 00:28:13,560
+To other things as well, or that only helping you if you drink copious amounts of alcohol.
+
+397
+00:28:14,240 --> 00:28:30,180
+The argument that I've heard people say is like, yes, well, these plants have toxins, but you know, you want to keep a steady supply of these toxins in there so that you that you build up this this resistance to them so that if you meet them, you know, later on, that you're not going to get hit full force with this.
+
+398
+00:28:30,180 --> 00:28:41,820
+That's like saying you should do heroin every day, just in case you, you know, build up a tolerance to heroin just in case you get hit with heroin six months down the road and it, and it makes you, you know, crazy high and you can't control yourself.
+
+399
+00:28:42,280 --> 00:28:43,640
+That's a bad argument.
+
+400
+00:28:44,240 --> 00:28:49,660
+You have to know and we're, and we're, we're talking about a plant toxin being traumatic.
+
+401
+00:28:50,920 --> 00:28:53,180
+Hey, you have to prove it that it's traumatic.
+
+402
+00:28:53,900 --> 00:29:01,240
+You have to prove what dose of traumatic because we all agree that traumatic substances past a certain point are toxic and harmful.
+
+403
+00:29:01,240 --> 00:29:10,700
+So you need to be very clear and delineate what is the target range of hormesis. So what the, what the chemical is, what is traumatic.
+
+404
+00:29:11,420 --> 00:29:18,460
+What dose is it traumatic? And then because this is coming in a plant that has thousands of potentially toxic chemicals in it.
+
+405
+00:29:19,480 --> 00:29:24,780
+You have to understand, okay, is there, are you getting a net negative from these other toxic effects.
+
+406
+00:29:25,700 --> 00:29:36,340
+Even if this were traumatic and not only that, maybe you're saying, okay, well, maybe they're all hormetic, okay, so you have to then list out all the different toxins that are in the plant.
+
+407
+00:29:36,940 --> 00:29:39,080
+You have to find out if they're hormetic or not.
+
+408
+00:29:39,280 --> 00:29:41,660
+You have to find which doses are traumatic or not.
+
+409
+00:29:41,980 --> 00:29:49,040
+And then you have to see, okay, how many leaves of spinach can I have to get hormesis versus toxicity.
+
+410
+00:29:49,820 --> 00:30:00,800
+And okay, if I want more pieces from the oxalates and in the, in the spinach fine, what's how many leaves are hormetic and then at that same number of leaves.
+
+411
+00:30:02,000 --> 00:30:12,120
+Am I getting a hormetic effect from the other toxins in the spinach or are they too high or too low or whatever, so it's, it's sort of a throw away line.
+
+412
+00:30:12,360 --> 00:30:14,300
+It's one that's used a lot.
+
+413
+00:30:14,300 --> 00:30:22,320
+And it sounds good at first the same. Well, these, yes, there are toxins, but these are good toxins, these are toxins that are good for you and there's like, but not.
+
+414
+00:30:22,900 --> 00:30:26,360
+You know, your bodies not, these plants are not trying to help you out.
+
+415
+00:30:26,680 --> 00:30:41,220
+You know, digitalists was not formed in Fox Club millions of years ago, so that, you know, 70 million years later, these, you know, hairless apes that might develop heart disease because of their lifestyle.
+
+416
+00:30:41,740 --> 00:30:43,240
+Bad lifestyle choices.
+
+417
+00:30:44,460 --> 00:30:57,840
+You know, that they might help them with their, their, their heart disease, right? No, they, they created this so they could stop the hearts of, of the animals trying to eat them, sorry, am I, am I cat saying hi, will naked cat.
+
+418
+00:30:58,520 --> 00:31:09,660
+And, you know, so that's what they're doing this for, they're trying to kill you, you know, if you take, if you take maybe 50 micrograms too much digitalists, you're dead.
+
+419
+00:31:09,660 --> 00:31:20,620
+Right, so we can measure this in millions of a gram for therapeutic doses. That's the hormetic dose. So you could talk about hormesis in the sense of medicines.
+
+420
+00:31:21,460 --> 00:31:28,580
+But medicines are only beneficial during certain conditions. Like if you have heart failure, you're congestive heart failure, for example.
+
+421
+00:31:29,140 --> 00:31:38,620
+And you take, you know, 50, 100 micrograms, one of your doses of digitalists that can help increase the contractility of your heart.
+
+422
+00:31:38,620 --> 00:31:55,760
+So this is a poison that is trying to kill you and stop your heart. But at the same time, if you take this in micro doses in millions of a gram, it can actually help you under certain circumstances. So that could absolutely be an example of hormesis if you are sick.
+
+423
+00:31:56,040 --> 00:32:00,040
+If you're not sick, then it's not going to actually improve your health at all.
+
+424
+00:32:00,040 --> 00:32:11,140
+But you're talking about micro doses. And when you're talking about in a plant itself, again, that digitalist, you don't know the dose. You don't know exactly how much is in it. You don't know the conditions it was it was made in.
+
+425
+00:32:11,320 --> 00:32:15,540
+So you're not going to understand how much is in there. So you don't know if you're getting the hormetic dose or the toxic dose.
+
+426
+00:32:15,540 --> 00:32:28,460
+And it comes with hundreds potentially thousands of other chemicals, are they good or better, are they hormetic or they in the toxic levels. So the hormetic, the hormetic argument.
+
+427
+00:32:28,840 --> 00:32:40,500
+Basically, if someone wants to make that, they have to then show, okay, which chemicals are hermetic, what is the dose? How many grams of that vegetable? Can you have? What about the other chemicals?
+
+428
+00:32:40,500 --> 00:32:49,460
+Or are they hormetic at the same dosage? And you just eat that exact amount of spinach or lettuce or whatever, then you're going to get hormetic across the board.
+
+429
+00:32:49,780 --> 00:32:53,160
+Something like that's very unlikely. It's very unlikely you're going to get any of that.
+
+430
+00:32:53,460 --> 00:32:58,420
+But you know, people generally just say that and say, well, hormesis, and then they don't, and then they walk away from the discussion.
+
+431
+00:32:58,420 --> 00:33:06,540
+I think I'll look at me. I've proven this and sometimes a stressor is is more beneficial than harmful. It could just be harmful, right?
+
+432
+00:33:06,780 --> 00:33:17,360
+And so you have to be under strict conditions. And I know when I've ever spoken to who, even people that lecture on hormesis that ever been able to address that.
+
+433
+00:33:17,360 --> 00:33:28,820
+Okay, well, I mean, yeah, very well put. I'm of the, you know, I get to speak to bring people like yourself a lot on this podcast and, you know, I know you've interviewed Dr. Thomas E. Friedam.
+
+434
+00:33:28,820 --> 00:33:33,020
+He's putting it down like a steam and you're very plugged into the metabolic health world.
+
+435
+00:33:33,740 --> 00:33:43,720
+And through this, I come to believe that most diseases or most chronic diseases and metabolic in nature and that keto on door to that like optimal metabolic state.
+
+436
+00:33:43,720 --> 00:34:00,760
+It seems that carnival is well, but if you were to track the blood bit measuring glucose levels or ketones of someone in strict clinical keto, maybe for, you know, cancer reasons or whatever versus someone or a carnival diet, the blood, but look quite different.
+
+437
+00:34:00,760 --> 00:34:09,960
+But mechanistically, what do you think is going on with carnival and how does that lead to sort of better metabolic health all around for all these different point disease?
+
+438
+00:34:11,140 --> 00:34:13,420
+So, so what blood markers in particular.
+
+439
+00:34:21,180 --> 00:34:37,440
+So, I mean, I, I've tested thousands of people's blood work over the years, the thing thing to remember is is that a carnival diet is a ketogenic diet. It's a subset of a ketogenic diet. It's just a plant free ketogenic diet goes one step further.
+
+440
+00:34:37,440 --> 00:35:01,960
+You know, we understand in ketogenic and ketogenic nutrition, ketogenic metabolism, that there are certain things that cause harm metabolic harm, such as carbohydrates, sugar, alcohol, these sorts of things to range or hormones in such a way they raise our blood sugar, which is toxic to the body elevated blood sugar causes direct damage to the vasculature and our body damaging the blood vessels, damaging the blood supply to every organ tissue in the body, causing end organ damage.
+
+441
+00:35:01,960 --> 00:35:09,360
+It's a number one cause of kidney failure, number one cause of adult blindness, number one cause of heart failure, it's number one cause of amputations.
+
+442
+00:35:09,660 --> 00:35:20,160
+Right, because this is damaging the vasculature is damaging the blood supply. That's high glucose. And so in order to protect the body from that high glucose hyperglycemia, your body elevates your insulin.
+
+443
+00:35:20,260 --> 00:35:25,400
+And that would be all well and good if the only thing that insulin did was lower blood sugar, but it's not.
+
+444
+00:35:25,400 --> 00:35:29,140
+It actually is involved in hundreds of other processes in the body and the brain.
+
+445
+00:35:29,600 --> 00:35:39,380
+And when you elevate that artificially with, um, by elevating your glucose, your blood sugar, you're elevating that for all these different effects. And you're actually causing very serious metabolic harm.
+
+446
+00:35:40,020 --> 00:35:49,800
+So that is a major precondition to chronic disease is is all training our metabolic state or hormonal state. There's so many things. I mean, it's very interesting.
+
+447
+00:35:49,800 --> 00:35:57,380
+People look up the different effects that insulin has in the body's wild. There's hundreds and hundreds and hundreds of things. They're extremely important.
+
+448
+00:35:57,780 --> 00:36:07,480
+It lowers testosterone levels and net. It lowers estrogen levels and women. So bleeding calls a PCOS polycystical variance syndrome and women, which is the leading cause of impertility.
+
+449
+00:36:07,840 --> 00:36:16,700
+When that's insulin resistance, insulin blocks the conversion of testosterone and estrogen and women making them completely hormonally on balance and infertile.
+
+450
+00:36:16,700 --> 00:36:28,320
+It, um, when you have elevated insulin, it, it downregulates the insulin receptors on the light excels and the testicles, main is making men make less testosterone.
+
+451
+00:36:28,740 --> 00:36:38,720
+And then when you reverse that and you resensitize your, your lighting cells to insulin, all of a sudden with less insulin, you're creating more testosterone.
+
+452
+00:36:39,300 --> 00:36:48,180
+And the list goes on. I mean, it blocks the action and production of growth hormone, which is very, very important for obviously growth during puberty.
+
+453
+00:36:48,980 --> 00:36:58,320
+Since the agricultural revolution, people have shrunk on average about five inches, right, and that could possibly be to this, these hormonal actions from growth hormone.
+
+454
+00:36:58,320 --> 00:37:05,640
+We're suppressing the growth hormone during puberty and you're just not growing as tall, right, but you need growth hormone throughout your entire life.
+
+455
+00:37:06,320 --> 00:37:15,900
+So there are a lot of problems that that carbohydrates, hyper insulinemia and hyper, you know, hyperclicemia cause directly on the body.
+
+456
+00:37:16,220 --> 00:37:20,220
+So that's a big first step, carnivore diet addresses that so does a ketogenic diet.
+
+457
+00:37:21,620 --> 00:37:33,020
+You could eat a more lean protein diet and not being as deep ketosis as someone who's really aiming for crazy high ketones, but you are in that same metabolic state.
+
+458
+00:37:33,540 --> 00:37:37,820
+And that's the important thing is that your insulin is low and you're able to access your fat store.
+
+459
+00:37:37,900 --> 00:37:42,920
+We call it a ketogenic state. I think it's a bit in this name. It's really just a fat burning state. The burning carbs, you're burning fat.
+
+460
+00:37:42,920 --> 00:37:49,860
+So if your insulin is high, it blocks the body's ability to break down fat for energy.
+
+461
+00:37:50,840 --> 00:37:57,160
+And when the insulin goes down enough, now you can now you can access your fat stores, which is the main energy storage in your body.
+
+462
+00:37:57,200 --> 00:38:00,620
+A 65 kilo individual with only 6% body fat.
+
+463
+00:38:02,400 --> 00:38:11,040
+Maximum carb loading can only store about 2,400 kilo calories of energy in glycogen in his liver and muscles for his whole body.
+
+464
+00:38:11,040 --> 00:38:21,660
+But that same 65 kilo individual with only 6% body fat. That 6% body fat has over 35,000 kilo calories of energy.
+
+465
+00:38:21,800 --> 00:38:29,160
+So that's actually the main storage form. When you're in that fat burning metabolism, you have access to that, which is a lot better when you're in athlete as well.
+
+466
+00:38:29,240 --> 00:38:35,940
+Because you don't have to keep sucking down gels and sugar packets. You just constantly are in tap tap into your energy levels.
+
+467
+00:38:35,940 --> 00:38:41,020
+And you completely regenerate your glycogen as well. That's been shown in human trials and elite athletes.
+
+468
+00:38:43,560 --> 00:38:52,100
+So a carnivore diet is just taking one step further. You're in touch with your fat cells, your insulin's low. That's the main thing.
+
+469
+00:38:52,220 --> 00:38:56,300
+It doesn't really matter how high your ketones are because long term ketosis.
+
+470
+00:38:56,960 --> 00:39:10,520
+You get more keto adapted and your ketones go down anyway. You have the in you who are eating extremely high fat diet. I think that 50% by weight of their diet can be fat, which is 90% plus calories from fat.
+
+471
+00:39:11,820 --> 00:39:26,260
+And their ketones can be 0.3.4, right?
+
+472
+00:39:26,260 --> 00:39:30,600
+Matters that you can tap into your fat stores. That's why I think is a bit myth name.
+
+473
+00:39:30,820 --> 00:39:32,320
+But it's sorry.
+
+474
+00:39:33,200 --> 00:39:38,780
+I was just saying for me personally, that's where I've always thought, well, because I read it really well to just stay connected.
+
+475
+00:39:39,360 --> 00:39:42,380
+And I feel, I've let it really great. I feel awesome.
+
+476
+00:39:43,600 --> 00:39:48,480
+I do notice that sometimes my SHGB goes quite high if I don't eat enough cap.
+
+477
+00:39:48,760 --> 00:39:55,700
+So that's one question few is, the people who say, oh, if you go pure carnivore, your SHGB goes through the roof.
+
+478
+00:39:55,700 --> 00:40:02,700
+Mind understanding, it's just a calorie deficit problem as opposed to a diet itself.
+
+479
+00:40:03,680 --> 00:40:14,100
+And then, secondly, I loved to understand, because like you, you've played rugby and the nutritionists, you know, I feel like garbage if I eat, you know, load of carbs and like for rugby game.
+
+480
+00:40:14,580 --> 00:40:19,800
+But if I actually stay a ketosis at the time, I didn't know about carnival then. I feel way better.
+
+481
+00:40:19,800 --> 00:40:30,380
+So from a point of view, what would you say to the athlete on listening to this being like, well, no, I've got a carb load for all my different things.
+
+482
+00:40:30,520 --> 00:40:34,900
+I mean, if we start with the end, you think, go back into the Atlantic stuff.
+
+483
+00:40:35,560 --> 00:40:40,220
+Yeah, so I'm sorry, I missed that last last thing, just so much.
+
+484
+00:40:40,360 --> 00:40:49,540
+Yeah, so if you just address like the hormonal impacts of going out of all maybe like fluctuating and then go and just, you know, how this has,
+
+485
+00:40:49,540 --> 00:40:58,460
+the effect of performance being in that. So the thing is, I have actually not seen because I tell people eat fatty meat until it stops tasting good.
+
+486
+00:40:58,540 --> 00:41:03,160
+I'm not telling people to go into a core deficit or not telling people to under eat, nor to lose weight.
+
+487
+00:41:03,380 --> 00:41:18,400
+Weight loss is better achieved by eating optimally and normalizing your hormones and keeping your insulin blood sugar and leptin and check and getting, you know, keeping track of your own hormonal metabolic state.
+
+488
+00:41:18,400 --> 00:41:22,440
+And then the weight just flies off and especially be exercising.
+
+489
+00:41:23,360 --> 00:41:30,620
+So I have patients that have double even triple their testosterone levels. I've had professional athletes that have been patients of mine who have doubled their testosterone levels.
+
+490
+00:41:31,040 --> 00:41:42,600
+And so whatever you want to say about the advantages or disadvantages are being ketosis, you cannot tell me that it's a disadvantage to double your testosterone as a competitive male athlete or even female athlete.
+
+491
+00:41:42,600 --> 00:41:47,980
+But, you know, it doesn't turn women into men. It just optimizes everybody. That's the main thing.
+
+492
+00:41:48,540 --> 00:41:57,900
+And so I have never, I've, I've heard the, the accusation that without carbohydrates being ketogenic, your SHBG will go up.
+
+493
+00:41:58,000 --> 00:42:06,400
+I have never seen it happen in practice. My SHBG has been 34 for the last seven years. I've checked my level. It just has never changed.
+
+494
+00:42:06,400 --> 00:42:18,660
+And so I at 45 years old, I maintain without TRT or anything like that. I maintain healthy testosterone levels of a 25 year old.
+
+495
+00:42:19,020 --> 00:42:35,200
+And that's what I see in my patients. I 50 year old, six year olds, 70 year old patients who when they go on to a ketogenic carnivore diet, they have this massive swing in their testosterone and hormones in general and health in general up to that healthy 25 year old level.
+
+496
+00:42:35,200 --> 00:42:40,260
+There's a number of reasons for that. One testosterone is made from cholesterol. Now we're normalizing cholesterol.
+
+497
+00:42:40,460 --> 00:42:49,240
+We're not trying to beat it out of your body system. When you go into ketosis, you're going to fat burning metabolism. You have to transport fat to your liver and how do you do that.
+
+498
+00:42:49,280 --> 00:42:55,160
+You do that in carrier molecules called LDL and HDL and they go up. And so if you, oh my god, you're going to die because of all this cholesterol.
+
+499
+00:42:55,160 --> 00:43:03,640
+No, that's natural. It's a metabolic state change. If you just fast for five days, you're ACL and LDL go up as well because you're running on fat. You need to transport the fat. It's pretty simple.
+
+500
+00:43:04,360 --> 00:43:07,000
+And because now you have more cholesterol, you're not eating these plants.
+
+501
+00:43:12,240 --> 00:43:20,700
+You're not having these plant sterols that are plants version of cholesterol that suppress your own production of cholesterol.
+
+502
+00:43:24,560 --> 00:43:32,180
+Now you're actually making a normal amount. Your body's making the amount of cholesterol that it wants. Now you have more substrate to make testosterone with.
+
+503
+00:43:32,380 --> 00:43:38,800
+You're also not eating plants that have phytoestrogens and hormonal disruptors that will block your testosterone.
+
+504
+00:43:38,800 --> 00:43:47,380
+We'll boost your estrogen. Soy has more phytoestrogens than the birth control pill. I just have seven or eight times as much estrogen as the birth control pill.
+
+505
+00:43:49,220 --> 00:44:00,000
+And things like, what was it, flax seed, flax seed, three ounces of flax seed has actually more estrogen than a fertile woman makes in a day.
+
+506
+00:44:00,000 --> 00:44:06,980
+Right. So it's the last thing you want to, if you want to correct your hormones for a man or woman's going to really mess you up.
+
+507
+00:44:07,460 --> 00:44:17,020
+Another thing is you're going to get more bioavailable nutrients like zinc zinc is required for testosterone production. Again, your insulin resistance is going to correct on a ketogenic carnivore diet.
+
+508
+00:44:17,020 --> 00:44:26,620
+And so your your lighting cells are going to be more sensitive to your insulin. You're going to have a higher signal to boost testosterone production as well.
+
+509
+00:44:26,620 --> 00:44:41,160
+So all these different things and there's more play into increased testosterone production. I see this across the board. I'd say probably good 90% of my patients male patients will have a massive increase in their testosterone levels.
+
+510
+00:44:42,600 --> 00:44:55,320
+I, I really almost never see the SHBG go up. You know, a couple times I've seen it where people is their total testosterone will go up jump up into that 25 year old range.
+
+511
+00:44:55,780 --> 00:45:01,920
+But then their SHBG will sort of come up with it and their free testosterone will say about the same so they don't go down.
+
+512
+00:45:01,920 --> 00:45:10,060
+But then as their bodies getting more metabolically sound and you know, it's is be sort of the same thing as someone injects testosterone.
+
+513
+00:45:11,000 --> 00:45:25,520
+And you have this big massive jump up and testosterone suddenly that can elicit a rise in your SHBG as well. So people that inject testosterone actually find that after a few months their SHBG starts climbing up and they have to inject more and more and more to get the same results.
+
+514
+00:45:25,520 --> 00:45:30,420
+Right, so there could be something like that that your body, all of a sudden just making so much more testosterone, your body is as well.
+
+515
+00:45:30,820 --> 00:45:38,760
+I can't hold the hell with that and has this sort of the same response. And then I see as they become more metabolic, they healthy more hormonally healthy.
+
+516
+00:45:39,020 --> 00:45:46,380
+The SHBG starts coming down, their total testosterone stays up and their free testosterone starts coming up as well. So that's what I typically see.
+
+517
+00:45:46,380 --> 00:45:57,360
+I did a whole talk on ketogenic carnivore athletes at a medical conference and that's available on YouTube by that name and people can go into the whole whole science behind it.
+
+518
+00:45:57,360 --> 00:46:06,340
+I mean, even just being able to access 35,000 kcal of energy in 6% body fat, that's already a massive, a massive improvement.
+
+519
+00:46:06,940 --> 00:46:22,240
+There've been multiple high level studies in humans in top elite athletes showing that being in ketosis actually allows people to have better performance.
+
+520
+00:46:24,060 --> 00:46:30,880
+So it, it's, that has to take a caveat with that. So that's when you get properly fat adapted.
+
+521
+00:46:31,020 --> 00:46:37,040
+So there's that idea of keto adaptation where your body gets turns on different genes so that you utilize ketones for energy better.
+
+522
+00:46:37,980 --> 00:46:44,360
+That can take months, but it takes at least a couple of weeks to start being able to use those ketones properly.
+
+523
+00:46:44,360 --> 00:47:07,140
+So there's, there's studies by a professor Tim Nopes that are crossover trials randomized crossover trials in recreational athletes that they put them in a keel group randomly selected me into a keel group or a carb group and let them adapt for six weeks and they had these athletic performances.
+
+524
+00:47:07,140 --> 00:47:19,600
+They ran a series of 800 meter runs and people say, well, they just have this built up muscle glycogen left over, you know, that's, that's nothing clever to say, okay, let's just keep running these until basically there's no way they'd ever had to have any glycogen left.
+
+525
+00:47:19,720 --> 00:47:29,460
+They just did 800 effort 800 effort 800 effort 800 effort 800 effort 800 effort 800 effort 800 the carb athletes had to keep sucking down sugar gels and gatorades and things like that to maintain their energy and performance.
+
+526
+00:47:29,460 --> 00:47:41,180
+The keto athletes just cruise the whole time. Then they had a two week washout period and then they swapped the group. So it was a crossover trials that keto group became carb group, carb group became keto group given six weeks again.
+
+527
+00:47:41,680 --> 00:47:49,380
+And ran the test and again, no drop in performance whatsoever the keto group just ran they didn't have to drink gatorades or anything like that. So that's it six weeks.
+
+528
+00:47:49,380 --> 00:48:03,360
+Then you had McSweeney who did a study was at 2017 2018 2018 I think and he took elite level world class level ultramarathon runners and iron man athletes.
+
+529
+00:48:04,080 --> 00:48:11,280
+They self selected into keto group or a carb group and and then they got keto adapted for three months they had this for three months.
+
+530
+00:48:11,280 --> 00:48:21,220
+And so then they had three tests they had a hundred mile run that is six second sprint and then a critical power test like a power lifting test right.
+
+531
+00:48:22,080 --> 00:48:32,840
+So all the different ways you can athletically move your body so explosive anaerobic power sprinting and then long distance you know endurance running okay.
+
+532
+00:48:33,420 --> 00:48:38,380
+And they found that the ketogenic group outperform the carb group in all three fields.
+
+533
+00:48:39,080 --> 00:48:46,740
+And the sprint and the critical power test came to statistical significance so you can really only say the hundred mile they beat all the guys on the hundred mile run.
+
+534
+00:48:47,200 --> 00:48:52,020
+But you can only really say that that was a trend that didn't reach statistical significance so.
+
+535
+00:48:52,020 --> 00:49:05,600
+Yeah, may have been a fluke who knows but they did beat them the other two came to statistical significance so when people say well yeah this works for endurance athletes but it would never work for rugby well no sorry the sprinting and power lifting that's actually came to statistical significant.
+
+536
+00:49:05,600 --> 00:49:14,620
+And as a well I don't see anybody in the tour to France doing keto well actually is Chris Froome who's like a three time three three four time winner of the tour to France he does keto.
+
+537
+00:49:14,940 --> 00:49:15,180
+Right.
+
+538
+00:49:15,940 --> 00:49:22,500
+Yeah, yeah, he does get his ton of them ton of people that they do this some of the top higher man that place ultra marathoners.
+
+539
+00:49:22,860 --> 00:49:33,380
+They do they do kids generally do even full carnivore right rugby teams half the New Zealand all blacks have been carnivore for like eight years nine years.
+
+540
+00:49:33,800 --> 00:49:38,040
+I spoke a new a couple of all like they've reached out to me on on social media.
+
+541
+00:49:38,780 --> 00:49:49,120
+And you'll comment on one of my videos and say hey keep up the good work I really like it and I was like okay that's really cool hey I heard that a lot of you guys you know like the Frank brothers we're only all blacks.
+
+542
+00:49:49,960 --> 00:49:55,800
+They've been you know keto at least keto if not carnivore for years.
+
+543
+00:49:55,800 --> 00:50:05,460
+You know one of them have just got resigned at 38 to three year deal with the crusaders right so these guys are still playing world class level rugby at nearly 40.
+
+544
+00:50:06,420 --> 00:50:13,800
+And that's I think that's largely to do with being ketogenic you get a lot of along jabby you get a lot of reduced information.
+
+545
+00:50:14,700 --> 00:50:25,980
+You know even arthritis one of you arthritis for seeing damage and cartilage when we take these samples out of the joint we're actually seeing glycation damage that damage from the glucose and the sugar damaging the cartilage and breaking it down.
+
+546
+00:50:26,540 --> 00:50:30,700
+And so you're not going to get as much joint break down and degradation.
+
+547
+00:50:31,440 --> 00:50:36,860
+When you're in a state of ketosis long term you're not going to break down your joints you're just going to last longer you're going to be an athlete longer.
+
+548
+00:50:37,660 --> 00:50:49,700
+And and so yeah so a lot of the old blacks are a lot of the Australian rugby teams are joining this now quite coopers openly carnivore sunny bill Williams is open the carnivore.
+
+549
+00:50:50,180 --> 00:50:52,000
+There are.
+
+550
+00:50:52,000 --> 00:51:03,160
+The entire rugby teams like the pendant panthers were the top rugby league team and you'll probably since the origins of the league here in Australia they won like four or five grand finals in a row.
+
+551
+00:51:04,140 --> 00:51:11,980
+And they came out after they won last year and publicly said yeah we're all doing this animal based carnivore diet right we just feel like superheroes.
+
+552
+00:51:12,560 --> 00:51:31,120
+I have a friend of mine just sports medicine physician who is is very fond of the ketogenic carnivore diet for his athletes and he's he's worked with entire rugby teams and converted the whole team over and one of them was at the bottom of the league they're actually thought that they were going to get relegated and they had no significant personnel changes.
+
+553
+00:51:31,120 --> 00:51:41,860
+He got them on to ketogenic or even full carnivore and all of a sudden they're in the playoffs right so they went from almost being relegated to going in the playoffs and no significant.
+
+554
+00:51:42,580 --> 00:51:48,640
+You know personal changes and things like that they they were beating teams at on paper ever thought these guys are going to get smoked.
+
+555
+00:51:49,240 --> 00:51:49,800
+You know.
+
+556
+00:51:50,440 --> 00:51:58,920
+So there's quite a lot of of of traction on this the key the iron man runners and ultramarathon runner they figured this out a long time ago and they've been doing this more and more.
+
+557
+00:51:59,520 --> 00:52:06,560
+So I think that is there's a lot of benefits from being in ketosis from a performance point of view.
+
+558
+00:52:06,560 --> 00:52:19,160
+But also from a longevity point of view because you're not going to eat all these plants and I have the gut issues all these sort of sort of issues not eating sugar all the time not getting prediabetic a lot of these athletes you stop at these if they studies.
+
+559
+00:52:19,620 --> 00:52:26,480
+Who's better the keto group of the car group the keto group almost invariably has like has a pre diabetes or even diabetes.
+
+560
+00:52:27,300 --> 00:52:29,980
+You know that's not that's not going to keep you in the game all that long.
+
+561
+00:52:29,980 --> 00:52:35,280
+There's another study by a vol like in thinning the faster trial in 2016.
+
+562
+00:52:36,040 --> 00:52:49,800
+And you know they say that for high level for high level athletic performance you have to eat carbohydrates because above you know zone two cardio 55% of the O2 max you just start burning carbs and that's true if you're in a carbohydrate metabolism.
+
+563
+00:52:50,440 --> 00:52:54,220
+And you cannot access your fat stores to oxidize fat.
+
+564
+00:52:54,220 --> 00:53:04,700
+But if you're in a state of ketosis even just immediately they did this in the supernova trial and they basically said hey look these guys aren't are burning a lot of fat over 92% VO2 max.
+
+565
+00:53:05,300 --> 00:53:09,480
+But you know their performance has gone down, but that's because they tested them in the first week or two.
+
+566
+00:53:09,620 --> 00:53:17,820
+They didn't give them a chance to adapt right but when you give them weeks to adapt all of a sudden there's no drop given three months to adapt there's a there's an improved performance.
+
+567
+00:53:17,820 --> 00:53:28,780
+So when you're in ketosis this is multiple studies have shown this vol like show this as well in 2016 the faster study that when you're in a state of ketosis.
+
+568
+00:53:29,560 --> 00:53:37,660
+These guys were in state ketosis for a month they were the ultimate marathon runners iron man runners they've been doing this for years some of these people average 22 months.
+
+569
+00:53:38,660 --> 00:53:44,420
+And they found that they were burning fat at over 90% VO2 max.
+
+570
+00:53:44,420 --> 00:53:49,040
+And only then were they using some of their glycogen and blood sugar which they were replenishing immediately.
+
+571
+00:53:49,780 --> 00:53:57,600
+And they found they did muscle biopsies they just three hour run and they did muscle biopsie before after and then three hours after the run after the recovery.
+
+572
+00:53:57,840 --> 00:54:07,360
+And they found that the ketogenic group had an ketogenic in carb group had the exact same muscle glycogen at all three stages before after and then three hours after recovery.
+
+573
+00:54:07,360 --> 00:54:16,680
+Even though the carb group was carb loading and then drinking gels and sugar during the three hour run.
+
+574
+00:54:17,380 --> 00:54:26,860
+And then drinking a whole bunch of sugar and eating carbs after their recovery they still had they still did not replenish their glycogen any faster than the ketogenic group.
+
+575
+00:54:27,340 --> 00:54:34,620
+So anyway you slice it from an energy perspective carbs are absolutely not the answer and if you if you're adapted long enough.
+
+576
+00:54:35,100 --> 00:54:40,220
+You're going to start out performing yourself and and your other competition.
+
+577
+00:54:41,040 --> 00:54:51,800
+Okay, so I'm going to give us a go. I mean I'm long explored keto and I've done next for a number of years and things like this but I've heard you say that you actually have to be quite.
+
+578
+00:54:51,900 --> 00:55:03,880
+You know the premise is quite strict so so where well the boundaries of like how you would start with the patient doing this you know is do fast with it what types of meats are best are eggs allow things like this.
+
+579
+00:55:03,880 --> 00:55:13,960
+Well you know it depends if you're just if you're if you don't have any sort of serious health issues like auto immunity and things like that you have a bit more you know a bit more.
+
+580
+00:55:14,840 --> 00:55:15,560
+Anyway, right.
+
+581
+00:55:16,660 --> 00:55:25,260
+Some of the auto moon issues they really have to stick to just red meat and water if they want best results the even eggs can can trigger auto immunity especially if it's.
+
+582
+00:55:25,320 --> 00:55:32,360
+Being fed corn and soy and things like that because some of those lectins and toxins will actually get into the egg or get into the chicken and the meat and of the pork even.
+
+583
+00:55:32,820 --> 00:55:39,960
+So you want that room in it meat that will that's the best is a room in it meat that or just wild meat that's pasture raise eating what it's supposed to eat.
+
+584
+00:55:39,960 --> 00:55:50,980
+But barring that you want the room in it meat the the cows in the chicken or the cows in the lambs goats benefits and things like that that have that four barrel stomach.
+
+585
+00:55:51,820 --> 00:56:02,520
+That can ferment and break down all these toxins even if food that they're not designed to eat so they can just break down they can be a better filter for these toxins and get more nutrients and nutrition out.
+
+586
+00:56:02,520 --> 00:56:08,940
+So those are the best if you're just if you're not in that category where you're very very sensitive to these sorts of things.
+
+587
+00:56:08,960 --> 00:56:16,760
+Then just eat any meat that you enjoy that makes you feel the best and that you have access to and kind of forward and so and if you like eggs that makes you feel good.
+
+588
+00:56:16,780 --> 00:56:21,020
+I mean try to get past your raised eggs that they are more nutritious but.
+
+589
+00:56:21,400 --> 00:56:31,920
+You know eggs are fine eggs are totally fine eggs are great I mean it's it's honorary meat because it's just has all the the precursors to turn into an animal right so it has all the things that you need to be.
+
+590
+00:56:31,920 --> 00:56:33,320
+animal to grow and build an animal.
+
+591
+00:56:34,680 --> 00:56:44,340
+And so you just eat fatty meat until it stops tasting good you do that as many times the days your body's telling you if you're training a lot and you're working out a lot especially if you're trying to put on muscle or not lose weight.
+
+592
+00:56:44,600 --> 00:56:50,820
+Then you want to you're probably going to need to eat about twice a day to get enough nutrition so that you you can satisfy your workload.
+
+593
+00:56:51,960 --> 00:56:58,060
+And you want to get one to two grams of fat to one gram of protein so very high fat diet moderate protein.
+
+594
+00:56:59,020 --> 00:57:07,760
+Your body has a limiting capacity to absorb that and that's determined by your bile you'll ever make a pile but it only makes a certain amount slow to produce.
+
+595
+00:57:08,440 --> 00:57:15,460
+And so if then you store that in your go all that and you concentrate that down so that you can have a big dose of it in one go when you eat you fatty meal.
+
+596
+00:57:16,800 --> 00:57:26,280
+Once you run out of the bile you it's really hard for your body to digest and absorb fat it's very difficult you only do about 10% of this something it's usually like medium chain triglycerides.
+
+597
+00:57:26,680 --> 00:57:36,240
+The rest of it is going to go out it's just not going to be able to be absorbed and so it goes out in your stool is that's what keeps your stool soft that excess fat to your body can absorb so if you're getting hard dry stools.
+
+598
+00:57:36,860 --> 00:57:39,060
+By definition you're not eating enough fat.
+
+599
+00:57:39,420 --> 00:57:48,280
+If you're getting loose stools you could be eating too much fat now there's other things that can cause loose stools coffee tea artificial sweeteners usually in the coffee or tea.
+
+600
+00:57:48,280 --> 00:58:05,280
+Now even magnesium supplements or medications like metformin for example all of those can have a mild active effect and when you get rid of fiber even if coffee never gave you the runs before and now you get rid of fiber which actually causes obstructions it causes slowing of the motility in your gut doesn't speed things up.
+
+601
+00:58:05,280 --> 00:58:13,900
+Slow things down and so that coffee is probably offsetting that so you're going regularly fine now you've gotten rid of that blockage and now it's too much okay.
+
+602
+00:58:14,560 --> 00:58:27,760
+So if you're only eating meat and only drinking water then you can gauge how much fat you're getting by your stools and so if you're getting soft stools even if it's once or twice a week because you absorb 98 99% of the meat that you're eating.
+
+603
+00:58:28,200 --> 00:58:35,460
+And so you just aren't going to have all that much waste as long as it's soft then you're getting the right amount of fat.
+
+604
+00:58:35,920 --> 00:58:47,340
+If you adding coffee and you have loose stools what the loose stools are probably from a coffee may not be from the fast you can actually hide under eating fat if you're drinking coffee or tea or some of these other sorts of things that can cause loose stools.
+
+605
+00:58:47,340 --> 00:59:06,740
+So you want to try to have a clean slate to sort of see how much that you're getting but if you're ever getting dry stools then by definition you're not eating enough that it's hard to pass that sort of thing rocky hard stools yeah have to eat more fat even if you're eating 10 times more fat than you ever thought was healthy if you need more if you're getting dry stools you need more.
+
+606
+00:59:06,740 --> 00:59:10,740
+You know so I with my patients if they.
+
+607
+00:59:11,980 --> 00:59:21,920
+If they want to sort of ease into it I always start them out okay just get rid of junk food obviously whole foods focus on meat nags that you eat as much meat nags as you want get rid of the carbs.
+
+608
+00:59:22,320 --> 00:59:27,920
+You know go ketogenic start that off right now if you want some vegetables just you know try to have.
+
+609
+00:59:28,640 --> 00:59:37,460
+You're cooked cooked cooked you know and cooked in ways that we traditionally would make these things don't have a much of raw veggies that will have all their toxins available right.
+
+610
+00:59:38,100 --> 00:59:49,300
+And mix them up don't don't have the same ones every single day because you have this toxins build up and so you'd have all the meat nags that you want and then two fifth size servings of non-starchy vegetables.
+
+611
+00:59:50,420 --> 01:00:07,120
+For the whole day right but then you want to phase those out and if people are able to just just cut everything out it's sort of easier to do that because you don't have to think okay well what veggies can I have and how much carbs they have and what about this just eating meat reading eggs and.
+
+612
+01:00:07,420 --> 01:00:12,800
+There's nothing else you know it's an easiest way of eating in the world you know exactly what you can eat you know exactly what you can't eat.
+
+613
+01:00:12,800 --> 01:00:17,880
+Yeah there's no there's no gray area there's no question about it just you eat meat you eat eggs and that's it.
+
+614
+01:00:18,420 --> 01:00:28,080
+You did any time of the day or night you don't have to like not eat before bedtime because you're worried about an insulin spike that will suppress growth hormone and melatonin.
+
+615
+01:00:28,380 --> 01:00:35,220
+Right because you're not getting an insulin spike you get a mild insulin bump with your protein but not much.
+
+616
+01:00:35,900 --> 01:00:49,340
+You eat as much as you want and as that's literally the case as much as you want as much as your body's telling you not as much as you I want to eat this whole buffalo okay we may want that but your body doesn't want that you eat until your body tells you to stop.
+
+617
+01:00:50,060 --> 01:00:53,220
+So if you're eating meat and it tastes good your body still wants it you have.
+
+618
+01:00:53,960 --> 01:00:59,360
+Chemical receptors in your stomach that actually track up your vagus nerve to your brain and your brain can actually track.
+
+619
+01:01:00,040 --> 01:01:04,200
+The macro micronutrients that are sitting in your stomach your your body tracks.
+
+620
+01:01:04,780 --> 01:01:08,120
+Nutrients not calories and so.
+
+621
+01:01:08,540 --> 01:01:17,720
+Your brain can actually see the nutrients that are in your stomach and so it says okay we need more of this we need more of this meat still tasting good meat still tasting great.
+
+622
+01:01:17,720 --> 01:01:25,620
+And then all of a sudden you're by saying actually we've got a pretty good amount of this we can slow this down all of a sudden it doesn't taste is good so first by is going to taste amazing.
+
+623
+01:01:26,620 --> 01:01:32,880
+And then next by is going to taste amazing amazing good good okay all right and you're going to get to a point we're just sort of taste like cardboard.
+
+624
+01:01:33,960 --> 01:01:38,040
+Even though it's the same piece of meat cooked at the same time the same conditions it's still warm.
+
+625
+01:01:39,080 --> 01:01:50,100
+And so why is that tasting different why it tastes like the best thing in the world with the first bite analysis kind of this because your body knows what the nutrients are in there and they're saying that's it and that's how.
+
+626
+01:01:50,140 --> 01:01:59,040
+In nature animals regulate how much they don't have a dietitian or a calculator to figure out their macros and and how many calories they're getting in.
+
+627
+01:01:59,040 --> 01:02:11,420
+Interesting to call it with a lot of calculated figure out its calories for the day they just eat and there's something in them that tells them when to stop and that for us is taste is probably for them to.
+
+628
+01:02:11,760 --> 01:02:23,340
+But so you eat until it stops tasting good and you do that as many times during the day as your body wants to do finish a whole big plate even if it's more than you think you should ever you ever even one time and it tasted good.
+
+629
+01:02:23,340 --> 01:02:30,440
+And that last bite you need to go make some more especially if you're working out because you need that you may need more nutrition.
+
+630
+01:02:31,760 --> 01:02:38,420
+So okay when it comes to what you're cooking you'll be in I mean my team all of oils out coconut oils out.
+
+631
+01:02:38,420 --> 01:02:39,660
+There it is.
+
+632
+01:02:39,660 --> 01:02:40,360
+Things like that.
+
+633
+01:02:40,680 --> 01:02:40,800
+Gee.
+
+634
+01:02:41,000 --> 01:02:41,780
+It's good.
+
+635
+01:02:42,100 --> 01:02:42,580
+Gee is better.
+
+636
+01:02:42,920 --> 01:02:44,060
+Gee has a higher smoke point.
+
+637
+01:02:44,780 --> 01:02:46,760
+And then a grass fed talo.
+
+638
+01:02:46,780 --> 01:02:47,940
+Grass fed geese great.
+
+639
+01:02:47,940 --> 01:02:50,440
+Grass fed talo is great.
+
+640
+01:02:51,160 --> 01:02:52,720
+Duck fat goose fat.
+
+641
+01:02:52,840 --> 01:02:54,840
+Lard animal fats.
+
+642
+01:02:55,900 --> 01:02:57,900
+Especially things that are that are solid at room temperature.
+
+643
+01:02:59,180 --> 01:03:01,060
+But it's going to have a lower smoke point.
+
+644
+01:03:01,500 --> 01:03:07,300
+So in the unless you're cooking sort of a low low temperatures sort of like eggs or something like that or sauteing something.
+
+645
+01:03:07,900 --> 01:03:08,340
+Lightly.
+
+646
+01:03:08,940 --> 01:03:11,060
+Then then you probably want to use something besides butter.
+
+647
+01:03:11,660 --> 01:03:14,460
+Even you know coconut oil has a higher smoke point too.
+
+648
+01:03:14,560 --> 01:03:15,520
+It's solid at room temperature.
+
+649
+01:03:15,680 --> 01:03:21,260
+It's not going to oxidize as like the olive oils or canola oils are which is not good.
+
+650
+01:03:21,620 --> 01:03:22,580
+If people were wondering.
+
+651
+01:03:24,480 --> 01:03:27,920
+But the problem with coconut oils it's it's a it's a plant oil.
+
+652
+01:03:28,020 --> 01:03:29,500
+It's just going to have the plant sterile.
+
+653
+01:03:29,640 --> 01:03:35,240
+It's a plant cholesterol and and and that's going to interrupt your normal cholesterol cycles in your body as well.
+
+654
+01:03:35,240 --> 01:03:40,400
+And and so for that and you know a few other reasons I don't I don't use those.
+
+655
+01:03:40,700 --> 01:03:41,680
+She want to use animal fats.
+
+656
+01:03:43,280 --> 01:03:47,440
+And typically the best to cook with would be things like ghee and talo.
+
+657
+01:03:48,520 --> 01:03:49,380
+Also that's super clear.
+
+658
+01:03:49,540 --> 01:03:50,860
+Well, I'm going to give you a go.
+
+659
+01:03:51,200 --> 01:03:51,640
+I'm sold.
+
+660
+01:03:52,760 --> 01:03:53,860
+Thank you so much for spending the time.
+
+661
+01:03:54,000 --> 01:03:56,460
+And I appreciate it's late in Perth has beat you all day.
+
+662
+01:03:56,760 --> 01:03:58,580
+So many questions and things.
+
+663
+01:03:59,000 --> 01:04:02,360
+But I do know you have a pretty extensive YouTube channel which I'm pretty sure.
+
+664
+01:04:02,360 --> 01:04:07,060
+People who you know have questions can go and find the answers there including myself.
+
+665
+01:04:08,260 --> 01:04:12,460
+The last one from me is anyone who wants to dive deeper into this obviously got your YouTube channel.
+
+666
+01:04:12,980 --> 01:04:17,660
+You mentioned the talk you did about athletic performance which will put on the.
+
+667
+01:04:17,660 --> 01:04:18,620
+In the show notes.
+
+668
+01:04:18,960 --> 01:04:23,240
+I'll just recommend or point people towards your Q and A you did with the.
+
+669
+01:04:23,400 --> 01:04:26,820
+Dr. Dagestino and Angela pop I think it was on the.
+
+670
+01:04:26,820 --> 01:04:29,180
+In the shoot platform which is great.
+
+671
+01:04:29,900 --> 01:04:30,740
+Any other books.
+
+672
+01:04:31,000 --> 01:04:34,880
+Any other resources that people can you know really want to dive deep web.
+
+673
+01:04:35,100 --> 01:04:36,420
+Where can they go.
+
+674
+01:04:37,080 --> 01:04:38,200
+Yeah, well, I have a website.
+
+675
+01:04:38,400 --> 01:04:39,140
+It's just.
+
+676
+01:04:39,300 --> 01:04:42,480
+Dr. Anthony Chafi.com and I have a lot of resources on there.
+
+677
+01:04:42,560 --> 01:04:47,280
+I have a lot of links for papers and studies and links other videos and things.
+
+678
+01:04:47,560 --> 01:04:48,360
+So look up cholesterol.
+
+679
+01:04:48,500 --> 01:04:53,020
+It's going to have a whole bunch of studies and videos and links and things like that as well.
+
+680
+01:04:53,580 --> 01:04:56,080
+So you can sort of jump into that as well.
+
+681
+01:04:56,080 --> 01:04:58,660
+And I will give a lot of resources as well.
+
+682
+01:04:58,960 --> 01:05:03,560
+You know, if you want to sort of look at these things, I mean, you can you can go back and start reading the books from.
+
+683
+01:05:03,560 --> 01:05:07,880
+Major researchers major clinicians who have figured this out.
+
+684
+01:05:08,240 --> 01:05:11,300
+150 years before any of us did.
+
+685
+01:05:11,560 --> 01:05:17,980
+Dr. J. Saul's very wrote a book called the relation of alien meditation and disease back in the 1800s after you did a 30 year research project.
+
+686
+01:05:17,980 --> 01:05:22,320
+On the optimal nutrition for human beings, just living with the Native Americans or just eating.
+
+687
+01:05:22,480 --> 01:05:25,500
+You know, meet from the bison things like that year around.
+
+688
+01:05:25,740 --> 01:05:26,400
+They were extremely healthy.
+
+689
+01:05:26,540 --> 01:05:29,320
+You'll live me 110, 115, 120 years.
+
+690
+01:05:29,660 --> 01:05:30,460
+Which sounds far fresh.
+
+691
+01:05:30,560 --> 01:05:35,240
+But actually was taught in genetics 20 years ago that genetically we are designed to live 120 years.
+
+692
+01:05:35,520 --> 01:05:39,320
+So that's exactly how long we should be living just naturally.
+
+693
+01:05:40,000 --> 01:05:44,240
+But yet we're dying 40, 50 years earlier and we're calling that a normal life span.
+
+694
+01:05:44,400 --> 01:05:44,940
+It's not.
+
+695
+01:05:44,940 --> 01:05:48,120
+We're actually being poisoned by something. We're actually being held back.
+
+696
+01:05:48,580 --> 01:05:53,340
+And you don't die 50 years early unless you were sick for 30, 40 years leading up to it, right?
+
+697
+01:05:53,340 --> 01:05:55,260
+And that's typical what we're seeing now.
+
+698
+01:05:55,500 --> 01:05:57,060
+There were more books since then.
+
+699
+01:05:57,920 --> 01:05:59,900
+There's Dr. Weston A. Price.
+
+700
+01:06:00,040 --> 01:06:04,700
+There's a dentist who noticed in the early 1900s that people in pre-agricultural communities.
+
+701
+01:06:05,100 --> 01:06:09,180
+When they were producing to more Western diet that their face weren't developing properly.
+
+702
+01:06:09,380 --> 01:06:10,940
+Their jaws weren't developing properly.
+
+703
+01:06:11,560 --> 01:06:17,520
+The teeth were coming in crooked even though their parents and even their siblings had perfect dental arches.
+
+704
+01:06:17,700 --> 01:06:18,800
+Perfect jaw formations.
+
+705
+01:06:19,540 --> 01:06:23,120
+And he figured out that there's something to do with animal nutrition.
+
+706
+01:06:23,300 --> 01:06:24,740
+They weren't getting enough animal fats.
+
+707
+01:06:25,380 --> 01:06:30,240
+And so he started supplementing him with cream and butter, milk animal fats.
+
+708
+01:06:30,360 --> 01:06:32,900
+Meat things like that. He actually reversed this.
+
+709
+01:06:32,900 --> 01:06:37,160
+These crooked teeth and dental misdevelopments and things like that.
+
+710
+01:06:37,160 --> 01:06:39,040
+And he wrote a whole book on that, which is pretty fascinating.
+
+711
+01:06:39,460 --> 01:06:42,220
+There's a Western, Western, a price and a price bondage foundation.
+
+712
+01:06:42,640 --> 01:06:43,960
+Now, continuing on his work.
+
+713
+01:06:44,740 --> 01:06:47,540
+There's even, there's a book called Strong Medicine.
+
+714
+01:06:47,800 --> 01:06:49,220
+It's a doctor in the 1960s.
+
+715
+01:06:49,300 --> 01:06:52,460
+You're basically talking about, this is how you stop all these diseases.
+
+716
+01:06:52,460 --> 01:06:55,000
+These are all these diseases are caused by eating the wrong thing.
+
+717
+01:06:55,520 --> 01:06:57,380
+And you just, you eat meat.
+
+718
+01:06:57,500 --> 01:06:59,920
+You cut out all this other, all these plants and other stuff.
+
+719
+01:06:59,920 --> 01:07:01,580
+You get out in the sun. You sleep properly.
+
+720
+01:07:01,820 --> 01:07:06,000
+You form proper human connections with your family and friends.
+
+721
+01:07:06,000 --> 01:07:08,180
+And then that's basically going to take care of most diseases.
+
+722
+01:07:08,860 --> 01:07:15,440
+There's even a study of a book in 1975 by Dr. Walter Vocland called the Stone Age Diet.
+
+723
+01:07:16,120 --> 01:07:16,960
+That was just that.
+
+724
+01:07:16,960 --> 01:07:18,760
+It's just argue that, look, humans are carnivores.
+
+725
+01:07:18,880 --> 01:07:21,540
+It's just what we've been, we've been apex predators for 2 million years.
+
+726
+01:07:21,540 --> 01:07:22,880
+This is what we need for millions of years.
+
+727
+01:07:23,040 --> 01:07:24,760
+It's what we're biologically adapted to.
+
+728
+01:07:25,120 --> 01:07:29,080
+And basically, if you stop eating plants, my profession as a gastroenterologist,
+
+729
+01:07:29,340 --> 01:07:31,420
+ceases to exist. That's what he argued.
+
+730
+01:07:32,140 --> 01:07:33,580
+And so there are all these sorts of books.
+
+731
+01:07:33,580 --> 01:07:34,760
+It's not just me saying this.
+
+732
+01:07:34,800 --> 01:07:40,880
+People, doctors and researchers have been saying this exact same thing for hundreds of years.
+
+733
+01:07:41,380 --> 01:07:47,900
+It's just it's been papered over by by very wealthy industries that profit by the
+
+734
+01:07:47,900 --> 01:07:55,920
+trillions of dollars every single year by having us eat plant-based junk that has
+
+735
+01:07:55,920 --> 01:07:59,420
+extremely high mark up causes us to get sick.
+
+736
+01:07:59,420 --> 01:08:04,860
+And then we have to spend trillions of dollars a year on medications and treatments to try to mitigate
+
+737
+01:08:04,860 --> 01:08:06,740
+those harmful effects.
+
+738
+01:08:07,720 --> 01:08:09,420
+Drug companies don't look for cures.
+
+739
+01:08:10,400 --> 01:08:11,780
+They never have.
+
+740
+01:08:12,640 --> 01:08:13,620
+And they say this.
+
+741
+01:08:13,920 --> 01:08:18,140
+They, in fact, they've had leaked internal memos, like from Goldman Sachs saying,
+
+742
+01:08:18,240 --> 01:08:21,220
+you know, is carrying someone of a disease, a viable business model.
+
+743
+01:08:21,260 --> 01:08:26,080
+The answer of course was no because if you kill them of the disease, that's it.
+
+744
+01:08:26,160 --> 01:08:27,680
+You treat them once and it's over.
+
+745
+01:08:27,680 --> 01:08:33,160
+But if you treat their symptoms and allow them to live with the disease, then you can sell
+
+746
+01:08:33,160 --> 01:08:35,260
+them this medication for the rest of their life.
+
+747
+01:08:36,120 --> 01:08:37,800
+And so that is what their model is.
+
+748
+01:08:38,120 --> 01:08:43,820
+And in fact, Goldman Sachs sent an angry letter to a company called Gilliat that actually
+
+749
+01:08:43,820 --> 01:08:47,540
+found a cure for hepatitis C, which is a very good thing to do for the world.
+
+750
+01:08:47,600 --> 01:08:48,880
+And this is what doctors used to do.
+
+751
+01:08:48,880 --> 01:08:52,020
+They actually tried to better the world, better humanity and cure disease.
+
+752
+01:08:52,160 --> 01:08:52,800
+It actually did that.
+
+753
+01:08:52,800 --> 01:08:55,780
+My great grandfather was a doctor in late 1800s, early 1900s.
+
+754
+01:08:55,780 --> 01:08:59,160
+And that's exactly what he and his colleagues tried to do.
+
+755
+01:08:59,440 --> 01:09:02,700
+And then the whole medical profession got completely corrupted by these industries.
+
+756
+01:09:05,660 --> 01:09:11,440
+And Goldman Sachs sent a letter to Gilliat saying, you messed up by curing hepatitis C.
+
+757
+01:09:11,580 --> 01:09:12,740
+You never cure a disease.
+
+758
+01:09:12,840 --> 01:09:14,040
+You only treat the disease.
+
+759
+01:09:14,120 --> 01:09:16,340
+You get a better treatment for the symptoms of the disease.
+
+760
+01:09:17,100 --> 01:09:19,000
+And then you can treat them the rest of their life.
+
+761
+01:09:19,240 --> 01:09:22,940
+You know, basically if you want our investment money, you're not going to do that.
+
+762
+01:09:22,940 --> 01:09:23,580
+I'll show you again.
+
+763
+01:09:24,020 --> 01:09:25,920
+You're going to look for symptom control.
+
+764
+01:09:26,600 --> 01:09:28,260
+So that we get a better return on our investment.
+
+765
+01:09:28,660 --> 01:09:29,920
+We're not trying to save the world here.
+
+766
+01:09:29,980 --> 01:09:30,800
+We're trying to make money.
+
+767
+01:09:31,600 --> 01:09:34,380
+And so fine, that's their profit incentive.
+
+768
+01:09:35,040 --> 01:09:36,560
+And so they're not going to look for cure.
+
+769
+01:09:37,260 --> 01:09:37,880
+So that's fine.
+
+770
+01:09:38,020 --> 01:09:40,100
+Let's just not look to them for the cure.
+
+771
+01:09:40,100 --> 01:09:41,580
+We've got to figure it out ourselves.
+
+772
+01:09:42,560 --> 01:09:44,940
+And a lot of people would figure that out before us.
+
+773
+01:09:44,960 --> 01:09:46,400
+And again, it's just been papered over.
+
+774
+01:09:46,420 --> 01:09:47,840
+And meet has been vilified.
+
+775
+01:09:49,360 --> 01:09:51,880
+And as pushed, I mean, that's a whole other thing.
+
+776
+01:09:51,880 --> 01:09:57,200
+You know, meet was vilified and that was vilified in order to protect the junk food industry,
+
+777
+01:09:57,340 --> 01:09:59,080
+the sugar industry and the junk food industry.
+
+778
+01:09:59,440 --> 01:10:02,200
+Because that was that looked like it was causing heart disease.
+
+779
+01:10:03,440 --> 01:10:05,920
+And so they were like, OK, well, we need to cover that up.
+
+780
+01:10:05,920 --> 01:10:08,860
+That was published in the German American Medical Association 2016,
+
+781
+01:10:09,040 --> 01:10:12,140
+actually internal memos from the sugar companies back in the 60s,
+
+782
+01:10:12,200 --> 01:10:16,100
+detailing how they paid off three Harvard professors to falsify data and publish
+
+783
+01:10:16,100 --> 01:10:19,120
+fraudulent studies to make it appear as if cholesterol caused heart disease
+
+784
+01:10:19,120 --> 01:10:22,580
+when it's much like more likely sugar to exonerate sugar and say that it was safe.
+
+785
+01:10:22,980 --> 01:10:25,860
+And one of those professors was named head of the USDA and use the one who offered
+
+786
+01:10:25,860 --> 01:10:30,760
+published in the 1977 USDA declaration saying that cholesterol causes heart disease
+
+787
+01:10:30,760 --> 01:10:34,360
+end of discussion, you know, we'll approach an argument.
+
+788
+01:10:35,140 --> 01:10:40,140
+And that just shut down the discussion that had been hotly debated since the 50s.
+
+789
+01:10:40,180 --> 01:10:43,800
+And now it was just like, no, teacher said so end of discussion.
+
+790
+01:10:44,000 --> 01:10:45,840
+And that's where we've been for the last 40 years.
+
+791
+01:10:45,840 --> 01:10:49,840
+It's fraud. It's known documented fraud.
+
+792
+01:10:51,220 --> 01:10:58,100
+And so, you know, there was a number of books that actually showed exactly what I'm talking about.
+
+793
+01:10:58,400 --> 01:10:59,920
+You go back to the medical textbooks.
+
+794
+01:11:00,620 --> 01:11:05,120
+In 1910, I have my great grandfather's medical textbook book by Sir William Osler,
+
+795
+01:11:05,180 --> 01:11:07,140
+who is the first Professor of Medicine in Johns Hopkins.
+
+796
+01:11:07,620 --> 01:11:10,880
+And he was knighted for his work in medicine,
+
+797
+01:11:10,880 --> 01:11:15,900
+who's Sir William Osler. And his medical textbook,
+
+798
+01:11:16,060 --> 01:11:18,740
+there's a chapter on diabetes. You know, the treatment,
+
+799
+01:11:19,100 --> 01:11:22,860
+the only treatment that we had for diabetes before insulin came in in the 1920s.
+
+800
+01:11:22,960 --> 01:11:24,780
+So it was back in 1910, this book was written.
+
+801
+01:11:25,120 --> 01:11:26,740
+It was a carnivore diet.
+
+802
+01:11:27,120 --> 01:11:29,600
+You put people on a meat bait, right? You get rid of carbohydrates.
+
+803
+01:11:31,340 --> 01:11:34,240
+And you equal parts protein and fat.
+
+804
+01:11:34,500 --> 01:11:39,080
+And that was the only thing that kept diabetic saliva one or two that didn't differentiate back then.
+
+805
+01:11:39,080 --> 01:11:41,340
+And they said that for the younger crowd,
+
+806
+01:11:41,460 --> 01:11:43,220
+there's a high mortality rate, but it wasn't 100%.
+
+807
+01:11:43,640 --> 01:11:47,480
+And this kept people alive eight, nine months to a year without insulin.
+
+808
+01:11:48,440 --> 01:11:50,360
+And then many of them actually survived long term.
+
+809
+01:11:50,600 --> 01:11:56,680
+That's in the literature that's in the medical textbooks that I have on my shelf.
+
+810
+01:11:56,940 --> 01:11:57,420
+Lengthen it.
+
+811
+01:11:58,640 --> 01:11:59,120
+1910.
+
+812
+01:11:59,220 --> 01:12:03,080
+And that was the treatment diabetes since the late 1700s.
+
+813
+01:12:03,760 --> 01:12:03,800
+Right?
+
+814
+01:12:04,600 --> 01:12:07,420
+And then we came up with insulin and just everything became about insulin.
+
+815
+01:12:08,000 --> 01:12:08,560
+Right?
+
+816
+01:12:09,300 --> 01:12:10,800
+And so we've forgotten our roots.
+
+817
+01:12:11,020 --> 01:12:16,420
+We've forgotten what people have known and paid dearly to figure out.
+
+818
+01:12:17,800 --> 01:12:19,360
+You know, in generation is before us.
+
+819
+01:12:20,020 --> 01:12:21,780
+So there's so many books.
+
+820
+01:12:21,820 --> 01:12:24,060
+So many books that are fantastic.
+
+821
+01:12:24,420 --> 01:12:28,500
+And I sort of list some of them in my website as well.
+
+822
+01:12:28,760 --> 01:12:29,340
+Okay, wonderful.
+
+823
+01:12:29,600 --> 01:12:31,920
+Well, I mean, when you're going to write yours, when this happens.
+
+824
+01:12:31,920 --> 01:12:35,360
+But yeah, so I have I mostly written my book.
+
+825
+01:12:35,440 --> 01:12:38,280
+I'm just sort of trying to do the finishing touches on it.
+
+826
+01:12:38,460 --> 01:12:42,100
+Now it's just last one pretty busy this past year.
+
+827
+01:12:42,940 --> 01:12:47,500
+So I haven't been able to get a chance to really sit down and crack at it.
+
+828
+01:12:47,500 --> 01:12:50,140
+But that's my my mission for the next few weeks.
+
+829
+01:12:50,260 --> 01:12:54,320
+Couple months is just to finish this thing up and get it out there.
+
+830
+01:12:54,340 --> 01:12:54,860
+Hit nice.
+
+831
+01:12:54,960 --> 01:12:55,360
+Well, best of luck.
+
+832
+01:12:55,540 --> 01:12:58,960
+Well, once it's once it's out, do let us know and maybe do a part two.
+
+833
+01:12:59,320 --> 01:13:01,360
+And yeah, yeah, we can all your work.
+
+834
+01:13:01,540 --> 01:13:02,280
+We'd love to do that.
+
+835
+01:13:02,860 --> 01:13:03,260
+I'll tell you.
+
+836
+01:13:03,320 --> 01:13:04,660
+I'm so excited to talk to Chokey.
+
+837
+01:13:04,760 --> 01:13:08,160
+Thank you so much for, you know, wasting your time with me.
+
+838
+01:13:08,860 --> 01:13:09,620
+But it was a plate.
+
+839
+01:13:10,460 --> 01:13:12,440
+And yeah, really appreciate it.
+
+840
+01:13:12,500 --> 01:13:12,860
+Not a problem.
+
+841
+01:13:12,900 --> 01:13:13,640
+Thank you for having me.

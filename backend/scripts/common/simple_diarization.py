@@ -9,21 +9,23 @@ from typing import List, Tuple, Optional
 import logging
 
 logger = logging.getLogger(__name__)
-
 def simple_energy_based_diarization(
     audio_path: str, 
     min_segment_duration: float = 3.0,
     energy_threshold: float = 0.01,
-    pause_duration: float = 0.5
+    pause_duration: float = 0.5,
+    use_spectral_features: bool = True,  # Use spectral features for better speaker differentiation
+    spectral_threshold: float = 0.5   # Threshold for spectral change detection
 ) -> List[Tuple[float, float, int]]:
     """
     Simple energy-based diarization that doesn't require HuggingFace authentication
     
-    Args:
         audio_path: Path to audio file
         min_segment_duration: Minimum segment duration in seconds
         energy_threshold: Energy threshold for silence detection
         pause_duration: Pause duration in seconds to consider a new segment
+        spectral_features: Whether to use spectral features for speaker differentiation
+        spectral_threshold: Threshold for spectral change detection
         
     Returns:
         List of (start, end, speaker_id) tuples

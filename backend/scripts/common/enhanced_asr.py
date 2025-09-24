@@ -3,14 +3,14 @@
 Enhanced ASR system with speaker identification and diarization
 Integrates faster-whisper → WhisperX → pyannote pipeline with voice profiles
 """
-
 import os
 import json
 import logging
 import tempfile
+import time
 import numpy as np
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Optional, Dict, Any, Tuple, Union
 from dataclasses import dataclass, asdict
 import torch
 import librosa
@@ -143,11 +143,7 @@ class EnhancedASR:
                 logger.info(f"HUGGINGFACE_HUB_TOKEN={os.getenv('HUGGINGFACE_HUB_TOKEN', 'None')[:5] if os.getenv('HUGGINGFACE_HUB_TOKEN') else 'None'}...")
                 
                 # Check if we should use simple diarization
-                use_simple_str = os.getenv('USE_SIMPLE_DIARIZATION', 'true')
-                use_simple = use_simple_str.lower() == 'true'
-                logger.info(f"USE_SIMPLE_DIARIZATION={use_simple_str} (parsed as {use_simple})")
-                logger.info(f"DIARIZE={os.getenv('DIARIZE', 'false')}")
-                logger.info(f"HUGGINGFACE_HUB_TOKEN={os.getenv('HUGGINGFACE_HUB_TOKEN', 'None')[:5] if os.getenv('HUGGINGFACE_HUB_TOKEN') else 'None'}...")
+                use_simple = os.getenv('USE_SIMPLE_DIARIZATION', 'true').lower() == 'true'
                 
                 if use_simple:
                     # Use our simple diarization that doesn't require authentication
@@ -342,9 +338,24 @@ class EnhancedASR:
                 # pyannote diarization
                 logger.info("Using pyannote diarization")
                 
+                # Convert audio to WAV format for pyannote compatibility
+                wav_path = audio_path.replace('.webm', '_diarization.wav').replace('.mp4', '_diarization.wav').replace('.m4a', '_diarization.wav')
+                
+                try:
+                    import librosa
+                    import soundfile as sf
+                    # Load and convert to 16kHz mono WAV
+                    audio_data, sr = librosa.load(audio_path, sr=16000, mono=True)
+                    sf.write(wav_path, audio_data, sr)
+                    logger.info(f"Converted audio to WAV format: {wav_path}")
+                    diarization_audio_path = wav_path
+                except Exception as e:
+                    logger.warning(f"Failed to convert audio format: {e}")
+                    diarization_audio_path = audio_path
+                
                 # Let pyannote determine the optimal number of speakers
                 logger.info("Running pyannote diarization with automatic speaker detection")
-                diarization = diarization_pipeline(audio_path)
+                diarization = diarization_pipeline(diarization_audio_path)
                 
                 # Get the number of speakers detected
                 try:
@@ -378,6 +389,14 @@ class EnhancedASR:
                     logger.info(f"Segment {i}: {start:.2f}-{end:.2f} -> Speaker {speaker_id}")
                 if len(segments) > 10:
                     logger.info(f"... and {len(segments) - 10} more segments")
+                
+                # Cleanup temporary WAV file
+                if 'wav_path' in locals() and wav_path != audio_path and os.path.exists(wav_path):
+                    try:
+                        os.unlink(wav_path)
+                        logger.info(f"Cleaned up temporary WAV file: {wav_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup temporary WAV file: {e}")
             
             logger.info(f"Diarization found {len(segments)} segments")
             return segments
@@ -445,26 +464,64 @@ class EnhancedASR:
                         ))
                     continue
                 
-                # Extract embeddings for this cluster (sample a few segments)
+                # Extract embeddings for this cluster (combine segments for better quality)
                 cluster_embeddings = []
-                sample_segments = segments[:3]  # Sample first 3 segments
                 
-                for start, end in sample_segments:
-                    try:
-                        # Extract audio segment
-                        audio, sr = librosa.load(audio_path, sr=16000, offset=start, duration=end-start)
-                        
-                        if len(audio) > sr:  # At least 1 second
-                            # Save to temp file for embedding extraction
-                            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
-                                sf.write(tmp_file.name, audio, sr)
-                                embeddings = enrollment._extract_embeddings_from_audio(tmp_file.name)
-                                if embeddings:  # Check if embeddings were extracted
-                                    cluster_embeddings.extend(embeddings)
-                                os.unlink(tmp_file.name)
+                # Combine segments to get at least 5 seconds of audio for embedding extraction
+                combined_audio = []
+                total_duration = 0
+                segments_used = 0
+                
+                for start, end in segments:
+                    if segments_used >= 5:  # Don't use too many segments
+                        break
                     
+                    duration = end - start
+                    if duration >= 0.5:  # Only use segments >= 0.5 seconds
+                        try:
+                            audio, sr = librosa.load(audio_path, sr=16000, offset=start, duration=duration)
+                            if len(audio) > sr * 0.5:  # At least 0.5 seconds of actual audio
+                                combined_audio.extend(audio)
+                                total_duration += duration
+                                segments_used += 1
+                                
+                                # Stop when we have enough audio
+                                if total_duration >= 5.0 or len(combined_audio) >= sr * 5:
+                                    break
+                        except Exception as e:
+                            logger.warning(f"Failed to load segment {start}-{end}: {e}")
+                            continue
+                
+                # Process combined audio if we have enough
+                if len(combined_audio) >= sr * 2:  # At least 2 seconds total
+                    # Save to temp file for embedding extraction
+                    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+                        tmp_path = tmp_file.name
+                    
+                    try:
+                        combined_audio_array = np.array(combined_audio, dtype=np.float32)
+                        sf.write(tmp_path, combined_audio_array, sr)
+                        # Add small delay to ensure file is written
+                        time.sleep(0.1)
+                        
+                        logger.info(f"Cluster {cluster_id}: Extracting embeddings from {total_duration:.1f}s of combined audio")
+                        embeddings = enrollment._extract_embeddings_from_audio(tmp_path)
+                        if embeddings:  # Check if embeddings were extracted
+                            cluster_embeddings.extend(embeddings)
+                            logger.info(f"Cluster {cluster_id}: Successfully extracted {len(embeddings)} embeddings")
+                        else:
+                            logger.warning(f"Cluster {cluster_id}: No embeddings extracted from combined audio")
                     except Exception as e:
-                        logger.warning(f"Failed to extract embedding for cluster {cluster_id} segment {start}-{end}: {e}")
+                        logger.warning(f"Failed to extract embeddings for cluster {cluster_id}: {e}")
+                    finally:
+                        # Ensure file cleanup even if extraction fails
+                        try:
+                            if os.path.exists(tmp_path):
+                                os.unlink(tmp_path)
+                        except:
+                            pass  # Ignore cleanup errors
+                else:
+                    logger.warning(f"Cluster {cluster_id}: Not enough audio ({len(combined_audio)/sr:.1f}s) for embedding extraction")
                 
                 if not cluster_embeddings:
                     logger.warning(f"No embeddings extracted for cluster {cluster_id}")
@@ -480,16 +537,20 @@ class EnhancedASR:
                         ))
                     continue
                 
-                # Compute average embedding for cluster
+                # Compute average embedding for cluster (with length weighting)
                 cluster_embedding = np.mean(cluster_embeddings, axis=0)
+                
+                # Calculate total duration for this cluster
+                total_duration = sum(end - start for start, end in segments)
                 
                 # Compare against all profiles
                 best_match = None
                 best_similarity = 0.0
                 similarities = {}
+                confidence_level = "unknown"
                 
                 # Debug info
-                logger.info(f"Cluster {cluster_id}: Testing against {len(profiles)} profiles")
+                logger.info(f"Cluster {cluster_id}: Testing against {len(profiles)} profiles (duration: {total_duration:.1f}s)")
                 
                 for profile_name, profile in profiles.items():
                     # Fix NumPy array comparison issue
@@ -498,11 +559,20 @@ class EnhancedASR:
                         sim = float(enrollment.compute_similarity(cluster_embedding, profile))
                         similarities[profile_name] = sim
                         
-                        logger.info(f"Cluster {cluster_id}: Similarity with {profile_name}: {sim:.3f}")
+                        # Apply duration-based confidence boost for longer segments
+                        duration_boost = 1.0
+                        if total_duration > 10:  # Long segments get accuracy boost
+                            duration_boost = 1.05
+                        elif total_duration > 5:
+                            duration_boost = 1.02
                         
-                        # Simple float comparison
-                        if sim > best_similarity:
-                            best_similarity = sim
+                        boosted_sim = sim * duration_boost
+                        
+                        logger.info(f"Cluster {cluster_id}: Similarity with {profile_name}: {sim:.3f} (boosted: {boosted_sim:.3f})")
+                        
+                        # Simple float comparison using boosted similarity
+                        if boosted_sim > best_similarity:
+                            best_similarity = boosted_sim
                             best_match = profile_name
                     except Exception as e:
                         logger.warning(f"Error computing similarity for {profile_name}: {e}")
@@ -516,9 +586,29 @@ class EnhancedASR:
                 if best_match:
                     # Get appropriate threshold
                     if best_match.lower() == 'chaffee':
-                        threshold = self.config.chaffee_min_sim
+                        base_threshold = self.config.chaffee_min_sim
                     else:
-                        threshold = self.config.guest_min_sim
+                        base_threshold = self.config.guest_min_sim
+                    
+                    # Multi-confidence level thresholds
+                    high_confidence_threshold = base_threshold + 0.15  # e.g., 0.65
+                    medium_confidence_threshold = base_threshold + 0.05  # e.g., 0.55
+                    
+                    # Get the raw similarity (without boost) for threshold comparison
+                    raw_similarity = similarities[best_match]
+                    
+                    # Determine confidence level and apply appropriate logic
+                    if raw_similarity >= high_confidence_threshold:
+                        confidence_level = "high"
+                        threshold = base_threshold  # Use base threshold for high confidence
+                    elif raw_similarity >= medium_confidence_threshold:
+                        confidence_level = "medium"
+                        threshold = base_threshold  # Will be processed with temporal consistency later
+                    else:
+                        confidence_level = "low"
+                        threshold = base_threshold
+                    
+                    logger.info(f"Cluster {cluster_id}: Confidence level: {confidence_level} (raw: {raw_similarity:.3f}, threshold: {threshold:.3f})")
                     
                     # Check if similarity meets threshold
                     if best_similarity >= threshold:
@@ -537,7 +627,7 @@ class EnhancedASR:
                     else:
                         logger.info(f"Cluster {cluster_id}: Best similarity {best_similarity:.3f} < threshold {threshold:.3f}")
                 
-                logger.info(f"Cluster {cluster_id} -> {speaker_name} (conf={confidence:.3f}, margin={margin:.3f})")
+                logger.info(f"Cluster {cluster_id} -> {speaker_name} (conf={confidence:.3f}, level={confidence_level}, margin={margin:.3f})")
                 
                 # Create speaker segments
                 for start, end in segments:
@@ -550,6 +640,9 @@ class EnhancedASR:
                         embedding=cluster_embedding.tolist(),
                         cluster_id=cluster_id
                     ))
+            
+            # Post-processing: Apply temporal consistency filtering
+            # speaker_segments = self._apply_temporal_consistency(speaker_segments)
             
             return speaker_segments
             
