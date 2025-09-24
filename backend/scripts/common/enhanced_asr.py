@@ -155,13 +155,35 @@ class EnhancedASR:
                     from pyannote.audio import Pipeline
                     
                     logger.info(f"Loading diarization pipeline: {self.config.diarization_model}")
-                    self._diarization_pipeline = Pipeline.from_pretrained(
-                        self.config.diarization_model,
-                        use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN')  # Required for some models
-                    )
-                    
-                    if self._device == "cuda":
-                        self._diarization_pipeline = self._diarization_pipeline.to(torch.device("cuda"))
+                    try:
+                        # Try to load the model with explicit cache path
+                        cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+                                                "pretrained_models")
+                        os.makedirs(cache_dir, exist_ok=True)
+                        
+                        logger.info(f"Using cache directory: {cache_dir}")
+                        
+                        # Try both token parameter names depending on pyannote.audio version
+                        try:
+                            self._diarization_pipeline = Pipeline.from_pretrained(
+                                self.config.diarization_model,
+                                use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
+                                cache_dir=cache_dir
+                            )
+                        except TypeError:
+                            self._diarization_pipeline = Pipeline.from_pretrained(
+                                self.config.diarization_model,
+                                token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
+                                cache_dir=cache_dir
+                            )
+                        
+                        if self._device == "cuda":
+                            self._diarization_pipeline = self._diarization_pipeline.to(torch.device("cuda"))
+                            
+                        logger.info("Successfully loaded pyannote diarization pipeline")
+                    except Exception as e:
+                        logger.error(f"Failed to load pyannote pipeline: {e}")
+                        raise
                 
             except ImportError:
                 raise ImportError("pyannote.audio not available. Install with: pip install pyannote.audio")
@@ -316,19 +338,32 @@ class EnhancedASR:
                 # pyannote diarization
                 logger.info("Using pyannote diarization")
                 
-                # Set min and max speakers if configured
-                min_speakers = self.config.alignment.min_speakers or 2  # Default to at least 2 speakers
-                max_speakers = self.config.alignment.max_speakers
+                # Convert audio to WAV format for pyannote compatibility
+                wav_path = audio_path.replace('.webm', '_diarization.wav').replace('.mp4', '_diarization.wav').replace('.m4a', '_diarization.wav')
                 
-                logger.info(f"Diarization with min_speakers={min_speakers}, max_speakers={max_speakers}")
+                try:
+                    import librosa
+                    import soundfile as sf
+                    # Load and convert to 16kHz mono WAV
+                    audio_data, sr = librosa.load(audio_path, sr=16000, mono=True)
+                    sf.write(wav_path, audio_data, sr)
+                    logger.info(f"Converted audio to WAV format: {wav_path}")
+                    diarization_audio_path = wav_path
+                except Exception as e:
+                    logger.warning(f"Failed to convert audio format: {e}")
+                    diarization_audio_path = audio_path
                 
-                # Run diarization with speaker count constraints
-                logger.info(f"Running pyannote diarization with min_speakers={min_speakers}, max_speakers={max_speakers}")
-                diarization = diarization_pipeline(
-                    audio_path,
-                    min_speakers=min_speakers,
-                    max_speakers=max_speakers
-                )
+                # Let pyannote determine the optimal number of speakers
+                logger.info("Running pyannote diarization with automatic speaker detection")
+                diarization = diarization_pipeline(diarization_audio_path)
+                
+                # Get the number of speakers detected
+                try:
+                    num_speakers = len(set(s for _, _, s in diarization.itertracks(yield_label=True)))
+                    logger.info(f"Pyannote automatically detected {num_speakers} speakers")
+                except Exception as e:
+                    logger.warning(f"Could not determine number of speakers: {e}")
+                    num_speakers = 'unknown'
                 
                 # Log diarization results
                 logger.info(f"Diarization result type: {type(diarization)}")
@@ -354,6 +389,14 @@ class EnhancedASR:
                     logger.info(f"Segment {i}: {start:.2f}-{end:.2f} -> Speaker {speaker_id}")
                 if len(segments) > 10:
                     logger.info(f"... and {len(segments) - 10} more segments")
+                
+                # Cleanup temporary WAV file
+                if 'wav_path' in locals() and wav_path != audio_path and os.path.exists(wav_path):
+                    try:
+                        os.unlink(wav_path)
+                        logger.info(f"Cleaned up temporary WAV file: {wav_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup temporary WAV file: {e}")
             
             logger.info(f"Diarization found {len(segments)} segments")
             return segments
