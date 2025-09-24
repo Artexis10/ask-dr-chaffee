@@ -316,19 +316,17 @@ class EnhancedASR:
                 # pyannote diarization
                 logger.info("Using pyannote diarization")
                 
-                # Set min and max speakers if configured
-                min_speakers = self.config.alignment.min_speakers or 2  # Default to at least 2 speakers
-                max_speakers = self.config.alignment.max_speakers
+                # Let pyannote determine the optimal number of speakers
+                logger.info("Running pyannote diarization with automatic speaker detection")
+                diarization = diarization_pipeline(audio_path)
                 
-                logger.info(f"Diarization with min_speakers={min_speakers}, max_speakers={max_speakers}")
-                
-                # Run diarization with speaker count constraints
-                logger.info(f"Running pyannote diarization with min_speakers={min_speakers}, max_speakers={max_speakers}")
-                diarization = diarization_pipeline(
-                    audio_path,
-                    min_speakers=min_speakers,
-                    max_speakers=max_speakers
-                )
+                # Get the number of speakers detected
+                try:
+                    num_speakers = len(set(s for _, _, s in diarization.itertracks(yield_label=True)))
+                    logger.info(f"Pyannote automatically detected {num_speakers} speakers")
+                except Exception as e:
+                    logger.warning(f"Could not determine number of speakers: {e}")
+                    num_speakers = 'unknown'
                 
                 # Log diarization results
                 logger.info(f"Diarization result type: {type(diarization)}")
