@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-Voice enrollment system for speaker identification using SpeechBrain ECAPA embeddings
+Voice Enrollment System for Speaker Identification
 """
 
 import os
 import json
 import logging
 import numpy as np
-from datetime import datetime
-from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-import tempfile
 import torch
-from dataclasses import dataclass, asdict
 import librosa
-import soundfile as sf
+from pathlib import Path
+from typing import List, Optional, Dict, Any
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -22,61 +19,35 @@ logger = logging.getLogger(__name__)
 class VoiceProfile:
     """Voice profile containing speaker embeddings and metadata"""
     name: str
-    centroid: List[float]  # Mean embedding vector
-    embeddings: List[List[float]]  # All embeddings used to compute centroid
-    metadata: Dict[str, Any]
+    embeddings: List[np.ndarray]
+    threshold: float
     created_at: str
-    audio_sources: List[str]  # Source files/URLs used for enrollment
+    metadata: Dict[str, Any]
+
+def compute_threshold_from_similarities(similarities: List[float]) -> float:
+    """Compute threshold from a list of similarities"""
+    if len(similarities) < 2:
+        return 0.7  # Default conservative threshold
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization"""
-        # Convert numpy arrays to lists for JSON serialization
-        result = {
-            'name': self.name,
-            'centroid': self.centroid if isinstance(self.centroid, list) else self.centroid.tolist(),
-            'embeddings': [emb.tolist() if isinstance(emb, np.ndarray) else emb for emb in self.embeddings],
-            'metadata': self.metadata,
-            'created_at': self.created_at,
-            'audio_sources': self.audio_sources
-        }
-        return result
+    similarities = np.array(similarities)
     
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'VoiceProfile':
-        """Create VoiceProfile from dictionary"""
-        return cls(**data)
+    # Threshold = mean - 2*std (conservative)
+    mean_sim = np.mean(similarities)
+    std_sim = np.std(similarities)
     
-    def get_similarity_threshold(self) -> float:
-        """Get recommended similarity threshold based on embedding variance"""
-        if len(self.embeddings) < 2:
-            return 0.82  # Default threshold
-        
-        # Calculate intra-speaker variance
-        embeddings_array = np.array(self.embeddings)
-        centroid_array = np.array(self.centroid)
-        
-        # Compute cosine similarities to centroid
-        similarities = []
-        for emb in embeddings_array:
-            sim = np.dot(emb, centroid_array) / (np.linalg.norm(emb) * np.linalg.norm(centroid_array))
-            similarities.append(sim)
-        
-        # Threshold = mean - 2*std (conservative)
-        mean_sim = np.mean(similarities)
-        std_sim = np.std(similarities)
-        
-        # Clamp between reasonable bounds
-        return float(max(0.5, mean_sim - 3 * std_sim))
+    # Clamp between reasonable bounds
+    return float(max(0.5, mean_sim - 3 * std_sim))
 
 class VoiceEnrollment:
     """Voice enrollment system for speaker identification"""
     
-    def __init__(self, voices_dir: Optional[str] = None):
+    def __init__(self, voices_dir: str = "voices", device: str = "cpu"):
         """
         Initialize voice enrollment system
         
         Args:
-            voices_dir: Directory to store voice profiles (default: ~/.cache/enhanced_asr/voice_profiles)
+            voices_dir: Directory to store voice profiles
+            device: Device to use for SpeechBrain model (default: "cpu")
         """
         if voices_dir:
             self.voices_dir = Path(voices_dir)
@@ -89,6 +60,7 @@ class VoiceEnrollment:
         
         # Initialize SpeechBrain model
         self.model = None
+        self.device = device
         
     def _load_model(self):
         """Load SpeechBrain ECAPA-TDNN model"""
@@ -96,16 +68,22 @@ class VoiceEnrollment:
             return
             
         try:
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info(f"Loading SpeechBrain ECAPA model on {device}")
+            # Disable symlinks to avoid permission issues on Windows
+            os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+            os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
             
-            from speechbrain.pretrained import EncoderClassifier
+            # Force CPU for compatibility with RTX 5080
+            self.device = "cpu"
+            logger.info(f"Loading SpeechBrain ECAPA model on {self.device}")
+            
+            # Load model directly from HuggingFace
+            from speechbrain.inference import EncoderClassifier
             self.model = EncoderClassifier.from_hparams(
                 source="speechbrain/spkrec-ecapa-voxceleb",
-                savedir="pretrained_models/spkrec-ecapa-voxceleb",
-                run_opts={"device": device}
+                run_opts={"device": self.device}
             )
             logger.info("Successfully loaded SpeechBrain ECAPA model")
+            
         except Exception as e:
             logger.error(f"Failed to load SpeechBrain model: {e}")
             raise
@@ -121,17 +99,18 @@ class VoiceEnrollment:
             audio, sr = librosa.load(audio_path, sr=16000)
             logger.debug(f"Loaded audio: {len(audio)} samples at {sr}Hz")
             
-            # Extract embeddings using sliding window (5-second segments, 2.5-second stride)
-            window_size = 5 * sr  # 5 seconds
-            stride = 2.5 * sr  # 2.5 seconds
+            # Extract embeddings using sliding window (smaller window for better coverage)
+            window_size = 3 * sr  # 3 seconds (was 5 seconds)
+            stride = 1.5 * sr  # 1.5 seconds (was 2.5 seconds)
             
             embeddings = []
             for start in range(0, len(audio) - window_size + 1, int(stride)):
                 end = start + window_size
                 segment = audio[start:end]
                 
-                # Skip segments with low energy (likely silence)
-                if np.mean(np.abs(segment)) < 0.005:
+                # Skip segments with very low energy (likely silence) - use extremely low threshold
+                # Original threshold was 0.001, lowering to 0.0001 to ensure we get embeddings
+                if np.mean(np.abs(segment)) < 0.0001:
                     continue
                     
                 # Extract embedding
@@ -147,345 +126,299 @@ class VoiceEnrollment:
             logger.error(f"Failed to extract embeddings from {audio_path}: {e}")
             return []
     
-    def _download_youtube_audio(self, url: str) -> Optional[str]:
-        """Download audio from YouTube URL using yt-dlp"""
-        try:
-            import subprocess
-            import shutil
-            
-            # Check if yt-dlp is available
-            if shutil.which('yt-dlp') is None:
-                logger.error("yt-dlp not found in PATH. Please install with: pip install yt-dlp")
-                return None
-            
-            # Create temporary directory for output
-            temp_dir = tempfile.mkdtemp()
-            output_path = os.path.join(temp_dir, 'audio.%(ext)s')
-            
-            # Get video ID for better filename
-            video_id = url.split('v=')[-1].split('&')[0] if 'v=' in url else 'audio'
-            
-            # Use yt-dlp to download audio - directly to mp3 to avoid ffmpeg issues
-            cmd = [
-                'yt-dlp',
-                '--extract-audio',
-                '--audio-format', 'mp3',  # Use mp3 instead of wav to avoid ffmpeg issues
-                '--audio-quality', '0',
-                '--no-playlist',
-                '--no-warnings',
-                '--no-check-certificate',  # Avoid SSL issues
-                '--prefer-ffmpeg',
-                '--output', output_path,
-                url
-            ]
-            
-            logger.info(f"Downloading audio from YouTube: {url}")
-            logger.info(f"Running command: {' '.join(cmd)}")
-            
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            
-            # Check for downloaded file
-            expected_file = os.path.join(temp_dir, f'audio.mp3')
-            if os.path.exists(expected_file):
-                logger.info(f"Successfully downloaded audio to: {expected_file}")
-                return expected_file
-            
-            # If the expected file doesn't exist, look for any audio file
-            audio_files = []
-            for ext in ['.mp3', '.m4a', '.wav', '.webm']:
-                audio_files.extend(list(Path(temp_dir).glob(f'*{ext}')))
-            
-            if audio_files:
-                logger.info(f"Found audio file: {audio_files[0]}")
-                return str(audio_files[0])
-            
-            # If we get here, something went wrong
-            logger.error(f"yt-dlp failed with return code {result.returncode}")
-            logger.error(f"STDERR: {result.stderr}")
-            logger.error(f"STDOUT: {result.stdout}")
-            logger.error(f"No audio files found in {temp_dir}")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Failed to download audio from {url}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return None
+    def compute_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+        """Compute cosine similarity between two embeddings"""
+        # Normalize embeddings
+        emb1_norm = embedding1 / np.linalg.norm(embedding1)
+        emb2_norm = embedding2 / np.linalg.norm(embedding2)
+        
+        # Compute cosine similarity
+        similarity = np.dot(emb1_norm, emb2_norm)
+        return float(similarity)
     
-    def enroll_speaker(
-        self, 
-        name: str, 
-        audio_sources: List[str], 
-        overwrite: bool = False,
-        update: bool = False,
-        min_duration: float = 30.0
-    ) -> Optional[VoiceProfile]:
-        """
-        Enroll a speaker using audio files or YouTube URLs
+    def save_profile(self, name: str, embeddings: List[np.ndarray], 
+                    threshold: Optional[float] = None, metadata: Optional[Dict] = None) -> None:
+        """Save voice profile to disk"""
+        if not embeddings:
+            raise ValueError("Cannot save profile with no embeddings")
         
-        Args:
-            name: Speaker name (e.g., "Chaffee")
-            audio_sources: List of file paths or YouTube URLs
-            overwrite: Whether to overwrite existing profile
-            update: Whether to update existing profile with new audio
-            min_duration: Minimum total audio duration required (seconds)
-            
-        Returns:
-            VoiceProfile if successful, None otherwise
-        """
-        profile_path = self.voices_dir / f"{name.lower()}.json"
-        
-        # Load existing profile if updating
-        existing_embeddings = []
-        existing_sources = []
-        existing_duration = 0.0
-        
-        if profile_path.exists():
-            if update:
-                # Load existing profile for updating
-                existing_profile = self.load_profile(name)
-                if existing_profile:
-                    existing_embeddings = existing_profile.embeddings
-                    existing_sources = existing_profile.audio_sources
-                    existing_duration = existing_profile.metadata.get('total_duration_seconds', 0.0)
-                    logger.info(f"Updating existing profile for '{name}' with {len(existing_embeddings)} embeddings")
-            elif not overwrite:
-                logger.error(f"Voice profile for '{name}' already exists. Use --overwrite to replace or --update to add new audio.")
-                return None
-        
-        logger.info(f"Enrolling speaker: {name} with {len(audio_sources)} audio sources")
-        
-        all_embeddings = []
-        processed_sources = []
-        total_duration = 0.0
-        temp_files = []
-        
-        try:
-            for source in audio_sources:
-                logger.info(f"Processing audio source: {source}")
-                
-                # Handle YouTube URLs vs local files
-                audio_path = source
-                if source.startswith(('http://', 'https://', 'www.')):
-                    # Download from YouTube
-                    audio_path = self._download_youtube_audio(source)
-                    if audio_path:
-                        temp_files.append(audio_path)
-                    else:
-                        logger.warning(f"Failed to download audio from {source}")
-                        continue
-                elif not os.path.exists(source):
-                    logger.warning(f"Audio file does not exist: {source}")
-                    continue
-                
-                # Check audio duration
-                try:
-                    audio, sr = librosa.load(audio_path, sr=None)
-                    duration = len(audio) / sr
-                    total_duration += duration
-                    logger.info(f"Audio duration: {duration:.1f}s")
-                except Exception as e:
-                    logger.error(f"Failed to load audio {audio_path}: {e}")
-                    continue
-                
-                # Extract embeddings
-                embeddings = self._extract_embeddings_from_audio(audio_path)
-                if embeddings:
-                    all_embeddings.extend(embeddings)
-                    processed_sources.append(source)
-                    logger.info(f"Added {len(embeddings)} embeddings from {source}")
-                else:
-                    logger.warning(f"No embeddings extracted from {source}")
-                    continue
-            
-            # Add existing embeddings and duration if updating
-            if existing_embeddings:
-                all_embeddings.extend(existing_embeddings)
-                processed_sources.extend(existing_sources)
-                total_duration += existing_duration
-                logger.info(f"Added {len(existing_embeddings)} embeddings from existing profile")
-                
-            # Check if we have enough audio
-            if total_duration < min_duration:
-                logger.error(f"Insufficient audio duration: {total_duration:.1f}s < {min_duration:.1f}s required")
-                return None
-                
-            # Compute centroid (average of all embeddings)
-            embeddings_array = np.array(all_embeddings)
-            centroid = np.mean(embeddings_array, axis=0)
-            
-            # Compute recommended threshold
+        if threshold is None:
+            # Compute threshold from internal similarities
             similarities = []
-            for emb in all_embeddings:
-                sim = np.dot(emb, centroid) / (np.linalg.norm(emb) * np.linalg.norm(centroid))
-                similarities.append(float(sim))
-                
-            # Use 3 standard deviations below mean as threshold
-            mean_sim = np.mean(similarities)
-            std_sim = np.std(similarities)
-            recommended_threshold = float(max(0.5, mean_sim - 3 * std_sim))
-            
-            # Create profile
-            profile = VoiceProfile(
-                name=name,
-                embeddings=all_embeddings,
-                centroid=centroid.tolist(),
-                audio_sources=processed_sources,
-                created_at=datetime.now().isoformat(),
-                metadata={
-                    'num_embeddings': len(all_embeddings),
-                    'total_duration_seconds': total_duration,
-                    'recommended_threshold': recommended_threshold,
-                    'model': 'speechbrain/spkrec-ecapa-voxceleb'
-                }
-            )
-            
-            # Save profile
-            with open(profile_path, 'w') as f:
-                json.dump(profile.to_dict(), f, indent=2)
-            
-            logger.info(f"Successfully enrolled speaker '{name}' with {len(all_embeddings)} embeddings")
-            logger.info(f"Recommended similarity threshold: {profile.metadata['recommended_threshold']:.3f}")
-            logger.info(f"Profile saved to: {profile_path}")
-            
-            return profile
-            
-        except Exception as e:
-            logger.error(f"Failed to enroll speaker {name}: {e}")
-            return None
-            
-        finally:
-            # Cleanup temporary files
-            for temp_file in temp_files:
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
+            for i in range(len(embeddings)):
+                for j in range(i + 1, len(embeddings)):
+                    sim = self.compute_similarity(embeddings[i], embeddings[j])
+                    similarities.append(sim)
+            threshold = compute_threshold_from_similarities(similarities)
+        
+        profile_data = {
+            'name': name,
+            'embeddings': [emb.tolist() for emb in embeddings],
+            'threshold': threshold,
+            'created_at': str(Path().absolute()),
+            'metadata': metadata or {}
+        }
+        
+        profile_path = self.voices_dir / f"{name.lower()}.json"
+        with open(profile_path, 'w') as f:
+            json.dump(profile_data, f, indent=2)
+        
+        logger.info(f"Saved voice profile for {name} to {profile_path}")
     
-    def load_profile(self, name: str) -> Optional[VoiceProfile]:
-        """Load a voice profile by name"""
+    def load_profile(self, name: str) -> Optional[np.ndarray]:
+        """Load voice profile from disk"""
         profile_path = self.voices_dir / f"{name.lower()}.json"
         
         if not profile_path.exists():
-            logger.error(f"Voice profile not found: {profile_path}")
+            logger.warning(f"Profile not found: {profile_path}")
             return None
         
         try:
             with open(profile_path, 'r') as f:
-                data = json.load(f)
-            return VoiceProfile.from_dict(data)
+                profile_data = json.load(f)
+            
+            # Convert embeddings back to numpy arrays and compute mean
+            embeddings = [np.array(emb) for emb in profile_data['embeddings']]
+            mean_embedding = np.mean(embeddings, axis=0)
+            
+            logger.debug(f"Loaded profile for {name}: {len(embeddings)} embeddings")
+            return mean_embedding
+            
         except Exception as e:
-            logger.error(f"Failed to load voice profile {name}: {e}")
+            logger.error(f"Failed to load profile {name}: {e}")
             return None
     
     def list_profiles(self) -> List[str]:
-        """List all available voice profiles"""
+        """List available voice profiles"""
         profiles = []
-        for profile_file in self.voices_dir.glob('*.json'):
-            profiles.append(profile_file.stem.title())
-        return sorted(profiles)
+        for profile_file in self.voices_dir.glob("*.json"):
+            if profile_file.name != '.gitignore':
+                profile_name = profile_file.stem.title()
+                profiles.append(profile_name)
+        return profiles
     
-    def compute_similarity(self, embedding: np.ndarray, profile: VoiceProfile) -> float:
-        """Compute cosine similarity between embedding and profile centroid"""
-        centroid = np.array(profile.centroid)
-        similarity = np.dot(embedding, centroid) / (np.linalg.norm(embedding) * np.linalg.norm(centroid))
-        return float(similarity)
-
-def main():
-    """CLI for voice enrollment"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Voice enrollment system for speaker identification')
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
-    
-    # Enroll command
-    enroll_parser = subparsers.add_parser('enroll', help='Enroll a new speaker')
-    enroll_parser.add_argument('--name', required=True, help='Speaker name (e.g., Chaffee)')
-    enroll_parser.add_argument('--audio', nargs='+', help='Audio file paths')
-    enroll_parser.add_argument('--url', nargs='+', help='YouTube URLs')
-    enroll_parser.add_argument('--overwrite', action='store_true', help='Overwrite existing profile')
-    enroll_parser.add_argument('--update', action='store_true', help='Update existing profile with new audio')
-    enroll_parser.add_argument('--min-duration', type=float, default=30.0, help='Minimum audio duration (seconds)')
-    
-    # List command
-    list_parser = subparsers.add_parser('list', help='List enrolled speakers')
-    
-    # Info command
-    info_parser = subparsers.add_parser('info', help='Show speaker profile information')
-    info_parser.add_argument('name', help='Speaker name')
-    
-    parser.add_argument('--voices-dir', help='Directory to store voice profiles')
-    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
-    
-    args = parser.parse_args()
-    
-    # Setup logging
-    level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
-    
-    # Initialize enrollment system
-    enrollment = VoiceEnrollment(voices_dir=args.voices_dir)
-    
-    if args.command == 'enroll':
-        # Collect audio sources
-        audio_sources = []
-        if args.audio:
-            audio_sources.extend(args.audio)
-        if args.url:
-            audio_sources.extend(args.url)
+    def get_profile_info(self, name: str) -> Optional[Dict]:
+        """Get profile information"""
+        profile_path = self.voices_dir / f"{name.lower()}.json"
         
-        if not audio_sources:
-            logger.error("No audio sources provided. Use --audio or --url")
-            return 1
+        if not profile_path.exists():
+            return None
         
-        # Enroll speaker
-        profile = enrollment.enroll_speaker(
-            name=args.name,
-            audio_sources=audio_sources,
-            overwrite=args.overwrite,
-            update=args.update,
-            min_duration=args.min_duration
-        )
+        try:
+            with open(profile_path, 'r') as f:
+                profile_data = json.load(f)
+            
+            # Handle both 'threshold' and 'recommended_threshold' field names
+            threshold = profile_data.get('threshold') or profile_data.get('recommended_threshold', 0.7)
+            
+            return {
+                'name': profile_data['name'],
+                'threshold': threshold,
+                'embedding_count': len(profile_data['embeddings']),
+                'created_at': profile_data.get('created_at'),
+                'metadata': profile_data.get('metadata', {})
+            }
+        except Exception as e:
+            logger.error(f"Failed to get profile info for {name}: {e}")
+            return None
+            
+    def enroll_speaker(self, name: str, audio_sources: List[str], 
+                      overwrite: bool = False, update: bool = False,
+                      min_duration: float = 30.0) -> Optional[Dict]:
+        """
+        Enroll a speaker using audio sources (files or YouTube URLs)
         
-        if profile:
-            print(f"✓ Successfully enrolled speaker: {args.name}")
-            print(f"  Embeddings: {profile.metadata['num_embeddings']}")
-            print(f"  Duration: {profile.metadata['total_duration_seconds']:.1f}s")
-            print(f"  Threshold: {profile.metadata['recommended_threshold']:.3f}")
-            return 0
-        else:
-            print(f"✗ Failed to enroll speaker: {args.name}")
-            return 1
-    
-    elif args.command == 'list':
-        profiles = enrollment.list_profiles()
-        if profiles:
-            print("Enrolled speakers:")
-            for profile_name in profiles:
-                print(f"  • {profile_name}")
-        else:
-            print("No enrolled speakers found.")
-        return 0
-    
-    elif args.command == 'info':
-        profile = enrollment.load_profile(args.name)
-        if profile:
-            print(f"Speaker: {profile.name}")
-            print(f"Created: {profile.created_at}")
-            print(f"Embeddings: {profile.metadata['num_embeddings']}")
-            print(f"Duration: {profile.metadata['total_duration_seconds']:.1f}s")
-            print(f"Threshold: {profile.metadata['recommended_threshold']:.3f}")
-            print(f"Sources: {len(profile.audio_sources)}")
-            for i, source in enumerate(profile.audio_sources, 1):
-                print(f"  {i}. {source}")
-        else:
-            print(f"Speaker '{args.name}' not found.")
-            return 1
-        return 0
-    
-    else:
-        parser.print_help()
-        return 1
-
-if __name__ == '__main__':
-    exit(main())
+        Args:
+            name: Speaker name
+            audio_sources: List of audio file paths or YouTube URLs
+            overwrite: Whether to overwrite existing profile
+            update: Whether to update existing profile
+            min_duration: Minimum audio duration required
+            
+        Returns:
+            Profile metadata if successful, None otherwise
+        """
+        try:
+            # Check if profile exists
+            profile_path = self.voices_dir / f"{name.lower()}.json"
+            existing_profile = None
+            existing_sources = []
+            
+            if profile_path.exists():
+                if not (overwrite or update):
+                    logger.warning(f"Profile {name} already exists. Use --overwrite or --update")
+                    return None
+                    
+                # Load existing profile if updating
+                if update:
+                    try:
+                        with open(profile_path, 'r') as f:
+                            existing_profile = json.load(f)
+                            existing_sources = existing_profile.get('audio_sources', [])
+                    except Exception as e:
+                        logger.error(f"Failed to load existing profile: {e}")
+                        if not overwrite:
+                            return None
+            
+            # Process audio sources
+            all_embeddings = []
+            processed_sources = []
+            total_duration = 0.0
+            
+            # Filter out duplicate sources if updating
+            new_sources = []
+            for source in audio_sources:
+                # Normalize YouTube URLs to standard format
+                if 'youtube.com' in source or 'youtu.be' in source:
+                    # Extract video ID and standardize URL
+                    if 'youtu.be/' in source:
+                        video_id = source.split('youtu.be/')[-1].split('?')[0]
+                    else:
+                        video_id = source.split('v=')[-1].split('&')[0]
+                    
+                    standard_url = f"https://www.youtube.com/watch?v={video_id}"
+                    
+                    # Check if this video is already in the profile
+                    if update and standard_url in existing_sources:
+                        logger.info(f"Skipping already enrolled video: {standard_url}")
+                        continue
+                    
+                    source = standard_url
+                
+                new_sources.append(source)
+            
+            # Process new sources
+            for source in new_sources:
+                logger.info(f"Processing audio source: {source}")
+                
+                # Handle YouTube URLs
+                if 'youtube.com' in source or 'youtu.be' in source:
+                    # Download audio using yt-dlp
+                    import tempfile
+                    import subprocess
+                    
+                    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+                        try:
+                            cmd = [
+                                'yt-dlp',
+                                '-x',
+                                '--audio-format', 'wav',
+                                '--audio-quality', '0',
+                                '--format', 'bestaudio',
+                                '--no-check-certificate',
+                                '--no-playlist',
+                                '--ignore-errors',
+                                '-o', tmp_file.name,
+                                source
+                            ]
+                            
+                            logger.info(f"Downloading audio from {source}")
+                            subprocess.run(cmd, check=True, capture_output=True)
+                            
+                            # Extract embeddings
+                            embeddings = self._extract_embeddings_from_audio(tmp_file.name)
+                            
+                            if embeddings:
+                                # Get audio duration
+                                import librosa
+                                duration = librosa.get_duration(path=tmp_file.name)
+                                
+                                if duration >= min_duration:
+                                    all_embeddings.extend(embeddings)
+                                    processed_sources.append(source)
+                                    total_duration += duration
+                                    logger.info(f"Added {len(embeddings)} embeddings from {source} ({duration:.1f}s)")
+                                else:
+                                    logger.warning(f"Audio too short: {duration:.1f}s < {min_duration:.1f}s")
+                            else:
+                                logger.warning(f"No embeddings extracted from {source}")
+                                
+                        except Exception as e:
+                            logger.error(f"Failed to process YouTube URL {source}: {e}")
+                        finally:
+                            # Clean up temp file
+                            try:
+                                os.unlink(tmp_file.name)
+                            except:
+                                pass
+                
+                # Handle local audio files
+                elif os.path.exists(source):
+                    embeddings = self._extract_embeddings_from_audio(source)
+                    
+                    if embeddings:
+                        # Get audio duration
+                        import librosa
+                        duration = librosa.get_duration(path=source)
+                        
+                        if duration >= min_duration:
+                            all_embeddings.extend(embeddings)
+                            processed_sources.append(source)
+                            total_duration += duration
+                            logger.info(f"Added {len(embeddings)} embeddings from {source} ({duration:.1f}s)")
+                        else:
+                            logger.warning(f"Audio too short: {duration:.1f}s < {min_duration:.1f}s")
+                    else:
+                        logger.warning(f"No embeddings extracted from {source}")
+                else:
+                    logger.warning(f"Source not found: {source}")
+            
+            # Combine with existing embeddings if updating
+            if update and existing_profile:
+                existing_embeddings = [np.array(emb) for emb in existing_profile.get('embeddings', [])]
+                all_embeddings.extend(existing_embeddings)
+                
+                # Add existing sources
+                for source in existing_sources:
+                    if source not in processed_sources:
+                        processed_sources.append(source)
+                
+                # Add existing duration
+                if 'metadata' in existing_profile and 'total_duration_seconds' in existing_profile['metadata']:
+                    total_duration += existing_profile['metadata']['total_duration_seconds']
+            
+            # Check if we have enough embeddings
+            if not all_embeddings:
+                logger.error("No embeddings extracted from any source")
+                return None
+                
+            # Compute threshold from internal similarities
+            similarities = []
+            for i in range(min(len(all_embeddings), 100)):
+                for j in range(i + 1, min(len(all_embeddings), 100)):
+                    sim = self.compute_similarity(all_embeddings[i], all_embeddings[j])
+                    similarities.append(sim)
+            
+            threshold = compute_threshold_from_similarities(similarities)
+            
+            # Create metadata
+            metadata = {
+                'num_embeddings': len(all_embeddings),
+                'total_duration_seconds': total_duration,
+                'recommended_threshold': threshold,
+                'model': 'speechbrain/spkrec-ecapa-voxceleb'
+            }
+            
+            # Save profile
+            from datetime import datetime
+            profile_data = {
+                'name': name,
+                'embeddings': [emb.tolist() for emb in all_embeddings],
+                'threshold': threshold,
+                'recommended_threshold': threshold,
+                'created_at': datetime.now().isoformat(),
+                'metadata': metadata,
+                'audio_sources': processed_sources
+            }
+            
+            with open(profile_path, 'w') as f:
+                json.dump(profile_data, f, indent=2)
+            
+            logger.info(f"Saved voice profile for {name} with {len(all_embeddings)} embeddings")
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"Failed to enroll speaker: {e}")
+            import traceback
+            traceback.print_exc()
+            return None

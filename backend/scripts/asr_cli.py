@@ -43,7 +43,7 @@ def enroll_command(args):
         print(f"[SPEAKER] Enrolling speaker: {args.name}")
         print(f"[FILES] Audio sources: {len(audio_sources)}")
         
-        profile = enrollment.enroll_speaker(
+        profile_metadata = enrollment.enroll_speaker(
             name=args.name,
             audio_sources=audio_sources,
             overwrite=args.overwrite,
@@ -51,11 +51,11 @@ def enroll_command(args):
             min_duration=args.min_duration
         )
         
-        if profile:
+        if profile_metadata:
             print(f"[SUCCESS] Successfully enrolled speaker: {args.name}")
-            print(f"   [STATS] Embeddings: {profile.metadata['num_embeddings']}")
-            print(f"   [TIME]  Duration: {profile.metadata['total_duration_seconds']:.1f}s")
-            print(f"   [TARGET] Recommended threshold: {profile.metadata['recommended_threshold']:.3f}")
+            print(f"   [STATS] Embeddings: {profile_metadata['num_embeddings']}")
+            print(f"   [TIME]  Duration: {profile_metadata['total_duration_seconds']:.1f}s")
+            print(f"   [TARGET] Recommended threshold: {profile_metadata['recommended_threshold']:.3f}")
             return 0
         else:
             print(f"[ERROR] Failed to enroll speaker: {args.name}")
@@ -102,18 +102,37 @@ def voice_info_command(args):
         from backend.scripts.common.voice_enrollment import VoiceEnrollment
         
         enrollment = VoiceEnrollment(voices_dir=args.voices_dir)
-        profile = enrollment.load_profile(args.name)
+        profile_info = enrollment.get_profile_info(args.name)
         
-        if profile:
-            print(f"[SPEAKER] Speaker: {profile.name}")
-            print(f"[DATE] Created: {profile.created_at}")
-            print(f"[STATS] Embeddings: {profile.metadata['num_embeddings']}")
-            print(f"[TIME]  Total duration: {profile.metadata['total_duration_seconds']:.1f}s")
-            print(f"[TARGET] Recommended threshold: {profile.metadata['recommended_threshold']:.3f}")
-            print(f"[TOOL] Model: {profile.metadata['model']}")
-            print(f"[FILES] Audio sources ({len(profile.audio_sources)}):")
-            for i, source in enumerate(profile.audio_sources, 1):
-                print(f"   {i}. {source}")
+        if profile_info:
+            print(f"[SPEAKER] Speaker: {profile_info['name']}")
+            print(f"[DATE] Created: {profile_info.get('created_at', 'Unknown')}")
+            print(f"[STATS] Embeddings: {profile_info['embedding_count']}")
+            
+            # Load the full profile to get more details
+            try:
+                profile_path = os.path.join(args.voices_dir, f"{args.name.lower()}.json")
+                if os.path.exists(profile_path):
+                    with open(profile_path, 'r') as f:
+                        import json
+                        profile_data = json.load(f)
+                        
+                        # Get metadata safely
+                        metadata = profile_data.get('metadata', {})
+                        total_duration = metadata.get('total_duration_seconds', 0)
+                        recommended_threshold = metadata.get('recommended_threshold', 0.7)
+                        model = metadata.get('model', 'Unknown')
+                        audio_sources = profile_data.get('audio_sources', [])
+                        
+                        print(f"[TIME]  Total duration: {total_duration:.1f}s")
+                        print(f"[TARGET] Recommended threshold: {recommended_threshold:.3f}")
+                        print(f"[TOOL] Model: {model}")
+                        print(f"[FILES] Audio sources ({len(audio_sources)}):")            
+                        for i, source in enumerate(audio_sources, 1):
+                            print(f"   {i}. {source}")
+            except Exception as e:
+                print(f"[WARNING] Could not load detailed profile info: {e}")
+            
             return 0
         else:
             print(f"[ERROR] Speaker '{args.name}' not found.")
@@ -126,44 +145,78 @@ def voice_info_command(args):
 def transcribe_command(args):
     """Handle transcription command"""
     try:
-        from backend.scripts.common.enhanced_asr import EnhancedASR, EnhancedASRConfig
+        from backend.scripts.common.enhanced_asr import EnhancedASR
+        from backend.scripts.common.enhanced_asr_config import EnhancedASRConfig
         
         print(f"[MIC]  Starting enhanced ASR transcription: {args.audio_file}")
         
-        # Create config with CLI overrides
-        config = EnhancedASRConfig()
+        # Create config with CLI overrides using new system
+        overrides = {}
         
+        # New Whisper configuration options
+        if hasattr(args, 'model') and args.model:
+            overrides['model'] = args.model
+        elif args.whisper_model:  # Legacy compatibility
+            overrides['model'] = args.whisper_model
+        
+        if hasattr(args, 'device') and args.device:
+            overrides['device'] = args.device
+        if hasattr(args, 'compute_type') and args.compute_type:
+            overrides['compute_type'] = args.compute_type
+        if hasattr(args, 'beam_size') and args.beam_size:
+            overrides['beam_size'] = args.beam_size
+        if hasattr(args, 'chunk_length') and args.chunk_length:
+            overrides['chunk_length'] = args.chunk_length
+        if hasattr(args, 'disable_vad') and args.disable_vad:
+            overrides['vad_filter'] = False
+        if hasattr(args, 'language') and args.language:
+            overrides['language'] = args.language
+        if hasattr(args, 'task') and args.task:
+            overrides['task'] = args.task
+        if hasattr(args, 'domain_prompt') and args.domain_prompt:
+            overrides['initial_prompt'] = args.domain_prompt
+        if hasattr(args, 'disable_two_pass') and args.disable_two_pass:
+            overrides['enable_two_pass'] = False
+        if hasattr(args, 'disable_alignment') and args.disable_alignment:
+            overrides['enable_alignment'] = False
+        
+        # Legacy speaker ID options (maintain backward compatibility)
         if args.chaffee_min_sim is not None:
-            config.chaffee_min_sim = args.chaffee_min_sim
+            overrides['chaffee_min_sim'] = args.chaffee_min_sim
         if args.guest_min_sim is not None:
-            config.guest_min_sim = args.guest_min_sim
+            overrides['guest_min_sim'] = args.guest_min_sim
         if args.attr_margin is not None:
-            config.attr_margin = args.attr_margin
+            overrides['attr_margin'] = args.attr_margin
         if args.overlap_bonus is not None:
-            config.overlap_bonus = args.overlap_bonus
+            overrides['overlap_bonus'] = args.overlap_bonus
         if args.assume_monologue:
-            config.assume_monologue = True
+            overrides['assume_monologue'] = True
         if args.no_word_alignment:
-            config.align_words = False
+            overrides['align_words'] = False
         if args.unknown_label:
-            config.unknown_label = args.unknown_label
+            overrides['unknown_label'] = args.unknown_label
         if args.voices_dir:
-            config.voices_dir = args.voices_dir
-        if args.whisper_model:
-            config.whisper_model = args.whisper_model
+            overrides['voices_dir'] = args.voices_dir
         
-        print(f"[CONFIG]  Configuration:")
+        config = EnhancedASRConfig(**overrides)
+        
+        print(f"[CONFIG]  Enhanced ASR Configuration:")
+        print(f"   [MODEL]  Whisper model: {config.whisper.model}")
+        print(f"   [DEVICE] Device: {config.whisper.device}")
+        print(f"   [COMPUTE] Compute type: {config.whisper.compute_type}")
+        print(f"   [BEAM]   Beam size: {config.whisper.beam_size}")
+        print(f"   [QA]     Two-pass QA: {config.quality.enable_two_pass}")
         print(f"   [TARGET] Chaffee threshold: {config.chaffee_min_sim:.3f}")
         print(f"   [GUESTS] Guest threshold: {config.guest_min_sim:.3f}")
         print(f"   [MARGIN] Attribution margin: {config.attr_margin:.3f}")
-        print(f"   [SYNC] Assume monologue: {config.assume_monologue}")
-        print(f"   [NOTES] Word alignment: {config.align_words}")
+        print(f"   [SYNC]   Assume monologue: {config.assume_monologue}")
+        print(f"   [ALIGN]  Word alignment: {config.align_words}")
         
         # Initialize ASR system
         asr = EnhancedASR(config)
         
-        # Perform transcription
-        result = asr.transcribe_with_speaker_id(args.audio_file)
+        # Perform transcription using new run method
+        result = asr.run(args.audio_file)
         
         if not result:
             print("[ERROR] Transcription failed")
@@ -264,7 +317,7 @@ def convert_command(args):
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
-        description='Enhanced ASR System with Speaker Identification',
+        description='Enhanced ASR System with Large-v3 Whisper and Speaker Identification',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -277,11 +330,20 @@ Examples:
   # List enrolled speakers
   python asr_cli.py list-voices
   
-  # Transcribe audio with speaker identification
+  # Enhanced transcription with large-v3 model (default)
   python asr_cli.py transcribe interview.wav --output results.json
   
-  # Transcribe and generate SRT with speaker prefixes
+  # High-quality transcription with custom settings
+  python asr_cli.py transcribe lecture.wav --model large-v3 --beam-size 8 --chunk-length 45
+  
+  # Fast transcription for real-time processing
+  python asr_cli.py transcribe stream.wav --model small.en --compute-type int8 --disable-two-pass
+  
+  # Generate SRT with speaker prefixes
   python asr_cli.py transcribe interview.wav --format srt --output subtitles.srt
+  
+  # Custom domain prompt for better medical terminology
+  python asr_cli.py transcribe medical.wav --domain-prompt "ketogenesis statins cholesterol LDL"
   
   # Convert JSON results to different formats
   python asr_cli.py convert results.json --format vtt --output subtitles.vtt
@@ -310,22 +372,39 @@ Examples:
     info_parser = subparsers.add_parser('voice-info', help='Show speaker profile information')
     info_parser.add_argument('name', help='Speaker name')
     
-    # Transcribe command
-    transcribe_parser = subparsers.add_parser('transcribe', help='Transcribe audio with speaker identification')
+    # Transcribe command with enhanced options
+    transcribe_parser = subparsers.add_parser('transcribe', help='Transcribe audio with enhanced ASR and speaker identification')
     transcribe_parser.add_argument('audio_file', help='Path to audio file')
     transcribe_parser.add_argument('--output', '-o', help='Output file path')
     transcribe_parser.add_argument('--format', choices=['json', 'srt', 'vtt', 'text', 'summary'], 
                                  default='json', help='Output format')
     
-    # Transcription options
-    transcribe_parser.add_argument('--chaffee-min-sim', type=float, help='Minimum similarity for Chaffee')
-    transcribe_parser.add_argument('--guest-min-sim', type=float, help='Minimum similarity for guests')
+    # New enhanced ASR options
+    transcribe_parser.add_argument('--model', help='Whisper model (large-v3, large-v3-turbo, distil-large-v3, etc.)')
+    transcribe_parser.add_argument('--device', choices=['cuda', 'cpu'], help='Processing device')
+    transcribe_parser.add_argument('--compute-type', choices=['float16', 'int8_float16', 'int8'], 
+                                 help='Compute precision for GPU processing')
+    transcribe_parser.add_argument('--beam-size', type=int, help='Beam search size (default: 6 for quality)')
+    transcribe_parser.add_argument('--chunk-length', type=int, help='Audio chunk length in seconds (default: 45)')
+    transcribe_parser.add_argument('--disable-vad', action='store_true', help='Disable voice activity detection')
+    transcribe_parser.add_argument('--language', default='en', help='Audio language (default: en)')
+    transcribe_parser.add_argument('--task', choices=['transcribe', 'translate'], default='transcribe', 
+                                 help='Whisper task (default: transcribe)')
+    transcribe_parser.add_argument('--domain-prompt', help='Domain-specific prompt for better accuracy')
+    transcribe_parser.add_argument('--disable-two-pass', action='store_true', 
+                                 help='Disable two-pass quality assurance for low-confidence segments')
+    transcribe_parser.add_argument('--disable-alignment', action='store_true', 
+                                 help='Disable word-level alignment (faster but less precise timing)')
+    
+    # Legacy speaker identification options (backward compatibility)
+    transcribe_parser.add_argument('--chaffee-min-sim', type=float, help='Minimum similarity for Chaffee attribution')
+    transcribe_parser.add_argument('--guest-min-sim', type=float, help='Minimum similarity for guest attribution')
     transcribe_parser.add_argument('--attr-margin', type=float, help='Attribution margin threshold')
     transcribe_parser.add_argument('--overlap-bonus', type=float, help='Overlap threshold bonus')
-    transcribe_parser.add_argument('--assume-monologue', action='store_true', help='Assume monologue (Chaffee only)')
-    transcribe_parser.add_argument('--no-word-alignment', action='store_true', help='Disable word alignment')
+    transcribe_parser.add_argument('--assume-monologue', action='store_true', help='Assume monologue (Chaffee only) for faster processing')
+    transcribe_parser.add_argument('--no-word-alignment', action='store_true', help='Disable word alignment (legacy, use --disable-alignment instead)')
     transcribe_parser.add_argument('--unknown-label', help='Label for unknown speakers')
-    transcribe_parser.add_argument('--whisper-model', help='Whisper model to use')
+    transcribe_parser.add_argument('--whisper-model', help='Whisper model to use (legacy, use --model instead)')
     
     # Output options
     transcribe_parser.add_argument('--no-speaker-prefix', action='store_true', help='Disable speaker prefixes')
