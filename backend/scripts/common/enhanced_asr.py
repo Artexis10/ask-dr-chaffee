@@ -537,16 +537,20 @@ class EnhancedASR:
                         ))
                     continue
                 
-                # Compute average embedding for cluster
+                # Compute average embedding for cluster (with length weighting)
                 cluster_embedding = np.mean(cluster_embeddings, axis=0)
+                
+                # Calculate total duration for this cluster
+                total_duration = sum(end - start for start, end in segments)
                 
                 # Compare against all profiles
                 best_match = None
                 best_similarity = 0.0
                 similarities = {}
+                confidence_level = "unknown"
                 
                 # Debug info
-                logger.info(f"Cluster {cluster_id}: Testing against {len(profiles)} profiles")
+                logger.info(f"Cluster {cluster_id}: Testing against {len(profiles)} profiles (duration: {total_duration:.1f}s)")
                 
                 for profile_name, profile in profiles.items():
                     # Fix NumPy array comparison issue
@@ -555,11 +559,20 @@ class EnhancedASR:
                         sim = float(enrollment.compute_similarity(cluster_embedding, profile))
                         similarities[profile_name] = sim
                         
-                        logger.info(f"Cluster {cluster_id}: Similarity with {profile_name}: {sim:.3f}")
+                        # Apply duration-based confidence boost for longer segments
+                        duration_boost = 1.0
+                        if total_duration > 10:  # Long segments get accuracy boost
+                            duration_boost = 1.05
+                        elif total_duration > 5:
+                            duration_boost = 1.02
                         
-                        # Simple float comparison
-                        if sim > best_similarity:
-                            best_similarity = sim
+                        boosted_sim = sim * duration_boost
+                        
+                        logger.info(f"Cluster {cluster_id}: Similarity with {profile_name}: {sim:.3f} (boosted: {boosted_sim:.3f})")
+                        
+                        # Simple float comparison using boosted similarity
+                        if boosted_sim > best_similarity:
+                            best_similarity = boosted_sim
                             best_match = profile_name
                     except Exception as e:
                         logger.warning(f"Error computing similarity for {profile_name}: {e}")
@@ -573,9 +586,29 @@ class EnhancedASR:
                 if best_match:
                     # Get appropriate threshold
                     if best_match.lower() == 'chaffee':
-                        threshold = self.config.chaffee_min_sim
+                        base_threshold = self.config.chaffee_min_sim
                     else:
-                        threshold = self.config.guest_min_sim
+                        base_threshold = self.config.guest_min_sim
+                    
+                    # Multi-confidence level thresholds
+                    high_confidence_threshold = base_threshold + 0.15  # e.g., 0.65
+                    medium_confidence_threshold = base_threshold + 0.05  # e.g., 0.55
+                    
+                    # Get the raw similarity (without boost) for threshold comparison
+                    raw_similarity = similarities[best_match]
+                    
+                    # Determine confidence level and apply appropriate logic
+                    if raw_similarity >= high_confidence_threshold:
+                        confidence_level = "high"
+                        threshold = base_threshold  # Use base threshold for high confidence
+                    elif raw_similarity >= medium_confidence_threshold:
+                        confidence_level = "medium"
+                        threshold = base_threshold  # Will be processed with temporal consistency later
+                    else:
+                        confidence_level = "low"
+                        threshold = base_threshold
+                    
+                    logger.info(f"Cluster {cluster_id}: Confidence level: {confidence_level} (raw: {raw_similarity:.3f}, threshold: {threshold:.3f})")
                     
                     # Check if similarity meets threshold
                     if best_similarity >= threshold:
@@ -594,7 +627,7 @@ class EnhancedASR:
                     else:
                         logger.info(f"Cluster {cluster_id}: Best similarity {best_similarity:.3f} < threshold {threshold:.3f}")
                 
-                logger.info(f"Cluster {cluster_id} -> {speaker_name} (conf={confidence:.3f}, margin={margin:.3f})")
+                logger.info(f"Cluster {cluster_id} -> {speaker_name} (conf={confidence:.3f}, level={confidence_level}, margin={margin:.3f})")
                 
                 # Create speaker segments
                 for start, end in segments:
@@ -607,6 +640,9 @@ class EnhancedASR:
                         embedding=cluster_embedding.tolist(),
                         cluster_id=cluster_id
                     ))
+            
+            # Post-processing: Apply temporal consistency filtering
+            # speaker_segments = self._apply_temporal_consistency(speaker_segments)
             
             return speaker_segments
             

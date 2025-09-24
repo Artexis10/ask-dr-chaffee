@@ -1,0 +1,14 @@
+# Sample video list for batch ingestion
+# Format: One video ID per line, or full YouTube URLs
+# Lines starting with # are comments
+
+# Example entries:
+RcBwvdVEAr8
+M29ud-nES_g  
+hsclCXRHb90
+
+# You can also use full URLs:
+# https://www.youtube.com/watch?v=RcBwvdVEAr8
+# https://youtu.be/M29ud-nES_g
+
+# Add your 50 videos here, one per line
