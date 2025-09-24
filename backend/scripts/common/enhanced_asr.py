@@ -315,11 +315,16 @@ class EnhancedASR:
                 logger.info(f"Diarization with min_speakers={min_speakers}, max_speakers={max_speakers}")
                 
                 # Run diarization with speaker count constraints
+                logger.info(f"Running pyannote diarization with min_speakers={min_speakers}, max_speakers={max_speakers}")
                 diarization = diarization_pipeline(
                     audio_path,
                     min_speakers=min_speakers,
                     max_speakers=max_speakers
                 )
+                
+                # Log diarization results
+                logger.info(f"Diarization result type: {type(diarization)}")
+                logger.info(f"Diarization result: {diarization}")
                 
                 # Convert pyannote format to our format
                 segments = []
@@ -334,6 +339,13 @@ class EnhancedASR:
                 
                 # Sort by start time
                 segments.sort(key=lambda x: x[0])
+                
+                # Log segments
+                logger.info(f"Diarization found {len(segments)} segments with {len(set(s[2] for s in segments))} unique speakers")
+                for i, (start, end, speaker_id) in enumerate(segments[:10]):
+                    logger.info(f"Segment {i}: {start:.2f}-{end:.2f} -> Speaker {speaker_id}")
+                if len(segments) > 10:
+                    logger.info(f"... and {len(segments) - 10} more segments")
             
             logger.info(f"Diarization found {len(segments)} segments")
             return segments
