@@ -307,12 +307,30 @@ class EnhancedASR:
             else:
                 # pyannote diarization
                 logger.info("Using pyannote diarization")
-                diarization = diarization_pipeline(audio_path)
+                
+                # Set min and max speakers if configured
+                min_speakers = self.config.alignment.min_speakers or 2  # Default to at least 2 speakers
+                max_speakers = self.config.alignment.max_speakers
+                
+                logger.info(f"Diarization with min_speakers={min_speakers}, max_speakers={max_speakers}")
+                
+                # Run diarization with speaker count constraints
+                diarization = diarization_pipeline(
+                    audio_path,
+                    min_speakers=min_speakers,
+                    max_speakers=max_speakers
+                )
                 
                 # Convert pyannote format to our format
                 segments = []
                 for turn, _, speaker in diarization.itertracks(yield_label=True):
-                    segments.append((turn.start, turn.end, int(speaker.split('_')[1])))
+                    # Extract speaker ID from pyannote format (e.g., 'SPEAKER_0' -> 0)
+                    try:
+                        speaker_id = int(speaker.split('_')[1])
+                        segments.append((turn.start, turn.end, speaker_id))
+                    except (ValueError, IndexError):
+                        logger.warning(f"Couldn't parse speaker ID from {speaker}, using 0")
+                        segments.append((turn.start, turn.end, 0))
                 
                 # Sort by start time
                 segments.sort(key=lambda x: x[0])
