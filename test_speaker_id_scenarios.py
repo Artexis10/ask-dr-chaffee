@@ -103,9 +103,9 @@ def test_speaker_id_scenarios(video_ids: List[str], output_dir: str = "test_resu
             # Extract speaker stats
             speaker_stats = {
                 "video_id": video_id,
-                "chaffee_percentage": result.metadata.get("chaffee_percentage", 0),
-                "speaker_distribution": result.metadata.get("speaker_distribution", {}),
-                "segments_count": result.metadata.get("segments_count", 0)
+                "chaffee_percentage": result.metadata.get("summary", {}).get("chaffee_percentage", 0),
+                "speaker_distribution": result.metadata.get("summary", {}).get("speaker_time_percentages", {}),
+                "segments_count": len(result.segments) if hasattr(result, 'segments') else 0
             }
             
             results.append(speaker_stats)
@@ -126,8 +126,15 @@ def test_speaker_id_scenarios(video_ids: List[str], output_dir: str = "test_resu
         print("\n=== Overall Results ===")
         for result in results:
             print(f"Video {result['video_id']}:")
-            print(f"  Chaffee: {result['chaffee_percentage']}%")
-            print(f"  Distribution: {result['speaker_distribution']}")
+            # Convert numpy values to regular floats for cleaner output
+            chaffee_pct = float(result['chaffee_percentage']) if result['chaffee_percentage'] else 0.0
+            print(f"  Chaffee: {chaffee_pct:.1f}%")
+            
+            # Convert speaker distribution to regular floats
+            clean_dist = {}
+            for speaker, pct in result['speaker_distribution'].items():
+                clean_dist[speaker] = float(pct) if pct else 0.0
+            print(f"  Distribution: {clean_dist}")
             print(f"  Segments: {result['segments_count']}")
         
         print(f"\nDetailed results saved to: {output_dir}")
