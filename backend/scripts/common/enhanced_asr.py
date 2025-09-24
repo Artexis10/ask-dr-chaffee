@@ -3,14 +3,14 @@
 Enhanced ASR system with speaker identification and diarization
 Integrates faster-whisper → WhisperX → pyannote pipeline with voice profiles
 """
-
 import os
 import json
 import logging
 import tempfile
+import time
 import numpy as np
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Optional, Dict, Any, Tuple, Union
 from dataclasses import dataclass, asdict
 import torch
 import librosa
@@ -464,26 +464,64 @@ class EnhancedASR:
                         ))
                     continue
                 
-                # Extract embeddings for this cluster (sample a few segments)
+                # Extract embeddings for this cluster (combine segments for better quality)
                 cluster_embeddings = []
-                sample_segments = segments[:3]  # Sample first 3 segments
                 
-                for start, end in sample_segments:
-                    try:
-                        # Extract audio segment
-                        audio, sr = librosa.load(audio_path, sr=16000, offset=start, duration=end-start)
-                        
-                        if len(audio) > sr:  # At least 1 second
-                            # Save to temp file for embedding extraction
-                            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
-                                sf.write(tmp_file.name, audio, sr)
-                                embeddings = enrollment._extract_embeddings_from_audio(tmp_file.name)
-                                if embeddings:  # Check if embeddings were extracted
-                                    cluster_embeddings.extend(embeddings)
-                                os.unlink(tmp_file.name)
+                # Combine segments to get at least 5 seconds of audio for embedding extraction
+                combined_audio = []
+                total_duration = 0
+                segments_used = 0
+                
+                for start, end in segments:
+                    if segments_used >= 5:  # Don't use too many segments
+                        break
                     
+                    duration = end - start
+                    if duration >= 0.5:  # Only use segments >= 0.5 seconds
+                        try:
+                            audio, sr = librosa.load(audio_path, sr=16000, offset=start, duration=duration)
+                            if len(audio) > sr * 0.5:  # At least 0.5 seconds of actual audio
+                                combined_audio.extend(audio)
+                                total_duration += duration
+                                segments_used += 1
+                                
+                                # Stop when we have enough audio
+                                if total_duration >= 5.0 or len(combined_audio) >= sr * 5:
+                                    break
+                        except Exception as e:
+                            logger.warning(f"Failed to load segment {start}-{end}: {e}")
+                            continue
+                
+                # Process combined audio if we have enough
+                if len(combined_audio) >= sr * 2:  # At least 2 seconds total
+                    # Save to temp file for embedding extraction
+                    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+                        tmp_path = tmp_file.name
+                    
+                    try:
+                        combined_audio_array = np.array(combined_audio, dtype=np.float32)
+                        sf.write(tmp_path, combined_audio_array, sr)
+                        # Add small delay to ensure file is written
+                        time.sleep(0.1)
+                        
+                        logger.info(f"Cluster {cluster_id}: Extracting embeddings from {total_duration:.1f}s of combined audio")
+                        embeddings = enrollment._extract_embeddings_from_audio(tmp_path)
+                        if embeddings:  # Check if embeddings were extracted
+                            cluster_embeddings.extend(embeddings)
+                            logger.info(f"Cluster {cluster_id}: Successfully extracted {len(embeddings)} embeddings")
+                        else:
+                            logger.warning(f"Cluster {cluster_id}: No embeddings extracted from combined audio")
                     except Exception as e:
-                        logger.warning(f"Failed to extract embedding for cluster {cluster_id} segment {start}-{end}: {e}")
+                        logger.warning(f"Failed to extract embeddings for cluster {cluster_id}: {e}")
+                    finally:
+                        # Ensure file cleanup even if extraction fails
+                        try:
+                            if os.path.exists(tmp_path):
+                                os.unlink(tmp_path)
+                        except:
+                            pass  # Ignore cleanup errors
+                else:
+                    logger.warning(f"Cluster {cluster_id}: Not enough audio ({len(combined_audio)/sr:.1f}s) for embedding extraction")
                 
                 if not cluster_embeddings:
                     logger.warning(f"No embeddings extracted for cluster {cluster_id}")
