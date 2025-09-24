@@ -118,3 +118,19 @@ test-endpoint.js
 test-json-parsing.js
 frontend/src/pages/api/milk-answer.ts
 frontend/src/pages/api/test-answer.ts
+
+# Debug and test files
+debug_*.py
+check_*.py
+fix_*.py
+test_*.py
+test_results/
+
+# Voice profiles and models
+voices/
+pretrained_models/
+
+# Documentation and reports
+final_report.md
+poc_report.md
+generate_report.py
