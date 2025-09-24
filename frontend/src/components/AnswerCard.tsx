@@ -6,17 +6,6 @@ interface Citation {
   published_at: string;
 }
 
-interface SourceClip {
-  id: number;
-  video_id: string;
-  title: string;
-  text: string;
-  start_time_seconds: number;
-  end_time_seconds: number;
-  published_at: string;
-  source_type: string;
-  similarity?: number;
-}
 
 interface AnswerData {
   answer_md: string;
@@ -26,7 +15,6 @@ interface AnswerData {
   used_chunk_ids: string[];
   cached?: boolean;
   cache_date?: string;
-  source_clips?: SourceClip[];
 }
 
 interface AnswerCardProps {
@@ -104,7 +92,7 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink, onC
           <ul>
             <li>Complex medical questions may take longer to process</li>
             <li>Answers are generated from Dr. Chaffee's video content</li>
-            <li>You'll see supporting video clips once the answer is ready</li>
+            <li>Citations will link directly to the relevant video timestamps</li>
           </ul>
         </div>
         
@@ -448,18 +436,36 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink, onC
 
       if (citation) {
         parts.push(
-          <span
+          <button
             key={match.index}
             className="citation-chip"
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('Playing clip:', videoId, 'at', citation.t_start_s, 'seconds');
+              
+              // Visual feedback
+              const button = e.currentTarget;
+              button.style.transform = 'scale(0.95)';
+              setTimeout(() => {
+                button.style.transform = '';
+              }, 150);
+              
               if (onPlayClip) {
                 onPlayClip(videoId, citation.t_start_s);
+                // Show user feedback that clip is loading
+                console.log(`🎥 Loading clip from ${videoId} at ${timestamp}`);
+              } else {
+                console.warn('Video player not available');
+                // Fallback: open YouTube video directly
+                window.open(`https://www.youtube.com/watch?v=${videoId}&t=${citation.t_start_s}s`, '_blank');
               }
             }}
-            title={`Play at ${timestamp} • ${citation.published_at}`}
+            title={`Click to play at ${timestamp}`}
+            type="button"
           >
-            clip {timestamp}
-          </span>
+            {timestamp}
+          </button>
         );
       } else {
         parts.push(`[${match[1]}@${match[2]}]`);
@@ -557,52 +563,6 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink, onC
         )}
       </div>
 
-      {/* Source Clips Section */}
-      {answer.source_clips && answer.source_clips.length > 0 && (
-        <div className="source-clips-section">
-          <div className="section-header">
-            <h4>📹 Source Clips Used</h4>
-            <span className="clips-count">{answer.source_clips.length} clips</span>
-          </div>
-          <div className="source-clips-grid">
-            {answer.source_clips.map((clip, index) => (
-              <div key={`${clip.video_id}-${clip.start_time_seconds}`} className="source-clip-card">
-                <div className="clip-header">
-                  <div className="clip-info">
-                    <button
-                      className="play-clip-btn"
-                      onClick={() => onPlayClip && onPlayClip(clip.video_id, clip.start_time_seconds)}
-                      title="Play this clip"
-                    >
-                      ▶️ {formatTimestamp(clip.start_time_seconds)}
-                    </button>
-                    <span className="clip-date">{formatDate(clip.published_at)}</span>
-                    {clip.similarity && (
-                      <span className="similarity-score" title="Relevance score">
-                        {Math.round(clip.similarity * 100)}%
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    className="copy-clip-link"
-                    onClick={() => {
-                      const url = `https://youtube.com/watch?v=${clip.video_id}&t=${Math.floor(clip.start_time_seconds)}s`;
-                      onCopyLink && onCopyLink(url);
-                    }}
-                    title="Copy YouTube link to this timestamp"
-                  >
-                    🔗
-                  </button>
-                </div>
-                <div className="clip-content">
-                  <h5 className="clip-title">{clip.title}</h5>
-                  <p className="clip-text">{clip.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="answer-footer">
         <button 
@@ -776,25 +736,44 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink, onC
         }
 
         .citation-chip {
-          background: #eff6ff;
-          color: #1d4ed8;
-          border: 1px solid #bfdbfe;
-          padding: 2px 8px;
-          border-radius: 12px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          display: inline-block;
-          margin: 0 2px;
-          text-decoration: none;
+          background: linear-gradient(135deg, #f0f9ff, #e0f2fe) !important;
+          color: #0369a1 !important;
+          border: 1px solid #7dd3fc !important;
+          padding: 2px 8px !important;
+          border-radius: 12px !important;
+          font-size: 0.7rem !important;
+          font-weight: 500 !important;
+          font-family: inherit !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          margin: 0 3px !important;
+          text-decoration: none !important;
+          user-select: none !important;
+          position: relative !important;
+          top: -1px !important;
+          pointer-events: auto !important;
+          z-index: 10 !important;
+          outline: none !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
         }
 
         .citation-chip:hover {
-          background: #dbeafe;
-          border-color: #93c5fd;
-          transform: translateY(-1px);
-          box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+          background: linear-gradient(135deg, #bae6fd, #93c5fd) !important;
+          border-color: #0284c7 !important;
+          transform: translateY(-2px) !important;
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25) !important;
+        }
+        
+        .citation-chip:active {
+          transform: translateY(0) !important;
+          box-shadow: 0 1px 4px rgba(59, 130, 246, 0.2) !important;
+        }
+        
+        .citation-chip:focus {
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+          outline: none !important;
         }
 
         .answer-notes {
@@ -949,148 +928,6 @@ export function AnswerCard({ answer, loading, error, onPlayClip, onCopyLink, onC
           font-weight: 500;
         }
 
-        .source-clips-section {
-          margin: 32px 0;
-          padding: 24px 0;
-          border-top: 1px solid #e5e7eb;
-        }
-
-        .section-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-
-        .section-header h4 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 700;
-          color: #111827;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .clips-count {
-          background: #f3f4f6;
-          color: #6b7280;
-          padding: 6px 12px;
-          border-radius: 16px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .source-clips-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 16px;
-        }
-
-        .source-clip-card {
-          background: #f9fafb;
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          padding: 20px;
-          transition: all 0.2s ease;
-        }
-
-        .source-clip-card:hover {
-          background: #f3f4f6;
-          border-color: #d1d5db;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-
-        .clip-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 16px;
-        }
-
-        .clip-info {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .play-clip-btn {
-          background: #10b981;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          padding: 8px 16px;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .play-clip-btn:hover {
-          background: #059669;
-          transform: translateY(-1px);
-          box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);
-        }
-
-        .clip-date {
-          font-size: 12px;
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        .similarity-score {
-          background: #dbeafe;
-          color: #1d4ed8;
-          padding: 4px 8px;
-          border-radius: 12px;
-          font-size: 11px;
-          font-weight: 600;
-        }
-
-        .copy-clip-link {
-          background: #e5e7eb;
-          color: #6b7280;
-          border: none;
-          border-radius: 8px;
-          padding: 8px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .copy-clip-link:hover {
-          background: #d1d5db;
-          color: #374151;
-          transform: translateY(-1px);
-        }
-
-        .clip-content {
-          text-align: left;
-        }
-
-        .clip-title {
-          margin: 0 0 8px 0;
-          font-size: 15px;
-          font-weight: 600;
-          color: #374151;
-          line-height: 1.4;
-        }
-
-        .clip-text {
-          margin: 0;
-          font-size: 14px;
-          line-height: 1.6;
-          color: #6b7280;
-        }
-
-        @media (min-width: 768px) {
-          .source-clips-grid {
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-          }
-        }
 
         @media (max-width: 768px) {
           .modern-answer-card {

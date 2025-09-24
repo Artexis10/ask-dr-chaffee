@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 // Import our RAG functionality
 type RAGResponse = {
@@ -229,7 +229,23 @@ async function callSummarizer(query: string, excerpts: ChunkResult[], style: str
   const targetWords = style === 'detailed' ? '600–1200' : '300–600';
   const maxTokens = style === 'detailed' ? 2500 : 1500;
   
-  const systemPrompt = `You are compiling a long-form synthesis of Dr. Anthony Chaffee's views. Ground EVERYTHING strictly in the provided transcript excerpts. Do NOT use outside knowledge or speculation. Write a cohesive, well-structured markdown answer that synthesizes across clips. Use ## section headers for organization. Cite with inline timestamps like [video_id@mm:ss] at the END of sentences/clauses they support. Prefer newer material when consolidating conflicting statements. If views evolved, state the nuance and cite both. Tone: neutral narrator summarizing Chaffee's position; do not speak as him.`;
+  const systemPrompt = `You are compiling a comprehensive synthesis of Dr. Anthony Chaffee's views. Your task is to create a clear, coherent, and accurate representation of his perspective on the queried topic.
+
+CORE PRINCIPLES:
+1. Ground EVERYTHING strictly in the provided transcript excerpts - do NOT use outside knowledge or speculation
+2. Create a cohesive narrative that shows the evolution of Dr. Chaffee's thinking over time
+3. Distinguish clearly between his personal experiences and his general recommendations
+4. Connect specific views to his broader health and nutrition philosophy
+5. Present nuanced perspectives rather than oversimplified statements
+6. Maintain a neutral, informative tone throughout - summarize Chaffee's position without speaking as him
+
+STRUCTURAL REQUIREMENTS:
+1. Organize content with clear ## section headers that create a logical flow
+2. Use precise inline citations [video_id@mm:ss] at the END of sentences they support
+3. When views have evolved, explicitly state this progression with appropriate citations
+4. Include relevant historical, cultural, or scientific context that Dr. Chaffee mentions
+5. Address both benefits and potential concerns/limitations he discusses about the topic
+6. Emphasize individual variation and personalization when he acknowledges these factors`;
   
   const userPrompt = `You are compiling a long-form synthesis of Dr. Anthony Chaffee's views.
 
@@ -247,6 +263,13 @@ Instructions:
 - Prefer newer material when consolidating conflicting statements; if views evolved, state the nuance and cite both.
 - If a point is unclear or missing in the excerpts, say so briefly (e.g., "not addressed in provided excerpts").
 - Tone: neutral narrator summarizing Chaffee's position; do not speak as him.
+- Create a cohesive narrative that shows the evolution of Dr. Chaffee's thinking over time.
+- Distinguish clearly between his personal experiences and his general recommendations.
+- Connect specific views to his broader health and nutrition philosophy.
+- Present nuanced perspectives rather than oversimplified statements.
+- Include relevant historical, cultural, or scientific context that Dr. Chaffee mentions.
+- Address both benefits and potential concerns/limitations he discusses about the topic.
+- Emphasize individual variation and personalization when he acknowledges these factors.
 
 Output MUST be valid JSON with this schema:
 {
@@ -296,7 +319,17 @@ Validation requirements:
     }
 
     try {
-      const parsed = JSON.parse(content);
+      // Extract JSON from the response, handling potential code fences
+      let jsonContent = content;
+      
+      // Check if content is wrapped in code fences and extract just the JSON part
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]+?)\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        jsonContent = jsonMatch[1].trim();
+      }
+      
+      console.log('Attempting to parse JSON content');
+      const parsed = JSON.parse(jsonContent);
       console.log('Successfully generated long-form synthesis using OpenAI API');
       return parsed;
     } catch (parseError) {
@@ -311,7 +344,7 @@ Validation requirements:
 
 
 // Validate citations and compute confidence
-function validateAndProcessResponse(llmResponse: LLMResponse, chunks: ChunkResult[]): AnswerResponse {
+function validateAndProcessResponse(llmResponse: LLMResponse, chunks: ChunkResult[], query?: string): AnswerResponse {
   const chunkMap = new Map<string, ChunkResult>();
   chunks.forEach(chunk => {
     const key = `${chunk.video_id}@${formatTimestamp(chunk.start_time_seconds)}`;
@@ -346,6 +379,18 @@ function validateAndProcessResponse(llmResponse: LLMResponse, chunks: ChunkResul
   // Adjust based on chunk quality (average similarity)
   const avgSimilarity = chunks.reduce((sum, chunk) => sum + chunk.similarity, 0) / chunks.length;
   confidence *= Math.min(1.0, avgSimilarity * 2); // Scale similarity to confidence
+  
+  // Apply confidence boost for well-structured answers with good coverage
+  if (chunks.length >= 5 && citationCoverage >= 0.8) {
+    // If we have good coverage and enough chunks, boost confidence
+    confidence = Math.min(1.0, confidence * 1.15); // 15% boost for well-sourced answers
+  }
+  
+  // Additional boost for answers with high-quality excerpts
+  const highQualityExcerpts = chunks.filter(chunk => chunk.similarity > 0.7).length;
+  if (highQualityExcerpts >= 3) {
+    confidence = Math.min(1.0, confidence * 1.1); // 10% boost for high-quality excerpts
+  }
   
   // Adjust based on recency (boost for newer content within last 2 years)
   const now = new Date();
@@ -541,7 +586,7 @@ export default async function handler(
 
     // Generate and validate answer
     const llmResponse = await callSummarizer(query, clusteredChunks, style);
-    const validatedResponse = validateAndProcessResponse(llmResponse, clusteredChunks);
+    const validatedResponse = validateAndProcessResponse(llmResponse, clusteredChunks, query);
 
     // Cache the result (implement caching logic here when ready)
     
