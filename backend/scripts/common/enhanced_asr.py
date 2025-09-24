@@ -293,10 +293,29 @@ class EnhancedASR:
     def _perform_diarization(self, audio_path: str) -> Optional[List[Tuple[float, float, int]]]:
         """Perform speaker diarization"""
         try:
-            from .simple_diarization import simple_energy_based_diarization
+            # Get the configured diarization pipeline
+            diarization_pipeline = self._get_diarization_pipeline()
             
             logger.info("Performing speaker diarization...")
-            segments = simple_energy_based_diarization(audio_path)
+            
+            # Check if we're using simple diarization or pyannote
+            use_simple = os.getenv('USE_SIMPLE_DIARIZATION', 'true').lower() == 'true'
+            
+            if use_simple:
+                # Simple energy-based diarization
+                segments = diarization_pipeline(audio_path)
+            else:
+                # pyannote diarization
+                logger.info("Using pyannote diarization")
+                diarization = diarization_pipeline(audio_path)
+                
+                # Convert pyannote format to our format
+                segments = []
+                for turn, _, speaker in diarization.itertracks(yield_label=True):
+                    segments.append((turn.start, turn.end, int(speaker.split('_')[1])))
+                
+                # Sort by start time
+                segments.sort(key=lambda x: x[0])
             
             logger.info(f"Diarization found {len(segments)} segments")
             return segments
