@@ -134,3 +134,11 @@ pretrained_models/
 final_report.md
 poc_report.md
 generate_report.py
+
+# Git configuration
+.gitmessage
+setup_git_template.bat
+
+# Benchmarking and examples
+backend/scripts/bench_asr.py
+backend/scripts/examples/
