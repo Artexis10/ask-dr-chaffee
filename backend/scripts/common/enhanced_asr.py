@@ -155,13 +155,27 @@ class EnhancedASR:
                     from pyannote.audio import Pipeline
                     
                     logger.info(f"Loading diarization pipeline: {self.config.diarization_model}")
-                    self._diarization_pipeline = Pipeline.from_pretrained(
-                        self.config.diarization_model,
-                        use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN')  # Required for some models
-                    )
-                    
-                    if self._device == "cuda":
-                        self._diarization_pipeline = self._diarization_pipeline.to(torch.device("cuda"))
+                    try:
+                        # Try to load the model with explicit cache path
+                        cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+                                                "pretrained_models")
+                        os.makedirs(cache_dir, exist_ok=True)
+                        
+                        logger.info(f"Using cache directory: {cache_dir}")
+                        
+                        self._diarization_pipeline = Pipeline.from_pretrained(
+                            self.config.diarization_model,
+                            use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN'),  # Required for some models
+                            cache_dir=cache_dir
+                        )
+                        
+                        if self._device == "cuda":
+                            self._diarization_pipeline = self._diarization_pipeline.to(torch.device("cuda"))
+                            
+                        logger.info("Successfully loaded pyannote diarization pipeline")
+                    except Exception as e:
+                        logger.error(f"Failed to load pyannote pipeline: {e}")
+                        raise
                 
             except ImportError:
                 raise ImportError("pyannote.audio not available. Install with: pip install pyannote.audio")
