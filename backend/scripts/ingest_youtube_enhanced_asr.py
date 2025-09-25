@@ -156,12 +156,50 @@ class EnhancedYouTubeIngestion:
                     logger.warning(f"Failed to generate embedding for chunk {chunk['chunk_index']}: {e}")
                     chunk['embedding'] = None
             
-            # Prepare source metadata
+            # Get essential video info using yt-dlp
+            try:
+                import subprocess
+                result = subprocess.run([
+                    'yt-dlp', '--print', 
+                    '%(title)s|||%(duration)s|||%(upload_date)s|||%(view_count)s',
+                    video_id
+                ], capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0:
+                    parts = result.stdout.strip().split('|||')
+                    real_title = parts[0] if len(parts) > 0 else f"YouTube Video {video_id}"
+                    duration = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+                    upload_date = parts[2] if len(parts) > 2 and parts[2] != 'NA' else None
+                    view_count = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+                else:
+                    real_title = f"YouTube Video {video_id}"
+                    duration = 0
+                    upload_date = None
+                    view_count = 0
+            except:
+                real_title = f"YouTube Video {video_id}"
+                duration = 0
+                upload_date = None
+                view_count = 0
+            
+            # Parse upload date
+            published_at = None
+            if upload_date:
+                try:
+                    from datetime import datetime
+                    published_at = datetime.strptime(upload_date, '%Y%m%d')
+                except:
+                    pass
+
+            # Prepare source metadata with processing timestamp
+            from datetime import datetime
             source_metadata = {
                 'video_id': video_id,
                 'method': method,
                 'segments_count': len(segments),
-                'processing_timestamp': metadata.get('timestamp'),
+                'processing_timestamp': datetime.now().isoformat(),
+                'duration_seconds': duration,
+                'view_count': view_count,
             }
             
             # Add Enhanced ASR metadata
@@ -172,7 +210,11 @@ class EnhancedYouTubeIngestion:
                     'chaffee_percentage': metadata.get('chaffee_percentage', 0.0),
                     'speaker_distribution': metadata.get('speaker_distribution', {}),
                     'confidence_stats': metadata.get('confidence_stats', {}),
-                    'monologue_detected': method.endswith('_monologue')
+                    'similarity_stats': metadata.get('similarity_stats', {}),
+                    'threshold_used': metadata.get('threshold_used', 0.50),
+                    'segments_with_high_confidence': metadata.get('high_confidence_segments', 0),
+                    'monologue_detected': method.endswith('_monologue'),
+                    'total_speakers_detected': len(metadata.get('speaker_distribution', {}))
                 })
             
             # Upsert to database
@@ -181,13 +223,13 @@ class EnhancedYouTubeIngestion:
             # Create source entry
             from backend.scripts.common.list_videos_yt_dlp import VideoInfo
             
-            # Create a VideoInfo object with the required fields
+            # Create a VideoInfo object with essential fields
             video_info = VideoInfo(
                 video_id=video_id,
-                title=f"YouTube Video {video_id}",
-                description="",
-                duration_s=0,  # We don't have this info yet
-                published_at=None
+                title=real_title,
+                duration_s=duration,
+                published_at=published_at,
+                view_count=view_count
             )
             
             # Use 'whisper' as provenance since Enhanced ASR is AI transcription

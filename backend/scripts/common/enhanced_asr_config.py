@@ -182,9 +182,9 @@ class EnhancedASRConfig:
         self.alignment = AlignmentConfig.from_env(**overrides)
         
         # Existing speaker identification config (backward compatibility)
-        self.chaffee_min_sim = float(os.getenv('CHAFFEE_MIN_SIM', '0.82'))
-        self.guest_min_sim = float(os.getenv('GUEST_MIN_SIM', '0.82'))
-        self.attr_margin = float(os.getenv('ATTR_MARGIN', '0.05'))
+        self.chaffee_min_sim = float(overrides.get('chaffee_min_sim', os.getenv('CHAFFEE_MIN_SIM', '0.82')))
+        self.guest_min_sim = float(overrides.get('guest_min_sim', os.getenv('GUEST_MIN_SIM', '0.82')))
+        self.attr_margin = float(overrides.get('attr_margin', os.getenv('ATTR_MARGIN', '0.05')))
         self.overlap_bonus = float(os.getenv('OVERLAP_BONUS', '0.03'))
         
         # Processing options
