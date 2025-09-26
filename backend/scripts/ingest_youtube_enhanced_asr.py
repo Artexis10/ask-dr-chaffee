@@ -32,7 +32,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import existing ingestion components
 from common.database import DatabaseManager
-from common.database_upsert import DatabaseUpserter
 from common.segments_database import SegmentsDatabase
 from common.embeddings import EmbeddingGenerator
 from common.transcript_processor import TranscriptProcessor
@@ -77,8 +76,6 @@ class EnhancedYouTubeIngestion:
         if not db_url:
             raise ValueError("DATABASE_URL environment variable is required")
         self.segments_db = SegmentsDatabase(db_url)
-        # Keep old upserter for compatibility during transition
-        self.db_upserter = DatabaseUpserter(db_url)
         
         logger.info(f"Enhanced YouTube Ingestion initialized (speaker_id={enable_speaker_id})")
     
@@ -291,11 +288,17 @@ class EnhancedYouTubeIngestion:
             # Use 'whisper' as provenance since Enhanced ASR is AI transcription
             provenance = 'whisper' if method in ['enhanced_asr', 'whisper'] else method
             
-            source_id = self.db_upserter.upsert_source(
-                video_info=video_info,
+            source_id = self.segments_db.upsert_source(
+                video_id=video_id,
+                title=video_info.get('title', f'Video {video_id}'),
                 source_type=self.source_type,
-                provenance=provenance,
-                extra_metadata=source_metadata
+                metadata={
+                    'provenance': provenance,
+                    'duration': video_info.get('duration'),
+                    'upload_date': video_info.get('upload_date'),
+                    'view_count': video_info.get('view_count'),
+                    'enhanced_asr_used': method in ['enhanced_asr', 'whisper']
+                }
             )
             
             # Log speaker identification results with source_id for tracking
@@ -333,9 +336,33 @@ class EnhancedYouTubeIngestion:
                     )
                     db_chunks.append(db_chunk)
             
-            # Upsert chunks
+            # Insert segments with enhanced speaker attribution
             if db_chunks:
-                self.db_upserter.upsert_chunks(db_chunks)
+                # Convert chunks to segments format with speaker information
+                segments = []
+                for chunk in db_chunks:
+                    segment = {
+                        'start': chunk.t_start_s,
+                        'end': chunk.t_end_s,
+                        'text': chunk.text,
+                        'speaker_label': getattr(chunk, 'speaker_label', 'GUEST'),
+                        'speaker_confidence': getattr(chunk, 'speaker_confidence', None),
+                        'avg_logprob': getattr(chunk, 'avg_logprob', None),
+                        'compression_ratio': getattr(chunk, 'compression_ratio', None),
+                        'no_speech_prob': getattr(chunk, 'no_speech_prob', None),
+                        're_asr': getattr(chunk, 're_asr', False),
+                        'embedding': chunk.embedding
+                    }
+                    segments.append(segment)
+                
+                # Batch insert segments
+                segments_count = self.segments_db.batch_insert_segments(
+                    segments=segments,
+                    video_id=video_id,
+                    chaffee_only_storage=False,  # Store all speakers
+                    embed_chaffee_only=True      # Only embed Chaffee segments
+                )
+                logger.info(f"Inserted {segments_count} segments into enhanced segments table")
             
             results['success'] = True
             logger.info(f"Successfully processed video {video_id}: {results['chunks_count']} chunks upserted")
@@ -485,10 +512,12 @@ def main():
         description="YouTube ingestion with Enhanced ASR and speaker identification"
     )
     
-    # Video selection - either specific IDs or channel URL
-    group = parser.add_mutually_exclusive_group(required=True)
+    # Video selection - either specific IDs, channel URL, or video list file
+    group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('--video-ids', nargs='+', help='Specific YouTube video IDs to process')
-    group.add_argument('--channel-url', help='YouTube channel URL to fetch videos from')
+    group.add_argument('--channel-url', default=os.getenv('YOUTUBE_CHANNEL_URL'), 
+                       help='YouTube channel URL to fetch videos from (default from .env)')
+    group.add_argument('--video-list-file', help='JSON file with pre-fetched video list')
     
     # Channel fetching options
     parser.add_argument('--limit', type=int, default=50, help='Maximum videos to fetch from channel')
@@ -585,9 +614,9 @@ def main():
                        help='Embedding model name')
     parser.add_argument('--embed-batch', type=int, default=256,
                        help='Embedding batch size')
-    parser.add_argument('--embedding-provider', default=os.getenv('EMBEDDING_PROVIDER', 'openai'),
+    parser.add_argument('--embedding-provider', default=os.getenv('EMBEDDING_PROVIDER', 'local'),
                        choices=['openai', 'local'],
-                       help='Embedding provider (openai for text-embedding-3-large, local for sentence-transformers)')
+                       help='Embedding provider (local for sentence-transformers, openai for text-embedding-3-large)')
     parser.add_argument('--chaffee-only-storage', action='store_true',
                        help='Store only Chaffee segments in database (saves space)')
     parser.add_argument('--embed-chaffee-only', action='store_true', default=True,
@@ -622,7 +651,7 @@ def main():
     print(f"   VAD Filter: {args.vad_filter}")
     print(f"   Chunk Size: {args.chunk_size}")
     print(f"   Parallel Jobs: {args.jobs} bulk, {args.refine_jobs} refine")
-    print(f"   Embedding Provider: {args.embedding_provider} ({args.embed_model})")
+    print(f"   Embedding Provider: {args.embedding_provider} ({'local sentence-transformers' if args.embedding_provider == 'local' else args.embed_model})")
     print(f"   Output Directory: {args.output_dir}")
     print(f"   Skip Existing: {args.skip_existing}")
     
@@ -725,9 +754,14 @@ def main():
     
     # Print results
     print(f"\n[RESULTS] Processing Results:")
-    print(f"   Successful: {batch_results['successful']}/{batch_results['total_videos']} ({batch_results['successful']/batch_results['total_videos']*100:.1f}%)")
-    print(f"   Skipped: {batch_results['skipped']}/{batch_results['total_videos']} ({batch_results['skipped']/batch_results['total_videos']*100:.1f}%)")
-    print(f"   Failed: {batch_results['failed']}/{batch_results['total_videos']} ({batch_results['failed']/batch_results['total_videos']*100:.1f}%)")
+    total_videos = batch_results['total_videos'] 
+    if total_videos > 0:
+        print(f"   Successful: {batch_results['successful']}/{total_videos} ({batch_results['successful']/total_videos*100:.1f}%)")
+        print(f"   Skipped: {batch_results['skipped']}/{total_videos} ({batch_results['skipped']/total_videos*100:.1f}%)")
+        print(f"   Failed: {batch_results['failed']}/{total_videos} ({batch_results['failed']/total_videos*100:.1f}%)")
+    else:
+        print(f"   No videos found to process!")
+        print(f"   Check channel URL or video list path")
     print(f"   Total chunks: {batch_results['summary']['total_chunks_processed']}")
     print(f"   Enhanced ASR videos: {batch_results['summary']['enhanced_asr_videos']}")
     

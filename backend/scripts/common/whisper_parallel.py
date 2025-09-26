@@ -41,7 +41,7 @@ def transcribe_audio_worker(audio_file_path: str, model_size: str = "small.en") 
         segments, info = model.transcribe(
             audio_file_path,
             language="en",
-            vad_filter=False,  # Disable aggressive VAD
+            vad_filter=True,  # Enable VAD to filter silence
             beam_size=5,
             word_timestamps=True
         )

@@ -30,17 +30,18 @@ if __name__ == '__main__':
         YOUTUBE_DATA_API_AVAILABLE = True
     except ImportError:
         logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
-        YOUTUBE_DATA_API_AVAILABLE = False
 else:
     # When imported as module, use relative imports
     from .transcript_common import TranscriptSegment
     from .downloader import AudioDownloader, AudioPreprocessingConfig
-    try:
-        from .transcript_api import YouTubeTranscriptAPI as YouTubeDataAPI
-        YOUTUBE_DATA_API_AVAILABLE = True
-    except ImportError:
-        logger.warning("YouTube Data API module not available. Install google-api-python-client for better performance.")
-        YOUTUBE_DATA_API_AVAILABLE = False
+
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api._errors import TranscriptsDisabled, VideoUnavailable, NoTranscriptFound
+    YOUTUBE_TRANSCRIPT_AVAILABLE = True
+except ImportError:
+    YOUTUBE_TRANSCRIPT_AVAILABLE = False
+    logger.warning("youtube-transcript-api not available. Install with: pip install youtube-transcript-api")
 
 try:
     import faster_whisper
@@ -199,101 +200,44 @@ class TranscriptFetcher:
         
         # Use YouTube Transcript API for third-party videos
         try:
-            # Create API instance with proxy support if configured
+            # Create API instance
             api = YouTubeTranscriptApi()
             
-            # Add proxy support if configured
-            if self.proxies:
-                logger.info(f"Using proxy for YouTube Transcript API: {self.proxies}")
-                
-                try:
-                    # Handle different proxy formats
-                    proxy_dict = self.proxies
-                    if isinstance(self.proxies, str):
-                        # Convert string proxy to dict format
-                        proxy_dict = {
-                            'http': self.proxies,
-                            'https': self.proxies
-                        }
-                    
-                    # Monkey patch requests for youtube_transcript_api
-                    import youtube_transcript_api._api
-                    original_get = youtube_transcript_api._api.requests.get
-                    
-                    def proxied_get(*args, **kwargs):
-                        kwargs['proxies'] = proxy_dict
-                        kwargs['timeout'] = 30  # Add timeout for proxy requests
-                        return original_get(*args, **kwargs)
-                    
-                    youtube_transcript_api._api.requests.get = proxied_get
-                    
-                    # Get transcript with proxy
-                    transcript_list = api.list_transcripts(video_id)
-                    transcript = None
-                    
-                    # Try preferred languages
-                    for lang in languages:
-                        try:
-                            transcript = transcript_list.find_transcript([lang])
-                            break
-                        except:
-                            continue
-                    
-                    if not transcript:
-                        transcript = transcript_list.find_generated_transcript(['en'])
-                    
-                    if transcript:
-                        transcript_data = transcript.fetch()
-                        segments = [TranscriptSegment.from_youtube_transcript(item) for item in transcript_data]
-                        # Filter out non-verbal content
-                        segments = [seg for seg in segments if not any(marker in seg.text.lower() for marker in ['[music]', '[applause]', '[laughter]'])]
-                        
-                        # Restore original function
-                        youtube_transcript_api._api.requests.get = original_get
-                        
-                        logger.info(f"Successfully fetched transcript with proxy for {video_id} ({len(segments)} segments)")
-                        return segments
-                    
-                    # Restore original function
-                    youtube_transcript_api._api.requests.get = original_get
-                    
-                except Exception as e:
-                    logger.warning(f"Proxy-based transcript fetch failed: {e}")
-                    # Restore original function in case of error
-                    try:
-                        youtube_transcript_api._api.requests.get = original_get
-                    except:
-                        pass
-                    # Continue without proxy   
+            # Fetch transcript with language preferences (tries English first, then any available)
+            try:
+                fetched_transcript = api.fetch(video_id, languages=['en'])
+            except Exception:
+                # If English not available, try without language restriction
+                fetched_transcript = api.fetch(video_id)
+            
+            # Convert to our transcript format
+            segments = []
+            for snippet in fetched_transcript:
+                # Each snippet has text, start, and duration
+                segment = TranscriptSegment(
+                    start_time=snippet.start,
+                    end_time=snippet.start + snippet.duration,
+                    text=snippet.text.strip()
+                )
+                segments.append(segment)
+            
+            # Filter out non-verbal content and empty segments
+            segments = [seg for seg in segments 
+                       if seg.text and len(seg.text.strip()) > 0 
+                       and not any(marker in seg.text.lower() 
+                                 for marker in ['[music]', '[applause]', '[laughter]', '[silence]'])]
+            
+            if segments:
+                logger.info(f"Successfully fetched YouTube transcript for {video_id} ({len(segments)} segments)")
+                return segments
             else:
-                # Standard fetch without proxies
-                transcript_list = api.list_transcripts(video_id)
-                transcript = None
-                
-                # Try preferred languages
-                for lang in languages:
-                    try:
-                        transcript = transcript_list.find_transcript([lang])
-                        break
-                    except:
-                        continue
-                
-                if not transcript:
-                    transcript = transcript_list.find_generated_transcript(['en'])
-                
-                if transcript:
-                    transcript_data = transcript.fetch()
-                    segments = [TranscriptSegment.from_youtube_transcript(item) for item in transcript_data]
-                    # Filter out non-verbal content
-                    segments = [seg for seg in segments if not any(marker in seg.text.lower() for marker in ['[music]', '[applause]', '[laughter]'])]
-                    
-                    logger.info(f"Successfully fetched transcript for {video_id} ({len(segments)} segments)")
-                    return segments
+                logger.warning(f"No valid transcript segments found for {video_id}")
+                return None
             
             logger.debug(f"YouTube transcript not available for {video_id}")
             return None
         
-        except (TranscriptsDisabled, VideoUnavailable) as e:
+        except (TranscriptsDisabled, VideoUnavailable, NoTranscriptFound) as e:
             logger.debug(f"YouTube transcript not available for {video_id}: {e}")
             return None
         except Exception as e:
@@ -434,12 +378,13 @@ class TranscriptFetcher:
             }
             
             # Transcribe with enhanced settings
-            segments, info = model.transcribe(
+            segments, info = self.whisper_model.transcribe(
                 str(audio_path),
                 beam_size=5,
                 word_timestamps=True,
-                vad_filter=False,  # Disable aggressive VAD that removes all audio
-                language="en"  # Force English for better performance
+                vad_filter=True,  # Enable VAD to filter out silence/non-speech
+                language="en",  # Force English for better performance
+                vad_parameters=vad_parameters  # Pass custom VAD parameters
             )
             
             # Convert to normalized format

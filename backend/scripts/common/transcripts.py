@@ -137,41 +137,40 @@ class TranscriptFetcher:
         
         try:
             logger.debug(f"Trying youtube-transcript-api for {video_id}")
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # Use the new API directly
+            api = YouTubeTranscriptApi()
             
-            # Try preferred languages in order
-            transcript = None
-            for lang in prefer_langs:
+            # Try to fetch with preferred languages
+            try:
+                fetched_transcript = api.fetch(video_id, languages=list(prefer_langs))
+            except Exception:
+                # If preferred languages fail, try English
                 try:
-                    transcript = transcript_list.find_transcript([lang])
-                    logger.debug(f"Found transcript in language: {lang}")
-                    break
-                except NoTranscriptFound:
-                    continue
+                    fetched_transcript = api.fetch(video_id, languages=['en'])
+                except Exception:
+                    # If English fails, try without language restriction
+                    fetched_transcript = api.fetch(video_id)
             
-            # Try generated transcript if no manual transcript found
-            if not transcript:
-                try:
-                    transcript = transcript_list.find_generated_transcript(['en'])
-                    logger.debug("Found auto-generated English transcript")
-                except NoTranscriptFound:
-                    logger.debug("No auto-generated transcript available")
-                    return None
+            # Convert to our format
+            segments = []
+            for snippet in fetched_transcript:
+                segment = TranscriptSegment(
+                    start_time=snippet.start,
+                    end_time=snippet.start + snippet.duration,
+                    text=snippet.text.strip()
+                )
+                segments.append(segment)
             
-            if transcript:
-                transcript_data = transcript.fetch()
-                segments = [TranscriptSegment.from_youtube_transcript(item) for item in transcript_data]
-                
-                # Filter out very short or empty segments
-                segments = [seg for seg in segments if seg.text and len(seg.text.strip()) > 2]
-                
-                # Filter out non-verbal content
-                segments = [seg for seg in segments if not any(
-                    marker in seg.text.lower() 
-                    for marker in ['[music]', '[applause]', '[laughter]', '[silence]']
-                )]
-                
-                return segments if segments else None
+            # Filter out very short or empty segments
+            segments = [seg for seg in segments if seg.text and len(seg.text.strip()) > 2]
+            
+            # Filter out non-verbal content
+            segments = [seg for seg in segments if not any(
+                marker in seg.text.lower() 
+                for marker in ['[music]', '[applause]', '[laughter]', '[silence]']
+            )]
+            
+            return segments if segments else None
                 
         except (TranscriptsDisabled, VideoUnavailable) as e:
             logger.debug(f"YouTube transcript unavailable for {video_id}: {e}")
