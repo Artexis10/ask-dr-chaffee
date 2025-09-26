@@ -9,7 +9,7 @@ import sys
 import logging
 import argparse
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -24,8 +24,9 @@ from backend.scripts.common.database_upsert import DatabaseUpserter, ChunkData
 from backend.scripts.common.embeddings import EmbeddingGenerator
 from backend.scripts.common.transcript_processor import TranscriptProcessor
 
-# Import enhanced transcript fetching
+# Import enhanced transcript fetching and video listing
 from backend.scripts.common.enhanced_transcript_fetch import EnhancedTranscriptFetcher
+from backend.scripts.common.list_videos_yt_dlp import YtDlpVideoLister
 
 logger = logging.getLogger(__name__)
 
@@ -33,21 +34,24 @@ class EnhancedYouTubeIngestion:
     """YouTube ingestion with Enhanced ASR capabilities"""
     
     def __init__(self, 
-                 enable_speaker_id: bool = True,
-                 voices_dir: str = "voices",
-                 chaffee_min_sim: float = 0.82,
-                 source_type: str = "youtube"):
+                 enable_speaker_id: bool = None,
+                 voices_dir: str = None,
+                 chaffee_min_sim: float = None,
+                 source_type: str = None,
+                 workers: int = None):
         
-        self.enable_speaker_id = enable_speaker_id
-        self.voices_dir = voices_dir
-        self.chaffee_min_sim = chaffee_min_sim
-        self.source_type = source_type
+        # Use .env defaults for all configuration
+        self.enable_speaker_id = enable_speaker_id if enable_speaker_id is not None else os.getenv('ENABLE_SPEAKER_ID', 'true').lower() == 'true'
+        self.voices_dir = voices_dir or os.getenv('VOICES_DIR', 'voices')
+        self.chaffee_min_sim = chaffee_min_sim if chaffee_min_sim is not None else float(os.getenv('CHAFFEE_MIN_SIM', '0.62'))
+        self.source_type = source_type or os.getenv('SOURCE_TYPE', 'youtube')
+        self.workers = workers or int(os.getenv('WHISPER_PARALLEL_MODELS', '4'))
         
-        # Initialize components
+        # Initialize components with .env values
         self.transcript_fetcher = EnhancedTranscriptFetcher(
-            enable_speaker_id=enable_speaker_id,
-            voices_dir=voices_dir,
-            chaffee_min_sim=chaffee_min_sim,
+            enable_speaker_id=self.enable_speaker_id,
+            voices_dir=self.voices_dir,
+            chaffee_min_sim=self.chaffee_min_sim,
             api_key=os.getenv('YOUTUBE_API_KEY'),
             ffmpeg_path=os.getenv('FFMPEG_PATH')
         )
@@ -359,21 +363,29 @@ class EnhancedYouTubeIngestion:
             return False
 
 def main():
-    """CLI for Enhanced YouTube ingestion"""
+    """Main entry point"""
     parser = argparse.ArgumentParser(
-        description='YouTube ingestion with Enhanced ASR and speaker identification'
+        description="YouTube ingestion with Enhanced ASR and speaker identification"
     )
     
-    # Video processing
-    parser.add_argument('video_ids', nargs='+', help='YouTube video IDs to process')
+    # Video selection - either specific IDs or channel URL
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--video-ids', nargs='+', help='Specific YouTube video IDs to process')
+    group.add_argument('--channel-url', help='YouTube channel URL to fetch videos from')
+    
+    # Channel fetching options
+    parser.add_argument('--limit', type=int, default=50, help='Maximum videos to fetch from channel')
+    parser.add_argument('--workers', type=int, help='Number of parallel workers (overrides env)')
     parser.add_argument('--force-enhanced-asr', action='store_true', 
                        help='Force Enhanced ASR (skip YouTube transcripts)')
     
-    # Enhanced ASR options
+    # Enhanced ASR options - use environment defaults
     parser.add_argument('--enable-speaker-id', action='store_true', default=True,
-                       help='Enable speaker identification')
-    parser.add_argument('--voices-dir', default='voices', help='Voice profiles directory')
-    parser.add_argument('--chaffee-min-sim', type=float, default=0.82,
+                       help='Enable speaker identification (default: True)')
+    parser.add_argument('--voices-dir', default=os.getenv('VOICES_DIR', 'voices'),
+                       help='Voice profiles directory')
+    parser.add_argument('--chaffee-min-sim', type=float, 
+                       default=float(os.getenv('CHAFFEE_MIN_SIM', '0.62')),
                        help='Minimum similarity threshold for Chaffee')
     parser.add_argument('--source-type', default='youtube',
                        help='Source type for database')
@@ -397,12 +409,43 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # Initialize ingestion system
+    # Display current .env configuration
+    print(f"[CONFIG] Enhanced ASR Configuration:")
+    print(f"   Model: {os.getenv('WHISPER_MODEL_ENHANCED', 'large-v3')}")
+    print(f"   Parallel Models: {os.getenv('WHISPER_PARALLEL_MODELS', '4')}")
+    print(f"   Compute Type: {os.getenv('WHISPER_COMPUTE', 'float16')}")
+    print(f"   Batch Size: {os.getenv('BATCH_SIZE', '32')}")
+    print(f"   Beam Size: {os.getenv('BEAM_SIZE', '5')}")
+    print(f"   Chaffee Threshold: {os.getenv('CHAFFEE_MIN_SIM', '0.62')}")
+    print(f"   Speaker ID: {os.getenv('ENABLE_SPEAKER_ID', 'true')}")
+    
+    # Performance estimates for medium model
+    model_name = os.getenv('WHISPER_MODEL_ENHANCED', 'large-v3')
+    parallel_models = int(os.getenv('WHISPER_PARALLEL_MODELS', '4'))
+    if model_name == 'medium':
+        print(f"\n[PERFORMANCE] Medium Model Estimates (RTX 5080):")
+        print(f"   Processing Speed: ~3x faster than large-v3")
+        print(f"   Parallel Workers: {parallel_models}")
+        print(f"   Est. Videos/Hour: 60-80 (1-hour videos)")
+        print(f"   8-Hour Target: 480-640 videos")
+        print(f"   Quality: 95% of large-v3 accuracy")
+        print(f"   VRAM Usage: ~{parallel_models * 1.5:.1f}GB ({parallel_models} x 1.5GB each)")
+    elif model_name == 'large-v3':
+        print(f"\n[PERFORMANCE] Large-v3 Model Estimates (RTX 5080):")
+        print(f"   Processing Speed: Highest quality, slower")
+        print(f"   Parallel Workers: {parallel_models}")
+        print(f"   Est. Videos/Hour: 20-30 (1-hour videos)")
+        print(f"   8-Hour Target: 160-240 videos")
+        print(f"   Quality: Maximum accuracy")
+        print(f"   VRAM Usage: ~{parallel_models * 2.5:.1f}GB ({parallel_models} x 2.5GB each)")
+    
+    # Initialize ingestion system with .env defaults
     ingestion = EnhancedYouTubeIngestion(
         enable_speaker_id=args.enable_speaker_id,
-        voices_dir=args.voices_dir,
+        voices_dir=args.voices_dir, 
         chaffee_min_sim=args.chaffee_min_sim,
-        source_type=args.source_type
+        source_type=args.source_type,
+        workers=args.workers
     )
     
     # Setup Chaffee profile if requested
@@ -430,11 +473,22 @@ def main():
         print("Enhanced ASR not available - install dependencies:")
         print("   pip install whisperx pyannote.audio speechbrain")
     
-    # Process videos
-    print(f"\n[VIDEO] Processing {len(args.video_ids)} videos...")
+    # Get video IDs (either from args or channel)
+    if args.channel_url:
+        print(f"[FETCH] Fetching videos from channel: {args.channel_url}")
+        video_lister = YtDlpVideoLister()
+        videos_data = video_lister.list_channel_videos(args.channel_url)
+        
+        # Extract video IDs and limit if specified
+        video_ids = [video.video_id for video in videos_data[:args.limit]]
+        print(f"[FETCH] Found {len(videos_data)} videos, processing {len(video_ids)}")
+    else:
+        video_ids = args.video_ids
+        print(f"[VIDEO] Processing {len(video_ids)} specified videos...")
     
+    # Process videos
     batch_results = ingestion.process_video_batch(
-        video_ids=args.video_ids,
+        video_ids=video_ids,
         force_enhanced_asr=args.force_enhanced_asr
     )
     

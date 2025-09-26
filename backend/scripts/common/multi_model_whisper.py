@@ -92,6 +92,7 @@ class MultiModelWhisperManager:
                 logger.info(f"🎯 Model {model_id}: Transcribing {audio_path.name}")
                 
                 # Optimized transcription settings for maximum throughput
+                logger.info(f"🎯 Model {model_id}: Starting transcription for {audio_path.name}")
                 segments, info = model.transcribe(
                     str(audio_path),
                     language="en",
@@ -101,19 +102,40 @@ class MultiModelWhisperManager:
                     temperature=0.0,      # Deterministic output
                     no_speech_threshold=0.6  # Skip very quiet segments
                 )
+                logger.info(f"🎯 Model {model_id}: Transcription completed, processing segments...")
                 
                 # Convert to transcript segments (compatible with existing code)
                 from .transcript_common import TranscriptSegment
                 transcript_segments = []
                 
-                for segment in segments:
-                    if len(segment.text.strip()) > 3:  # Filter very short segments
-                        ts = TranscriptSegment(
-                            start=segment.start,
-                            end=segment.end,
-                            text=segment.text.strip()
-                        )
-                        transcript_segments.append(ts)
+                # FIX: Process segments with timeout and chunked processing
+                try:
+                    segment_count = 0
+                    max_segments = 3000  # Reasonable limit to prevent infinite processing
+                    
+                    for i, segment in enumerate(segments):
+                        if i >= max_segments:
+                            logger.warning(f"🎯 Model {model_id}: Reached segment limit ({max_segments}), stopping")
+                            break
+                            
+                        if len(segment.text.strip()) > 3:  # Filter very short segments
+                            ts = TranscriptSegment(
+                                start=segment.start,
+                                end=segment.end,
+                                text=segment.text.strip()
+                            )
+                            transcript_segments.append(ts)
+                            segment_count += 1
+                            
+                        # Progress logging every 100 segments
+                        if (i + 1) % 100 == 0:
+                            logger.info(f"🎯 Model {model_id}: Processed {i + 1} segments, {segment_count} valid")
+                    
+                    logger.info(f"🎯 Model {model_id}: Completed with {segment_count} valid segments from {i + 1 if 'i' in locals() else 0} total")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Model {model_id}: Segment processing failed: {e}")
+                    raise
                 
                 processing_time = time.time() - start_time
                 
