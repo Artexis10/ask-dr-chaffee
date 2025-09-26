@@ -52,10 +52,17 @@ class EnhancedYouTubeIngestion:
                  source_type: str = None,
                  workers: int = None):
         
-        # Use .env defaults for all configuration
-        self.enable_speaker_id = enable_speaker_id if enable_speaker_id is not None else os.getenv('ENABLE_SPEAKER_ID', 'true').lower() == 'true'
+        # MANDATORY: Chaffee speaker identification is ALWAYS enabled (non-negotiable)
+        self.enable_speaker_id = True  # FORCED - cannot be disabled
         self.voices_dir = voices_dir or os.getenv('VOICES_DIR', 'voices')
         self.chaffee_min_sim = chaffee_min_sim if chaffee_min_sim is not None else float(os.getenv('CHAFFEE_MIN_SIM', '0.62'))
+        
+        # MANDATORY: Verify Chaffee profile exists - CANNOT proceed without it
+        chaffee_profile_path = os.path.join(self.voices_dir, 'chaffee.json')
+        if not os.path.exists(chaffee_profile_path):
+            raise FileNotFoundError(f"CRITICAL: Chaffee voice profile not found at {chaffee_profile_path}. "
+                                  f"Speaker identification is MANDATORY to prevent misattribution. "
+                                  f"Cannot proceed without Dr. Chaffee's voice profile!")
         self.source_type = source_type or os.getenv('SOURCE_TYPE', 'youtube')
         self.workers = workers or int(os.getenv('WHISPER_PARALLEL_MODELS', '4'))
         
@@ -310,48 +317,50 @@ class EnhancedYouTubeIngestion:
                 logger.info(f"   Total speakers: {len(speaker_meta.get('speaker_distribution', {}))}")
                 logger.info(f"   Method: {speaker_meta.get('processing_method', 'unknown')}")
             
-            # Prepare chunks for database upsert
+            # Prepare chunks for database upsert - INCLUDE ALL CHUNKS (embeddings generated later)
             db_chunks = []
             for chunk in chunks:
-                if chunk['embedding'] is not None:
-                    # Ensure all values are native Python types, not numpy types
-                    t_start = float(chunk['start_time_seconds']) if chunk['start_time_seconds'] is not None else 0.0
-                    t_end = float(chunk['end_time_seconds']) if chunk['end_time_seconds'] is not None else 0.0
-                    
-                    # Convert embedding to list if needed
-                    embedding = chunk['embedding']
-                    if embedding is not None:
-                        if hasattr(embedding, 'tolist'):
-                            embedding = embedding.tolist()
-                        elif hasattr(embedding, '__iter__') and not isinstance(embedding, list):
-                            embedding = list(embedding)
-                    
-                    db_chunk = ChunkData(
-                        chunk_hash=f"{video_id}:{chunk['chunk_index']}",
-                        source_id=source_id,
-                        text=chunk['text'],
-                        t_start_s=t_start,
-                        t_end_s=t_end,
-                        embedding=embedding
-                    )
-                    db_chunks.append(db_chunk)
+                # Ensure all values are native Python types, not numpy types
+                t_start = float(chunk['start_time_seconds']) if chunk['start_time_seconds'] is not None else 0.0
+                t_end = float(chunk['end_time_seconds']) if chunk['end_time_seconds'] is not None else 0.0
+                
+                # Convert embedding to list if needed (may be None, that's OK)
+                embedding = chunk.get('embedding')
+                if embedding is not None:
+                    if hasattr(embedding, 'tolist'):
+                        embedding = embedding.tolist()
+                    elif hasattr(embedding, '__iter__') and not isinstance(embedding, list):
+                        embedding = list(embedding)
+                
+                db_chunk = ChunkData(
+                    chunk_hash=f"{video_id}:{chunk['chunk_index']}",
+                    source_id=source_id,
+                    text=chunk['text'],
+                    t_start_s=t_start,
+                    t_end_s=t_end,
+                    embedding=embedding  # Can be None - embeddings generated in segments_db
+                )
+                db_chunks.append(db_chunk)
             
             # Insert segments with enhanced speaker attribution
             if db_chunks:
-                # Convert chunks to segments format with speaker information
+                # Convert chunks to segments format with Enhanced ASR metadata
                 segments = []
-                for chunk in db_chunks:
+                for i, chunk_data in enumerate(db_chunks):
+                    # Get original chunk for Enhanced ASR metadata
+                    orig_chunk = chunks[i] if i < len(chunks) else {}
+                    
                     segment = {
-                        'start': chunk.t_start_s,
-                        'end': chunk.t_end_s,
-                        'text': chunk.text,
-                        'speaker_label': getattr(chunk, 'speaker_label', 'GUEST'),
-                        'speaker_confidence': getattr(chunk, 'speaker_confidence', None),
-                        'avg_logprob': getattr(chunk, 'avg_logprob', None),
-                        'compression_ratio': getattr(chunk, 'compression_ratio', None),
-                        'no_speech_prob': getattr(chunk, 'no_speech_prob', None),
-                        're_asr': getattr(chunk, 're_asr', False),
-                        'embedding': chunk.embedding
+                        'start': chunk_data.t_start_s,
+                        'end': chunk_data.t_end_s,
+                        'text': chunk_data.text,
+                        'speaker_label': orig_chunk.get('speaker_label', 'GUEST'),
+                        'speaker_confidence': orig_chunk.get('speaker_confidence', None),
+                        'avg_logprob': orig_chunk.get('avg_logprob', None),
+                        'compression_ratio': orig_chunk.get('compression_ratio', None),
+                        'no_speech_prob': orig_chunk.get('no_speech_prob', None),
+                        're_asr': orig_chunk.get('re_asr', False),
+                        'embedding': chunk_data.embedding  # May be None - generated in segments_db
                     }
                     segments.append(segment)
                 
@@ -359,10 +368,12 @@ class EnhancedYouTubeIngestion:
                 segments_count = self.segments_db.batch_insert_segments(
                     segments=segments,
                     video_id=video_id,
-                    chaffee_only_storage=False,  # Store all speakers
-                    embed_chaffee_only=True      # Only embed Chaffee segments
+                    chaffee_only_storage=False,     # Store all speakers
+                    embed_chaffee_only=False        # Embed all speakers
                 )
-                logger.info(f"Inserted {segments_count} segments into enhanced segments table")
+                logger.info(f"✅ Inserted {segments_count} segments into database for {video_id}")
+            else:
+                logger.warning(f"⚠️  No chunks to insert for {video_id} - original chunks: {len(chunks)}")
             
             results['success'] = True
             logger.info(f"Successfully processed video {video_id}: {results['chunks_count']} chunks upserted")
@@ -527,7 +538,7 @@ def main():
     
     # Enhanced ASR options - use environment defaults
     parser.add_argument('--enable-speaker-id', action='store_true', default=True,
-                       help='Enable speaker identification (default: True)')
+                       help='Speaker identification (MANDATORY - always enabled for accuracy)')
     parser.add_argument('--voices-dir', default=os.getenv('VOICES_DIR', 'voices'),
                        help='Voice profiles directory')
     parser.add_argument('--chaffee-min-sim', type=float, 
@@ -619,8 +630,8 @@ def main():
                        help='Embedding provider (local for sentence-transformers, openai for text-embedding-3-large)')
     parser.add_argument('--chaffee-only-storage', action='store_true',
                        help='Store only Chaffee segments in database (saves space)')
-    parser.add_argument('--embed-chaffee-only', action='store_true', default=True,
-                       help='Generate embeddings only for Chaffee segments (default: True)')
+    parser.add_argument('--embed-chaffee-only', action='store_true', default=False,
+                       help='Generate embeddings only for Chaffee segments (default: False - embed all)')
     
     # Chaffee profile setup
     parser.add_argument('--setup-chaffee', nargs='+', metavar='AUDIO_SOURCE',
