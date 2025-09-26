@@ -24,7 +24,8 @@ from sqlalchemy.pool import StaticPool
 
 # Import our existing processors
 import sys
-sys.path.append('/app')
+backend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(backend_path)
 from scripts.process_srt_files import SRTProcessor
 from scripts.common.database_upsert import DatabaseUpserter
 from scripts.common.transcript_common import TranscriptSegment

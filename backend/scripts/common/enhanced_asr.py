@@ -8,8 +8,15 @@ import json
 import logging
 import tempfile
 import time
+import warnings
 import numpy as np
 from pathlib import Path
+
+# Suppress audio processing warnings at module level
+warnings.filterwarnings("ignore", category=UserWarning, message=".*torchaudio.*deprecated.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*TensorFloat-32.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*TorchCodec.*")
+os.environ["TORCHAUDIO_USE_BACKEND_DISPATCHER"] = "0"
 from typing import List, Optional, Dict, Any, Tuple, Union
 from dataclasses import dataclass, asdict
 import torch
@@ -262,12 +269,13 @@ class EnhancedASR:
             return None
     
     def _transcribe_whisper_only(self, audio_path: str) -> Optional[TranscriptionResult]:
-        """Transcribe using Whisper only (no diarization)"""
+        """Transcribe using optimized two-stage approach: distil-large-v3 + selective large-v3 refinement"""
         try:
-            model = self._get_whisper_model()
+            # Stage 1: Primary transcription with distil-large-v3 (fast)
+            primary_model = self._get_whisper_model()
             
-            # Transcribe with word timestamps
-            segments, info = model.transcribe(
+            logger.info(f"Stage 1: Primary transcription with {self.config.whisper.model}")
+            segments, info = primary_model.transcribe(
                 audio_path,
                 language="en",
                 word_timestamps=True,
@@ -275,21 +283,42 @@ class EnhancedASR:
                 beam_size=5
             )
             
-            # Convert segments
+            # Convert segments and identify low-quality ones
             result_segments = []
             words = []
             full_text = ""
+            low_quality_spans = []
             
             for segment in segments:
+                # Check quality metrics for triage
+                avg_logprob = getattr(segment, 'avg_logprob', 0.0)
+                compression_ratio = getattr(segment, 'compression_ratio', 1.0)
+                no_speech_prob = getattr(segment, 'no_speech_prob', 0.0)
+                
+                # Flag for refinement if quality is poor
+                needs_refinement = (
+                    avg_logprob <= self.config.quality.low_conf_avg_logprob or
+                    compression_ratio >= self.config.quality.low_conf_compression_ratio or
+                    no_speech_prob >= 0.8
+                )
+                
                 segment_dict = {
                     'start': segment.start,
                     'end': segment.end,
                     'text': segment.text.strip(),
+                    'avg_logprob': avg_logprob,
+                    'compression_ratio': compression_ratio,
+                    'no_speech_prob': no_speech_prob,
                     'speaker': None,  # Will be filled by caller
-                    'speaker_confidence': None
+                    'speaker_confidence': None,
+                    'needs_refinement': needs_refinement,
+                    're_asr': False
                 }
                 result_segments.append(segment_dict)
                 full_text += segment.text
+                
+                if needs_refinement:
+                    low_quality_spans.append((segment.start, segment.end, len(result_segments) - 1))
                 
                 # Extract words if available
                 if hasattr(segment, 'words') and segment.words:
@@ -301,12 +330,44 @@ class EnhancedASR:
                             confidence=getattr(word, 'probability', 0.0)
                         ))
             
+            # Stage 2: Selective refinement with large-v3 for poor quality segments
+            refinement_stats = {'total_segments': len(result_segments), 'refined_segments': 0}
+            
+            if low_quality_spans and self.config.quality.enable_two_pass:
+                logger.info(f"Stage 2: Refining {len(low_quality_spans)} low-quality segments with {self.config.whisper.refine_model}")
+                
+                # Load refinement model if different from primary
+                refine_model = self._get_refinement_model()
+                
+                # Merge adjacent spans to reduce API calls
+                merged_spans = self._merge_adjacent_spans(low_quality_spans)
+                
+                for start_time, end_time, segment_indices in merged_spans:
+                    try:
+                        # Extract audio segment for refinement
+                        refined_segments = self._refine_audio_segment(
+                            audio_path, start_time, end_time, refine_model
+                        )
+                        
+                        if refined_segments:
+                            # Replace original segments with refined ones
+                            self._replace_segments(result_segments, segment_indices, refined_segments, start_time)
+                            refinement_stats['refined_segments'] += len(segment_indices)
+                            
+                    except Exception as e:
+                        logger.warning(f"Failed to refine segment {start_time}-{end_time}: {e}")
+            
             metadata = {
                 'whisper_model': self.config.whisper_model,
+                'refine_model': getattr(self.config.whisper, 'refine_model', 'none'),
                 'language': info.language if hasattr(info, 'language') else 'en',
                 'duration': info.duration if hasattr(info, 'duration') else 0.0,
-                'method': 'whisper_only'
+                'method': 'optimized_two_stage',
+                'refinement_stats': refinement_stats,
+                'low_quality_segments': len(low_quality_spans)
             }
+            
+            logger.info(f"Transcription complete: {refinement_stats['refined_segments']}/{refinement_stats['total_segments']} segments refined")
             
             return TranscriptionResult(
                 text=full_text.strip(),
@@ -317,8 +378,148 @@ class EnhancedASR:
             )
             
         except Exception as e:
-            logger.error(f"Whisper-only transcription failed: {e}")
+            logger.error(f"Optimized transcription failed: {e}")
             return None
+    
+    def _get_refinement_model(self):
+        """Get refinement model (large-v3) - separate from primary model"""
+        if not hasattr(self, '_refinement_model') or self._refinement_model is None:
+            try:
+                import faster_whisper
+                refine_model_name = getattr(self.config.whisper, 'refine_model', 'large-v3')
+                
+                # Only load if different from primary model
+                if refine_model_name != self.config.whisper_model:
+                    logger.info(f"Loading refinement model: {refine_model_name}")
+                    self._refinement_model = faster_whisper.WhisperModel(
+                        refine_model_name,
+                        device=self._device,
+                        compute_type="float16" if self._device == "cuda" else "int8"
+                    )
+                else:
+                    # Use same model
+                    self._refinement_model = self._get_whisper_model()
+                    
+            except ImportError:
+                raise ImportError("faster-whisper not available for refinement model")
+        
+        return self._refinement_model
+    
+    def _merge_adjacent_spans(self, spans: List[Tuple[float, float, int]], gap_threshold: float = 2.0) -> List[Tuple[float, float, List[int]]]:
+        """Merge adjacent low-quality spans to reduce processing overhead"""
+        if not spans:
+            return []
+        
+        # Sort by start time
+        sorted_spans = sorted(spans, key=lambda x: x[0])
+        merged = []
+        
+        current_start = sorted_spans[0][0]
+        current_end = sorted_spans[0][1]
+        current_indices = [sorted_spans[0][2]]
+        
+        for start, end, idx in sorted_spans[1:]:
+            if start <= current_end + gap_threshold:
+                # Merge with current span
+                current_end = max(current_end, end)
+                current_indices.append(idx)
+            else:
+                # Finalize current span and start new one
+                merged.append((current_start, current_end, current_indices))
+                current_start = start
+                current_end = end
+                current_indices = [idx]
+        
+        # Add final span
+        merged.append((current_start, current_end, current_indices))
+        
+        logger.info(f"Merged {len(spans)} spans into {len(merged)} consolidated spans")
+        return merged
+    
+    def _refine_audio_segment(self, audio_path: str, start_time: float, end_time: float, refine_model) -> List[Dict]:
+        """Extract and re-transcribe a specific audio segment with large-v3"""
+        try:
+            # Create temporary file for segment
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                temp_path = temp_file.name
+            
+            # Extract segment using ffmpeg
+            import subprocess
+            cmd = [
+                'ffmpeg', '-i', audio_path,
+                '-ss', str(start_time),
+                '-t', str(end_time - start_time),
+                '-ar', '16000', '-ac', '1',
+                '-y', temp_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                logger.warning(f"ffmpeg extraction failed: {result.stderr}")
+                return []
+            
+            # Re-transcribe with refinement model
+            segments, _ = refine_model.transcribe(
+                temp_path,
+                language="en", 
+                word_timestamps=True,
+                vad_filter=True,
+                beam_size=8,  # Higher beam size for quality
+                temperature=[0.0, 0.2, 0.4]  # Multiple temperatures
+            )
+            
+            # Convert segments and adjust timestamps
+            refined_segments = []
+            for segment in segments:
+                refined_segments.append({
+                    'start': segment.start + start_time,  # Adjust to original timeline
+                    'end': segment.end + start_time,
+                    'text': segment.text.strip(),
+                    'avg_logprob': getattr(segment, 'avg_logprob', 0.0),
+                    'compression_ratio': getattr(segment, 'compression_ratio', 1.0),
+                    'no_speech_prob': getattr(segment, 'no_speech_prob', 0.0),
+                    'speaker': None,
+                    'speaker_confidence': None,
+                    'needs_refinement': False,
+                    're_asr': True  # Mark as refined
+                })
+            
+            # Cleanup temp file
+            os.unlink(temp_path)
+            
+            logger.debug(f"Refined segment {start_time:.1f}-{end_time:.1f}: {len(refined_segments)} new segments")
+            return refined_segments
+            
+        except Exception as e:
+            logger.warning(f"Segment refinement failed: {e}")
+            return []
+    
+    def _replace_segments(self, result_segments: List[Dict], segment_indices: List[int], 
+                         refined_segments: List[Dict], original_start_time: float):
+        """Replace original segments with refined versions"""
+        # Mark original segments as refined and update text
+        for idx in segment_indices:
+            result_segments[idx]['re_asr'] = True
+            result_segments[idx]['needs_refinement'] = False
+        
+        # For simplicity, replace first segment with concatenated refined text
+        # In production, could do more sophisticated alignment
+        if refined_segments and segment_indices:
+            first_idx = segment_indices[0]
+            combined_text = ' '.join(seg['text'] for seg in refined_segments)
+            
+            # Update first segment with refined content
+            result_segments[first_idx].update({
+                'text': combined_text,
+                'avg_logprob': max(seg['avg_logprob'] for seg in refined_segments),
+                'compression_ratio': min(seg['compression_ratio'] for seg in refined_segments),
+                're_asr': True
+            })
+            
+            # Mark other segments in span as empty/merged
+            for idx in segment_indices[1:]:
+                result_segments[idx]['text'] = ''  # Mark as merged
+                result_segments[idx]['merged_into'] = first_idx
     
     def _perform_diarization(self, audio_path: str) -> Optional[List[Tuple[float, float, int]]]:
         """Perform speaker diarization"""

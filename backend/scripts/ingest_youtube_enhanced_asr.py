@@ -8,25 +8,38 @@ import os
 import sys
 import logging
 import argparse
+import warnings
+import multiprocessing
+import concurrent.futures
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
+# Suppress noisy deprecation warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*torchaudio.*deprecated.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*TensorFloat-32.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*TorchCodec.*")
+
+# Suppress torchaudio backend warnings
+os.environ["TORCHAUDIO_USE_BACKEND_DISPATCHER"] = "0"
 # Add backend scripts to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import existing ingestion components
-from backend.scripts.common.database import DatabaseManager
-from backend.scripts.common.database_upsert import DatabaseUpserter, ChunkData
-from backend.scripts.common.embeddings import EmbeddingGenerator
-from backend.scripts.common.transcript_processor import TranscriptProcessor
+from common.database import DatabaseManager
+from common.database_upsert import DatabaseUpserter
+from common.segments_database import SegmentsDatabase
+from common.embeddings import EmbeddingGenerator
+from common.transcript_processor import TranscriptProcessor
 
 # Import enhanced transcript fetching and video listing
-from backend.scripts.common.enhanced_transcript_fetch import EnhancedTranscriptFetcher
-from backend.scripts.common.list_videos_yt_dlp import YtDlpVideoLister
+from common.enhanced_transcript_fetch import EnhancedTranscriptFetcher
+from common.list_videos_yt_dlp import YtDlpVideoLister
 
 logger = logging.getLogger(__name__)
 
@@ -59,21 +72,32 @@ class EnhancedYouTubeIngestion:
         self.transcript_processor = TranscriptProcessor(chunk_duration_seconds=45)
         self.embedding_generator = EmbeddingGenerator()
         
-        # Initialize database components
+        # Initialize enhanced segments database
         db_url = os.getenv('DATABASE_URL')
         if not db_url:
             raise ValueError("DATABASE_URL environment variable is required")
+        self.segments_db = SegmentsDatabase(db_url)
+        # Keep old upserter for compatibility during transition
         self.db_upserter = DatabaseUpserter(db_url)
         
         logger.info(f"Enhanced YouTube Ingestion initialized (speaker_id={enable_speaker_id})")
     
-    def process_video(self, video_id: str, force_enhanced_asr: bool = False) -> Dict[str, Any]:
+    def _check_existing_video(self, video_id: str) -> Tuple[Optional[int], int]:
+        """Check if video already exists in database and return source_id and segment count"""
+        try:
+            return self.segments_db.check_video_exists(video_id)
+        except Exception as e:
+            logger.error(f"Failed to check existing video {video_id}: {e}")
+            return None, 0
+    
+    def process_video(self, video_id: str, force_enhanced_asr: bool = False, skip_existing: bool = True) -> Dict[str, Any]:
         """
-        Process a single YouTube video with Enhanced ASR
+        Process a single YouTube video with Enhanced ASR and caching/resume support
         
         Args:
             video_id: YouTube video ID
             force_enhanced_asr: Skip YouTube transcripts and use Enhanced ASR
+            skip_existing: Skip videos already processed in database
             
         Returns:
             Processing results with metadata
@@ -85,11 +109,29 @@ class EnhancedYouTubeIngestion:
             'segments_count': 0,
             'chunks_count': 0,
             'speaker_metadata': {},
-            'error': None
+            'refinement_stats': {},
+            'error': None,
+            'skipped': False,
+            'processing_time': 0
         }
         
+        start_time = time.time()
+        
         try:
-            logger.info(f"Processing video {video_id} with Enhanced ASR")
+            # Enhanced caching: Check if video already exists and is complete
+            if skip_existing:
+                existing_source_id, existing_chunks = self._check_existing_video(video_id)
+                if existing_source_id and existing_chunks > 0:
+                    logger.info(f"✅ Skipping {video_id}: already processed ({existing_chunks} chunks)")
+                    results.update({
+                        'success': True,
+                        'skipped': True,
+                        'chunks_count': existing_chunks,
+                        'source_id': existing_source_id
+                    })
+                    return results
+            
+            logger.info(f"🚀 Processing video {video_id} with optimized Enhanced ASR")
             
             # Check Enhanced ASR status
             asr_status = self.transcript_fetcher.get_enhanced_asr_status()
@@ -113,7 +155,7 @@ class EnhancedYouTubeIngestion:
             results['method'] = method
             results['segments_count'] = len(segments)
             
-            # Extract speaker metadata if available
+            # Extract speaker metadata and refinement stats if available
             if metadata.get('enhanced_asr_used'):
                 results['speaker_metadata'] = {
                     'chaffee_percentage': metadata.get('chaffee_percentage', 0.0),
@@ -122,9 +164,19 @@ class EnhancedYouTubeIngestion:
                     'processing_method': metadata.get('processing_method', method)
                 }
                 
-                logger.info(f"Speaker identification results:")
-                logger.info(f"  Chaffee: {results['speaker_metadata']['chaffee_percentage']:.1f}%")
-                logger.info(f"  Unknown segments: {results['speaker_metadata']['unknown_segments']}")
+                # Extract refinement statistics
+                refinement_stats = metadata.get('refinement_stats', {})
+                if refinement_stats:
+                    results['refinement_stats'] = {
+                        'total_segments': refinement_stats.get('total_segments', 0),
+                        'refined_segments': refinement_stats.get('refined_segments', 0),
+                        'low_quality_segments': metadata.get('low_quality_segments', 0),
+                        'refinement_percentage': (refinement_stats.get('refined_segments', 0) / 
+                                                max(refinement_stats.get('total_segments', 1), 1)) * 100
+                    }
+                    logger.info(f"📊 Quality triage: {refinement_stats.get('refined_segments', 0)}/{refinement_stats.get('total_segments', 0)} segments refined")
+                
+                # Will log speaker results after source_id is available
             
             # Convert segments to transcript entries for chunking
             transcript_entries = []
@@ -246,6 +298,15 @@ class EnhancedYouTubeIngestion:
                 extra_metadata=source_metadata
             )
             
+            # Log speaker identification results with source_id for tracking
+            if results.get('speaker_metadata'):
+                speaker_meta = results['speaker_metadata']
+                logger.info(f"🎯 Speaker identification results for {video_id} (source_id: {source_id}):")
+                logger.info(f"   Chaffee: {speaker_meta['chaffee_percentage']:.1f}%")
+                logger.info(f"   Unknown segments: {speaker_meta['unknown_segments']}")
+                logger.info(f"   Total speakers: {len(speaker_meta.get('speaker_distribution', {}))}")
+                logger.info(f"   Method: {speaker_meta.get('processing_method', 'unknown')}")
+            
             # Prepare chunks for database upsert
             db_chunks = []
             for chunk in chunks:
@@ -285,27 +346,83 @@ class EnhancedYouTubeIngestion:
             results['error'] = str(e)
             logger.error(f"Failed to process video {video_id}: {e}")
             return results
+        
+        finally:
+            results['processing_time'] = time.time() - start_time
     
-    def process_video_batch(self, video_ids: list, force_enhanced_asr: bool = False) -> Dict[str, Any]:
-        """Process multiple videos"""
+    def process_video_batch(self, video_ids: list, force_enhanced_asr: bool = False, skip_existing: bool = True) -> Dict[str, Any]:
+        """Process multiple videos in parallel with enhanced caching and resume support"""
         batch_results = {
             'total_videos': len(video_ids),
             'successful': 0,
             'failed': 0,
+            'skipped': 0,
             'video_results': {},
-            'summary': {}
+            'summary': {},
+            'error_summary': {}
         }
         
-        logger.info(f"Processing batch of {len(video_ids)} videos")
+        # Determine optimal number of parallel processes
+        max_workers = self.workers or int(os.getenv('WHISPER_PARALLEL_MODELS', '4'))
+        # Limit to CPU count - 1 to avoid system overload
+        max_workers = min(max_workers, multiprocessing.cpu_count() - 1)
+        max_workers = max(1, max_workers)  # Ensure at least 1 worker
         
-        for video_id in video_ids:
-            result = self.process_video(video_id, force_enhanced_asr=force_enhanced_asr)
-            batch_results['video_results'][video_id] = result
+        logger.info(f"Processing batch of {len(video_ids)} videos with {max_workers} parallel threads")
+        error_counts = {}
+        processed_count = 0
+        
+        # Define worker function for ProcessPoolExecutor
+        def process_video_worker(args):
+            idx, vid = args
+            try:
+                logger.info(f"[{idx}/{len(video_ids)}] Processing video {vid}")
+                result = self.process_video(vid, force_enhanced_asr=force_enhanced_asr, skip_existing=skip_existing)
+                success_msg = f"✅ [{idx}/{len(video_ids)}] SUCCESS: {vid} ({result.get('chunks_count', 0)} chunks)"
+                return vid, result, True, None, success_msg
+            except Exception as e:
+                error_msg = str(e)
+                fail_msg = f"💥 [{idx}/{len(video_ids)}] ERROR: {vid} - {error_msg}"
+                return vid, {
+                    'video_id': vid,
+                    'success': False,
+                    'error': f'Worker error: {error_msg}',
+                    'chunks_count': 0
+                }, False, error_msg, fail_msg
+        
+        # Process videos in parallel with ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all jobs with their indices
+            future_to_idx = {executor.submit(process_video_worker, (i, vid)): i 
+                            for i, vid in enumerate(video_ids, 1)}
             
-            if result['success']:
-                batch_results['successful'] += 1
-            else:
-                batch_results['failed'] += 1
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_idx):
+                vid, result, success, error_msg, log_msg = future.result()
+                batch_results['video_results'][vid] = result
+                
+                # Log the result
+                logger.info(log_msg)
+                
+                # Update counters
+                if success:
+                    if result.get('skipped'):
+                        batch_results['skipped'] += 1
+                    else:
+                        batch_results['successful'] += 1
+                else:
+                    batch_results['failed'] += 1
+                    error_type = result.get('error', 'Unknown error')
+                    error_counts[error_type] = error_counts.get(error_type, 0) + 1
+                
+                # Progress update
+                processed_count += 1
+                if processed_count % 10 == 0:
+                    logger.info(f"🔄 Progress: {processed_count}/{len(video_ids)} processed, "
+                              f"{batch_results['successful']} successful, {batch_results['failed']} failed, {batch_results['skipped']} skipped")
+        
+        # Store error summary
+        batch_results['error_summary'] = error_counts
         
         # Generate batch summary
         total_chunks = sum(r['chunks_count'] for r in batch_results['video_results'].values() if r['success'])
@@ -390,6 +507,92 @@ def main():
     parser.add_argument('--source-type', default='youtube',
                        help='Source type for database')
     
+    # Models & compute options
+    parser.add_argument('--model-primary', default=os.getenv('WHISPER_MODEL_PRIMARY', 'distil-large-v3'),
+                       help='Primary transcription model (default: distil-large-v3)')
+    parser.add_argument('--model-refine', default=os.getenv('WHISPER_MODEL_REFINE', 'large-v3'),
+                       help='Refinement model for low-quality segments (default: large-v3)')
+    parser.add_argument('--compute-type', default=os.getenv('WHISPER_COMPUTE', 'float16'),
+                       choices=['float16', 'int8_float16', 'int8'],
+                       help='Compute type for models')
+    parser.add_argument('--language', default='en', help='Language for transcription')
+    
+    # VAD/chunk/decoding options
+    parser.add_argument('--vad-filter', action='store_true', default=True,
+                       help='Enable Voice Activity Detection')
+    parser.add_argument('--vad-threshold', type=float, default=0.5,
+                       help='VAD threshold')
+    parser.add_argument('--chunk-size', type=int, default=20,
+                       help='Chunk size for processing')
+    parser.add_argument('--beam-size', type=int, default=1,
+                       help='Beam size for bulk transcription')
+    parser.add_argument('--temperature', type=float, default=0.0,
+                       help='Temperature for sampling')
+    parser.add_argument('--temperature-increment-on-fallback', type=float, default=0.2,
+                       help='Temperature increment on fallback')
+    parser.add_argument('--initial-prompt', type=str, default='',
+                       help='Initial prompt for Whisper')
+    
+    # Diarization & speaker profile options
+    parser.add_argument('--diarization', action='store_true', default=True,
+                       help='Enable speaker diarization')
+    parser.add_argument('--ch-profile-path', type=str,
+                       default=os.getenv('CH_PROFILE_PATH', 'data/chaffee_profile.json'),
+                       help='Path to Chaffee speaker profile')
+    parser.add_argument('--ch-hi', type=float, default=float(os.getenv('CH_HI', '0.75')),
+                       help='Chaffee high threshold for entry')
+    parser.add_argument('--ch-lo', type=float, default=float(os.getenv('CH_LO', '0.68')),
+                       help='Chaffee low threshold for exit')
+    parser.add_argument('--min-runs', type=int, default=int(os.getenv('MIN_RUNS', '2')),
+                       help='Minimum consecutive segments for state change')
+    parser.add_argument('--overlap-split-ms', type=int, default=int(os.getenv('OVERLAP_SPLIT_MS', '300')),
+                       help='Split overlapping segments (milliseconds)')
+    
+    # Refinement policy options
+    parser.add_argument('--reprobe-segments', action='store_true', default=True,
+                       help='Enable segment refinement')
+    parser.add_argument('--threshold-logprob-ch', type=float, 
+                       default=float(os.getenv('THRESHOLD_LOGPROB_CH', '-0.55')),
+                       help='Log probability threshold for Chaffee segments')
+    parser.add_argument('--threshold-logprob-guest', type=float,
+                       default=float(os.getenv('THRESHOLD_LOGPROB_GUEST', '-0.8')),
+                       help='Log probability threshold for guest segments')
+    parser.add_argument('--threshold-compression-ch', type=float,
+                       default=float(os.getenv('THRESHOLD_COMPRESSION_CH', '2.4')),
+                       help='Compression ratio threshold for Chaffee segments')
+    parser.add_argument('--threshold-compression-guest', type=float,
+                       default=float(os.getenv('THRESHOLD_COMPRESSION_GUEST', '2.6')),
+                       help='Compression ratio threshold for guest segments')
+    
+    # Concurrency & I/O options
+    parser.add_argument('--jobs', type=int, default=4,
+                       help='Bulk processing queue size')
+    parser.add_argument('--refine-jobs', type=int, default=1,
+                       help='Refinement processing jobs')
+    parser.add_argument('--output-dir', type=str, default='data/asr',
+                       help='Output directory for files')
+    parser.add_argument('--skip-existing', action='store_true', default=True,
+                       help='Skip videos already processed in database')
+    parser.add_argument('--dry-run', action='store_true',
+                       help='Dry run mode (no database writes)')
+    
+    # Database & embeddings options
+    parser.add_argument('--db-url', default=os.getenv('DATABASE_URL'),
+                       help='PostgreSQL connection string')
+    parser.add_argument('--schema', default='public',
+                       help='Database schema name')
+    parser.add_argument('--embed-model', default=os.getenv('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-large'),
+                       help='Embedding model name')
+    parser.add_argument('--embed-batch', type=int, default=256,
+                       help='Embedding batch size')
+    parser.add_argument('--embedding-provider', default=os.getenv('EMBEDDING_PROVIDER', 'openai'),
+                       choices=['openai', 'local'],
+                       help='Embedding provider (openai for text-embedding-3-large, local for sentence-transformers)')
+    parser.add_argument('--chaffee-only-storage', action='store_true',
+                       help='Store only Chaffee segments in database (saves space)')
+    parser.add_argument('--embed-chaffee-only', action='store_true', default=True,
+                       help='Generate embeddings only for Chaffee segments (default: True)')
+    
     # Chaffee profile setup
     parser.add_argument('--setup-chaffee', nargs='+', metavar='AUDIO_SOURCE',
                        help='Setup Chaffee profile from audio files or YouTube URLs')
@@ -409,35 +612,62 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # Display current .env configuration
-    print(f"[CONFIG] Enhanced ASR Configuration:")
-    print(f"   Model: {os.getenv('WHISPER_MODEL_ENHANCED', 'large-v3')}")
-    print(f"   Parallel Models: {os.getenv('WHISPER_PARALLEL_MODELS', '4')}")
-    print(f"   Compute Type: {os.getenv('WHISPER_COMPUTE', 'float16')}")
-    print(f"   Batch Size: {os.getenv('BATCH_SIZE', '32')}")
-    print(f"   Beam Size: {os.getenv('BEAM_SIZE', '5')}")
-    print(f"   Chaffee Threshold: {os.getenv('CHAFFEE_MIN_SIM', '0.62')}")
-    print(f"   Speaker ID: {os.getenv('ENABLE_SPEAKER_ID', 'true')}")
+    # Display enhanced configuration
+    print(f"[CONFIG] Enhanced ASR Configuration with Chaffee-aware Diarization:")
+    print(f"   Primary Model: {args.model_primary} ({args.compute_type})")
+    print(f"   Refinement Model: {args.model_refine} (quality improvement)")
+    print(f"   Language: {args.language}")
+    print(f"   Beam Size: {args.beam_size} (bulk), 5 (refine)")
+    print(f"   Temperature: {args.temperature} (+{args.temperature_increment_on_fallback} fallback)")
+    print(f"   VAD Filter: {args.vad_filter}")
+    print(f"   Chunk Size: {args.chunk_size}")
+    print(f"   Parallel Jobs: {args.jobs} bulk, {args.refine_jobs} refine")
+    print(f"   Embedding Provider: {args.embedding_provider} ({args.embed_model})")
+    print(f"   Output Directory: {args.output_dir}")
+    print(f"   Skip Existing: {args.skip_existing}")
     
-    # Performance estimates for medium model
-    model_name = os.getenv('WHISPER_MODEL_ENHANCED', 'large-v3')
-    parallel_models = int(os.getenv('WHISPER_PARALLEL_MODELS', '4'))
-    if model_name == 'medium':
-        print(f"\n[PERFORMANCE] Medium Model Estimates (RTX 5080):")
-        print(f"   Processing Speed: ~3x faster than large-v3")
-        print(f"   Parallel Workers: {parallel_models}")
+    # Speaker profile configuration
+    print(f"\n[SPEAKER PROFILE] Chaffee-aware Configuration:")
+    print(f"   Diarization: {args.diarization}")
+    print(f"   Chaffee Profile: {args.ch_profile_path}")
+    print(f"   Hysteresis Thresholds: HI={args.ch_hi}, LO={args.ch_lo}")
+    print(f"   Min Runs: {args.min_runs} consecutive segments")
+    print(f"   Overlap Split: {args.overlap_split_ms}ms")
+    
+    # Quality triage configuration  
+    print(f"\n[QUALITY TRIAGE] Refinement Policy:")
+    print(f"   Reprobe Segments: {args.reprobe_segments}")
+    print(f"   CH Thresholds: logprob={args.threshold_logprob_ch}, compression={args.threshold_compression_ch}")
+    print(f"   GUEST Thresholds: logprob={args.threshold_logprob_guest}, compression={args.threshold_compression_guest}")
+    
+    # Performance estimates for distil-large-v3
+    if args.model_primary == 'distil-large-v3':
+        print(f"\n[PERFORMANCE] distil-large-v3 Pipeline Estimates (RTX 5080):")
+        print(f"   Primary Speed: ~5x faster than large-v3, superior to medium.en")
+        print(f"   Quality: Large-v3 level accuracy with distillation efficiency")
+        print(f"   Selective Refinement: {args.threshold_logprob_ch}/{args.threshold_compression_ch} thresholds")
+        print(f"   Expected Refinement: 5-15% of segments for optimal quality")
+        print(f"   Overall Speed: ~4x faster than pure large-v3")
         print(f"   Est. Videos/Hour: 60-80 (1-hour videos)")
         print(f"   8-Hour Target: 480-640 videos")
-        print(f"   Quality: 95% of large-v3 accuracy")
-        print(f"   VRAM Usage: ~{parallel_models * 1.5:.1f}GB ({parallel_models} x 1.5GB each)")
-    elif model_name == 'large-v3':
-        print(f"\n[PERFORMANCE] Large-v3 Model Estimates (RTX 5080):")
-        print(f"   Processing Speed: Highest quality, slower")
-        print(f"   Parallel Workers: {parallel_models}")
-        print(f"   Est. Videos/Hour: 20-30 (1-hour videos)")
-        print(f"   8-Hour Target: 160-240 videos")
-        print(f"   Quality: Maximum accuracy")
-        print(f"   VRAM Usage: ~{parallel_models * 2.5:.1f}GB ({parallel_models} x 2.5GB each)")
+        
+        if args.compute_type == 'float16':
+            vram_per_job = 5.5
+            recommended_jobs = 3
+        elif args.compute_type == 'int8_float16':
+            vram_per_job = 4.0
+            recommended_jobs = 5
+        else:
+            vram_per_job = 3.0
+            recommended_jobs = 6
+            
+        total_vram = args.jobs * vram_per_job
+        print(f"   VRAM Usage: ~{total_vram:.1f}GB ({args.jobs} jobs × {vram_per_job}GB each)")
+        if args.jobs > recommended_jobs:
+            print(f"   WARNING: Consider reducing --jobs to {recommended_jobs} for {args.compute_type}")
+    else:
+        print(f"\n[PERFORMANCE] Using {args.model_primary} as primary model")
+        print(f"   Note: distil-large-v3 is recommended for optimal quality+speed")
     
     # Initialize ingestion system with .env defaults
     ingestion = EnhancedYouTubeIngestion(
@@ -489,35 +719,56 @@ def main():
     # Process videos
     batch_results = ingestion.process_video_batch(
         video_ids=video_ids,
-        force_enhanced_asr=args.force_enhanced_asr
+        force_enhanced_asr=args.force_enhanced_asr,
+        skip_existing=args.skip_existing
     )
     
     # Print results
     print(f"\n[RESULTS] Processing Results:")
-    print(f"   Successful: {batch_results['successful']}/{batch_results['total_videos']}")
-    print(f"   Failed: {batch_results['failed']}/{batch_results['total_videos']}")
+    print(f"   Successful: {batch_results['successful']}/{batch_results['total_videos']} ({batch_results['successful']/batch_results['total_videos']*100:.1f}%)")
+    print(f"   Skipped: {batch_results['skipped']}/{batch_results['total_videos']} ({batch_results['skipped']/batch_results['total_videos']*100:.1f}%)")
+    print(f"   Failed: {batch_results['failed']}/{batch_results['total_videos']} ({batch_results['failed']/batch_results['total_videos']*100:.1f}%)")
     print(f"   Total chunks: {batch_results['summary']['total_chunks_processed']}")
     print(f"   Enhanced ASR videos: {batch_results['summary']['enhanced_asr_videos']}")
     
-    # Show individual results
-    for video_id, result in batch_results['video_results'].items():
-        status = "[SUCCESS]" if result['success'] else "[FAILED]"
-        method = result.get('method', 'unknown')
-        chunks = result.get('chunks_count', 0)
-        
-        print(f"   {status} {video_id}: {method} ({chunks} chunks)")
-        
-        # Show speaker info if available
-        if result.get('speaker_metadata'):
-            speaker_meta = result['speaker_metadata']
-            chaffee_pct = speaker_meta.get('chaffee_percentage', 0)
-            unknown_segs = speaker_meta.get('unknown_segments', 0)
+    # Show refinement statistics if available
+    total_refinements = sum(r.get('refinement_stats', {}).get('refined_segments', 0) 
+                           for r in batch_results['video_results'].values() if r['success'])
+    total_segments = sum(r.get('refinement_stats', {}).get('total_segments', 0) 
+                        for r in batch_results['video_results'].values() if r['success'])
+    if total_segments > 0:
+        refinement_pct = (total_refinements / total_segments) * 100
+        print(f"   Quality Triage: {total_refinements}/{total_segments} segments refined ({refinement_pct:.1f}%)")
+    
+    # Show error summary
+    if batch_results.get('error_summary'):
+        print(f"\n[ERROR SUMMARY] Top failure reasons:")
+        for error_type, count in sorted(batch_results['error_summary'].items(), key=lambda x: x[1], reverse=True)[:10]:
+            print(f"   {error_type}: {count} videos")
+    
+    # Show successful videos only (limit output)
+    successful_videos = [(vid, result) for vid, result in batch_results['video_results'].items() if result['success']]
+    if successful_videos:
+        print(f"\n[SUCCESS DETAILS] First 10 successful videos:")
+        for i, (video_id, result) in enumerate(successful_videos[:10]):
+            method = result.get('method', 'unknown')
+            chunks = result.get('chunks_count', 0)
+            print(f"   ✅ {video_id}: {method} ({chunks} chunks)")
             
-            if chaffee_pct > 0:
-                print(f"      [SPEAKER] Chaffee: {chaffee_pct:.1f}%, Unknown segments: {unknown_segs}")
-        
-        if result.get('error'):
-            print(f"      [ERROR] Error: {result['error']}")
+            # Show speaker info if available
+            if result.get('speaker_metadata'):
+                speaker_meta = result['speaker_metadata']
+                chaffee_pct = speaker_meta.get('chaffee_percentage', 0)
+                if chaffee_pct > 0:
+                    print(f"      🎯 Chaffee: {chaffee_pct:.1f}%")
+    
+    # Show sample failures (first 5 only)
+    failed_videos = [(vid, result) for vid, result in batch_results['video_results'].items() if not result['success']]
+    if failed_videos:
+        print(f"\n[FAILURE SAMPLES] First 5 failed videos:")
+        for i, (video_id, result) in enumerate(failed_videos[:5]):
+            error = result.get('error', 'Unknown')[:100]  # Truncate long errors
+            print(f"   ❌ {video_id}: {error}")
     
     # Save results if requested
     if args.output:

@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 class WhisperConfig:
     """Configuration for Whisper transcription with quality-first defaults"""
     
-    # Model configuration
-    model: str = "large-v3"
+    # Model configuration - defaults (can be overridden by env vars)
+    model: str = "distil-large-v3"  # Superior distilled model with large-v3 quality
+    refine_model: str = "large-v3"  # Use large-v3 for refinement of low-quality segments
     device: str = "cuda"
     compute_type: str = "float16"
     
@@ -52,6 +53,7 @@ class WhisperConfig:
         
         # Load from environment
         config.model = os.getenv('WHISPER_MODEL', config.model)
+        config.refine_model = os.getenv('WHISPER_REFINE_MODEL', config.refine_model)
         config.device = os.getenv('WHISPER_DEVICE', config.device)
         config.compute_type = os.getenv('WHISPER_COMPUTE', config.compute_type)
         config.beam_size = int(os.getenv('WHISPER_BEAM', str(config.beam_size)))
