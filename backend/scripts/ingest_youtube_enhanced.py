@@ -239,10 +239,8 @@ class EnhancedYouTubeIngester:
             enable_speaker_id=config.enable_speaker_id,
             voices_dir=config.voices_dir,
             chaffee_min_sim=config.chaffee_min_sim,
-            # RTX 5080 Performance Optimizations
-            assume_monologue=config.assume_monologue,
-            optimize_gpu_memory=config.optimize_gpu_memory,
-            reduce_vad_overhead=config.reduce_vad_overhead
+            # RTX 5080 Performance Optimizations (passed via environment)
+            assume_monologue=config.assume_monologue
         )
         self.embedder = EmbeddingGenerator()
         
