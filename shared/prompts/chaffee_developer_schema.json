@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Emulated Dr. Chaffee Response Schema",
+  "description": "Strict JSON schema for Dr. Chaffee AI emulation responses",
+  "properties": {
+    "role_label": {
+      "type": "string",
+      "description": "Always 'Emulated Dr. Anthony Chaffee (AI)'",
+      "const": "Emulated Dr. Anthony Chaffee (AI)"
+    },
+    "answer_mode": {
+      "type": "string",
+      "description": "Response depth level",
+      "enum": ["concise", "expanded", "deep_dive"]
+    },
+    "summary_short": {
+      "type": "string",
+      "description": "1-2 sentence direct answer in Dr. Chaffee's style",
+      "minLength": 10,
+      "maxLength": 300
+    },
+    "summary_long": {
+      "type": "string",
+      "description": "Detailed explanation (required for expanded/deep_dive modes, optional for concise)",
+      "minLength": 0
+    },
+    "key_points": {
+      "type": "array",
+      "description": "Main takeaways as bullet points",
+      "items": {
+        "type": "string",
+        "minLength": 5
+      },
+      "minItems": 1,
+      "maxItems": 8
+    },
+    "chaffee_quotes": {
+      "type": "array",
+      "description": "Direct quotes from Dr. Chaffee's content with timestamps",
+      "items": {
+        "type": "object",
+        "properties": {
+          "quote": {
+            "type": "string",
+            "description": "Brief, relevant quote from Dr. Chaffee",
+            "minLength": 10
+          },
+          "video_id": {
+            "type": "string",
+            "description": "YouTube video ID or source identifier"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "Timestamp in MM:SS or HH:MM:SS format"
+          },
+          "context": {
+            "type": "string",
+            "description": "Brief context for the quote"
+          }
+        },
+        "required": ["quote", "video_id", "timestamp"],
+        "additionalProperties": false
+      },
+      "maxItems": 3
+    },
+    "evidence": {
+      "type": "object",
+      "description": "Evidence quality assessment",
+      "properties": {
+        "chaffee_content_available": {
+          "type": "boolean",
+          "description": "Whether relevant Dr. Chaffee content was found"
+        },
+        "primary_studies_cited": {
+          "type": "integer",
+          "description": "Number of controlled studies referenced",
+          "minimum": 0
+        },
+        "evidence_strength": {
+          "type": "string",
+          "description": "Overall evidence quality",
+          "enum": ["strong", "moderate", "limited", "insufficient"]
+        },
+        "uncertainties": {
+          "type": "array",
+          "description": "Known limitations or uncertainties",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["chaffee_content_available", "primary_studies_cited", "evidence_strength"],
+      "additionalProperties": false
+    },
+    "clips": {
+      "type": "array",
+      "description": "Relevant video clips with metadata",
+      "items": {
+        "type": "object",
+        "properties": {
+          "video_id": {
+            "type": "string",
+            "description": "YouTube video ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "Video title"
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Start timestamp (MM:SS or HH:MM:SS)"
+          },
+          "duration": {
+            "type": "string",
+            "description": "Clip duration (optional)"
+          },
+          "relevance_score": {
+            "type": "number",
+            "description": "Relevance to query (0.0-1.0)",
+            "minimum": 0.0,
+            "maximum": 1.0
+          }
+        },
+        "required": ["video_id", "title", "start_time", "relevance_score"],
+        "additionalProperties": false
+      },
+      "maxItems": 5
+    },
+    "disclaimers": {
+      "type": "array",
+      "description": "Important disclaimers and limitations",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 3
+    }
+  },
+  "required": [
+    "role_label",
+    "answer_mode", 
+    "summary_short",
+    "key_points",
+    "chaffee_quotes",
+    "evidence",
+    "clips",
+    "disclaimers"
+  ],
+  "additionalProperties": false
+}
