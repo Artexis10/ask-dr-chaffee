@@ -128,6 +128,7 @@ check_*.py
 fix_*.py
 test_*.py
 test_results/
+test_results_summary/
 
 # Voice profiles and models
 voices/
