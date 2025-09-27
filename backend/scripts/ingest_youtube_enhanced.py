@@ -195,6 +195,10 @@ class EnhancedYouTubeIngester:
             audio_storage_dir=str(config.audio_storage_dir) if config.audio_storage_dir else None,
             production_mode=config.production_mode
         )
+        self.embedder = EmbeddingGenerator()
+        self.processor = TranscriptProcessor(
+            chunk_duration_seconds=int(os.getenv('CHUNK_DURATION_SECONDS', 45))
+        )
         
         # Initialize video/file lister based on source
         if config.source == 'api':
@@ -340,8 +344,8 @@ class EnhancedYouTubeIngester:
             self.db.upsert_ingest_state(video_id, video, status='pending')
             
             # Step 1: Fetch transcript with enhanced metadata
-            # Determine if this is a local file based on the video info
-            is_local_file = video.url and video.url.startswith('file://')
+            # Determine if this is a local file based on the source configuration
+            is_local_file = self.config.source == 'local'
             
             if hasattr(self.transcript_fetcher, 'fetch_transcript_with_speaker_id'):
                 # Use enhanced transcript fetcher with speaker ID support
@@ -468,7 +472,7 @@ class EnhancedYouTubeIngester:
             # Log completion with additional info
             extra_info = ""
             if self.config.source == 'local':
-                extra_info = f" (local file: {Path(video.url.replace('file://', '')).name})"
+                extra_info = f" (local file: {video_id})"
             elif metadata.get('stored_audio_path'):
                 extra_info = f" (audio stored: {Path(metadata['stored_audio_path']).name})"
             
