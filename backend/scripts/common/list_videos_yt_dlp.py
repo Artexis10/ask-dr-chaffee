@@ -157,30 +157,72 @@ class YtDlpVideoLister:
             logger.error("yt-dlp timeout after 5 minutes")
             raise
         except subprocess.CalledProcessError as e:
-            logger.error(f"yt-dlp failed: {e.stderr}")
             raise
         except Exception as e:
             logger.error(f"Failed to dump channel JSON: {e}")
             raise
     
-    def list_channel_videos(self, channel_url: str, use_cache: bool = True) -> List[VideoInfo]:
+    def list_channel_videos(self, channel_url: str, use_cache: bool = True, skip_members_only: bool = True) -> List[VideoInfo]:
         """List all videos from a YouTube channel"""
         # Create cache file path
         cache_dir = Path("backend/data")
         cache_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate cache filename from channel URL
-        channel_id = channel_url.split('/')[-1].replace('@', '').replace('c/', '')
-        cache_file = cache_dir / f"videos_{channel_id}.json"
+        channel_name = channel_url.split('@')[-1] if '@' in channel_url else 'unknown'
+        cache_file = cache_dir / f"videos_{channel_name}.json"
         
         # Use cache if available and requested
         if use_cache and cache_file.exists():
             logger.info(f"Using cached video list: {cache_file}")
-            return self.list_from_json(cache_file)
+            videos = self.list_from_json(cache_file)
+            
+            # Apply members-only filter to cached data too
+            if skip_members_only:
+                original_count = len(videos)
+                videos = [v for v in videos if not self._is_members_only_video(v)]
+                filtered_count = original_count - len(videos)
+                if filtered_count > 0:
+                    logger.info(f"Filtered out {filtered_count} members-only videos from cache, {len(videos)} remaining")
+            
+            return videos
         
         # Dump fresh data
         self.dump_channel_json(channel_url, cache_file)
-        return self.list_from_json(cache_file)
+        videos = self.list_from_json(cache_file)
+        
+        # Apply members-only filter if requested
+        if skip_members_only:
+            original_count = len(videos)
+            videos = [v for v in videos if not self._is_members_only_video(v)]
+            filtered_count = original_count - len(videos)
+            if filtered_count > 0:
+                logger.info(f"Filtered out {filtered_count} members-only videos, {len(videos)} remaining")
+        
+        return videos
+    
+    def _is_members_only_video(self, video: VideoInfo) -> bool:
+        """Check if video is members-only content based on title"""
+        title = video.title.lower()
+        
+        # Check for common members-only indicators in title
+        members_indicators = [
+            'members only',
+            'members exclusive',
+            'exclusive to members', 
+            'member exclusive',
+            'patreon exclusive',
+            'subscriber exclusive',
+            'premium content',
+            'early access'
+        ]
+        
+        for indicator in members_indicators:
+            if indicator in title:
+                logger.debug(f"Detected members-only video: {video.video_id} - {video.title[:50]}...")
+                return True
+        
+        return False
     
     def get_video_metadata(self, video_id: str) -> Optional[VideoInfo]:
         """Get detailed metadata for a single video"""

@@ -105,6 +105,9 @@ models/
 *.m4a
 *.aac
 
+# Audio storage directory (ingestion pipeline)
+audio_storage/
+
 # FFmpeg binaries
 backend/ffmpeg/
 backend/ffmpeg.zip

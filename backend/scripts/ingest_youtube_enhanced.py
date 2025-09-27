@@ -12,38 +12,39 @@ import argparse
 import logging
 import asyncio
 import concurrent.futures
+import time
+import json
+import codecs
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
-import json
 
 import tqdm
 from dotenv import load_dotenv
 
-# Local imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from scripts.common.list_videos_yt_dlp import YtDlpVideoLister, VideoInfo
-from scripts.common.list_videos_api import YouTubeAPILister
-from scripts.common.local_file_lister import LocalFileLister, LocalFileInfo
-from scripts.common.transcript_fetch import TranscriptFetcher, TranscriptSegment
-from scripts.common.enhanced_transcript_fetch import EnhancedTranscriptFetcher
-from scripts.common.database_upsert import DatabaseUpserter, ChunkData
-from scripts.common.embeddings import EmbeddingGenerator
-from scripts.common.transcript_processor import TranscriptProcessor
-from scripts.common.proxy_manager import ProxyManager, ProxyConfig
-
-# Load environment variables
+# Load environment variables first
 load_dotenv()
-
-# Configure logging with Unicode support for Windows
-import sys
-import codecs
 
 # Set UTF-8 encoding for stdout on Windows
 if sys.platform == 'win32':
     sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, errors='replace')
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, errors='replace')
+
+# Add paths for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
+
+# Import all required modules
+from scripts.common.list_videos_yt_dlp import YtDlpVideoLister, VideoInfo
+from scripts.common.list_videos_api import YouTubeAPILister  
+from scripts.common.local_file_lister import LocalFileLister
+from scripts.common.proxy_manager import ProxyConfig, ProxyManager
+from scripts.common.enhanced_transcript_fetch import EnhancedTranscriptFetcher  
+from scripts.common.database_upsert import DatabaseUpserter
+from scripts.common.segments_database import SegmentsDatabase
+from scripts.common.embeddings import EmbeddingGenerator
+# ChunkData not needed - using segments directly
 
 logging.basicConfig(
     level=logging.INFO,
@@ -143,7 +144,7 @@ class ProcessingStats:
     errors: int = 0
     youtube_transcripts: int = 0
     whisper_transcripts: int = 0
-    chunks_created: int = 0
+    segments_created: int = 0
     
     def log_summary(self):
         """Log final statistics"""
@@ -154,7 +155,7 @@ class ProcessingStats:
         logger.info(f"Errors: {self.errors}")
         logger.info(f"YouTube transcripts: {self.youtube_transcripts}")
         logger.info(f"Whisper transcripts: {self.whisper_transcripts}")
-        logger.info(f"Total chunks created: {self.chunks_created}")
+        logger.info(f"Total segments created: {self.segments_created}")
         
         if self.total > 0:
             success_rate = (self.processed / self.total) * 100
@@ -168,7 +169,8 @@ class EnhancedYouTubeIngester:
         self.stats = ProcessingStats()
         
         # Initialize components
-        self.db = DatabaseUpserter(config.db_url)
+        self.db = DatabaseUpserter(config.db_url)  # Keep for ingest_state tracking
+        self.segments_db = SegmentsDatabase(config.db_url)  # Use for segments storage
         
         # Setup proxy manager
         proxy_config = ProxyConfig(
@@ -196,9 +198,6 @@ class EnhancedYouTubeIngester:
             production_mode=config.production_mode
         )
         self.embedder = EmbeddingGenerator()
-        self.processor = TranscriptProcessor(
-            chunk_duration_seconds=int(os.getenv('CHUNK_DURATION_SECONDS', 45))
-        )
         
         # Initialize video/file lister based on source
         if config.source == 'api':
@@ -252,10 +251,11 @@ class EnhancedYouTubeIngester:
                     skip_members_only=self.config.skip_members_only
                 )
             else:
-                # yt-dlp lister has different signature
+                # yt-dlp lister supports members-only filtering
                 videos = self.video_lister.list_channel_videos(
                     self.config.channel_url,
-                    use_cache=True
+                    use_cache=True,
+                    skip_members_only=self.config.skip_members_only
                 )
         
         # Apply filters (only for non-local sources)
@@ -310,13 +310,10 @@ class EnhancedYouTubeIngester:
     
     def should_skip_video(self, video: VideoInfo) -> Tuple[bool, str]:
         """Check if video should be skipped"""
-        # Check existing ingest state
-        state = self.db.get_ingest_state(video.video_id)
-        if state:
-            if state['status'] in ('done', 'upserted'):
-                return True, f"already processed (status: {state['status']})"
-            elif state['status'] == 'error' and state['retries'] >= 3:
-                return True, f"max retries exceeded ({state['retries']})"
+        # Check existing processing state from merged sources table
+        source_id, segment_count = self.segments_db.check_video_exists(video.video_id)
+        if source_id and segment_count > 0:
+            return True, f"already processed ({segment_count} segments)"
         
         # Check duration limit for Whisper fallback
         if (self.config.max_duration and 
@@ -331,6 +328,13 @@ class EnhancedYouTubeIngester:
         video_id = video.video_id
         
         try:
+            # Check if video already exists in segments database
+            source_id, segment_count = self.segments_db.check_video_exists(video_id)
+            if source_id and segment_count > 0:
+                logger.info(f"⚡ Skipping {video_id}: already processed ({segment_count} segments)")
+                self.stats.skipped += 1
+                return False
+            
             # Check if should skip
             should_skip, reason = self.should_skip_video(video)
             if should_skip:
@@ -339,9 +343,6 @@ class EnhancedYouTubeIngester:
                 return True
             
             logger.info(f"Processing video {video_id}: {video.title}")
-            
-            # Initialize/update ingest state
-            self.db.upsert_ingest_state(video_id, video, status='pending')
             
             # Step 1: Fetch transcript with enhanced metadata
             # Determine if this is a local file based on the source configuration
@@ -369,21 +370,12 @@ class EnhancedYouTubeIngester:
             
             if not segments:
                 error_msg = metadata.get('error', 'Failed to fetch transcript')
-                self.db.update_ingest_status(
-                    video_id, 'error', 
-                    error=error_msg,
-                    increment_retries=True
-                )
+                logger.error(f"Failed to get transcript for {video_id}: {error_msg}")
                 self.stats.errors += 1
                 return False
             
-            # Update transcript status with enhanced metadata tracking
-            transcript_status = {
-                'has_yt_transcript': method == 'youtube',
-                'has_whisper': method in ('whisper', 'whisper_upgraded'),
-                'status': 'has_yt_transcript' if method == 'youtube' else 'transcribed'
-            }
-            self.db.update_ingest_status(video_id, **transcript_status)
+            # Log transcript method for statistics
+            logger.debug(f"Transcript method for {video_id}: {method}")
             
             # Track transcription method statistics
             if method == 'youtube':
@@ -426,31 +418,20 @@ class EnhancedYouTubeIngester:
             if 'upgrade_used' in metadata:
                 extra_metadata['upgrade_used'] = metadata['upgrade_used']
             
-            # Step 2: Chunk transcript
-            chunks = []
-            for segment in segments:
-                chunk = ChunkData.from_transcript_segment(segment, video_id)
-                chunks.append(chunk)
-            
-            self.db.update_ingest_status(
-                video_id, 'chunked',
-                chunk_count=len(chunks)
-            )
+            # Step 2: Process segments with embeddings
+            logger.debug(f"Processing {len(segments)} segments for {video_id}")
             
             # Step 3: Generate embeddings
-            texts = [chunk.text for chunk in chunks]
+            texts = [segment.get('text', '') for segment in segments]
             embeddings = self.embedder.generate_embeddings(texts)
             
-            # Attach embeddings to chunks
-            for chunk, embedding in zip(chunks, embeddings):
-                chunk.embedding = embedding
+            # Attach embeddings to segments
+            for segment, embedding in zip(segments, embeddings):
+                segment['embedding'] = embedding
             
-            self.db.update_ingest_status(
-                video_id, 'embedded',
-                embedding_count=len(embeddings)
-            )
+            logger.debug(f"Generated {len(embeddings)} embeddings for {video_id}")
             
-            # Step 4: Upsert to database with metadata tracking
+            # Step 4: Upsert source and segments to database with proper speaker attribution
             # Determine source type based on actual source
             if self.config.source == 'local':
                 source_type = 'local_file'
@@ -459,23 +440,23 @@ class EnhancedYouTubeIngester:
             else:
                 source_type = 'youtube'  # Default for yt-dlp
             
-            source_id = self.db.upsert_source(
-                video, 
+            source_id = self.segments_db.upsert_source(
+                video_id, 
+                video.title,
                 source_type=source_type,
-                provenance=provenance,
-                extra_metadata=extra_metadata
+                metadata={'provenance': provenance, **extra_metadata}
             )
             
-            # Update chunks with correct source_id
-            for chunk in chunks:
-                chunk.source_id = source_id
-            
-            chunk_count = self.db.upsert_chunks(chunks)
-            
-            self.db.update_ingest_status(video_id, 'done')
+            # Insert segments with speaker attribution
+            segment_count = self.segments_db.batch_insert_segments(
+                segments, 
+                video_id,
+                chaffee_only_storage=False,  # Store all speakers
+                embed_chaffee_only=True      # But only embed Chaffee content for search
+            )
             
             self.stats.processed += 1
-            self.stats.chunks_created += chunk_count
+            self.stats.segments_created += segment_count
             
             # Log completion with additional info
             extra_info = ""
@@ -484,22 +465,15 @@ class EnhancedYouTubeIngester:
             elif metadata.get('stored_audio_path'):
                 extra_info = f" (audio stored: {Path(metadata['stored_audio_path']).name})"
             
-            logger.info(f"✅ Completed {video_id}: {len(chunks)} chunks, {method} transcript{extra_info}")
+            logger.info(f"✅ Completed {video_id}: {len(segments)} segments, {method} transcript{extra_info}")
             return True
             
         except Exception as e:
             error_msg = str(e)[:500]  # Truncate long errors
             logger.error(f"❌ Error processing {video_id}: {error_msg}")
             
-            try:
-                self.db.update_ingest_status(
-                    video_id, 'error',
-                    error=error_msg,
-                    increment_retries=True
-                )
-            except Exception as db_error:
-                logger.error(f"Failed to update error status: {db_error}")
-            
+            # Log error for debugging
+            logger.debug(f"Error details for {video_id}: {e}")
             self.stats.errors += 1
             return False
     
@@ -557,8 +531,85 @@ class EnhancedYouTubeIngester:
                         'skipped': self.stats.skipped
                     })
     
+    async def check_video_accessibility(self, video: VideoInfo) -> bool:
+        """Check if a video is accessible (not members-only) using yt-dlp"""
+        try:
+            cmd = [
+                "yt-dlp",
+                "--simulate", 
+                "--no-warnings",
+                "--extractor-args", "youtube:player_client=web_safari",
+                "-4",
+                f"https://www.youtube.com/watch?v={video.video_id}"
+            ]
+            
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode == 0:
+                return True
+            else:
+                error_msg = stderr.decode().lower()
+                if "members-only" in error_msg or "join this channel" in error_msg:
+                    logger.info(f"🔒 Skipping members-only: {video.video_id} - {video.title[:50]}...")
+                    return False
+                else:
+                    logger.warning(f"⚠️ Video inaccessible: {video.video_id}")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"❌ Accessibility check failed for {video.video_id}: {e}")
+            return False
+    
+    async def phase1_prefilter_videos(self, videos: List[VideoInfo]) -> List[VideoInfo]:
+        """Phase 1: Smart pre-filtering for accessibility (3-phase optimization)"""
+        if self.config.source == 'local' or len(videos) <= 10:
+            logger.info("⚡ Skipping Phase 1 pre-filtering (local files or small batch)")
+            return videos
+            
+        logger.info(f"🎯 PHASE 1: Pre-filtering {len(videos)} videos for accessibility")
+        start_time = time.time()
+        
+        # Create semaphore for controlled concurrent checks - increased for RTX 5080
+        max_concurrent_checks = min(16, len(videos))  # Doubled from 8 to 16
+        semaphore = asyncio.Semaphore(max_concurrent_checks)
+        
+        async def check_with_semaphore(video):
+            async with semaphore:
+                is_accessible = await self.check_video_accessibility(video)
+                return video, is_accessible
+        
+        # Check all videos concurrently
+        logger.info(f"🔍 Checking accessibility ({max_concurrent_checks} concurrent)")
+        tasks = [check_with_semaphore(video) for video in videos]
+        results = await asyncio.gather(*tasks)
+        
+        # Filter results
+        accessible_videos = []
+        members_only_count = 0
+        
+        for video, is_accessible in results:
+            if is_accessible:
+                accessible_videos.append(video)
+            else:
+                members_only_count += 1
+        
+        duration = time.time() - start_time
+        logger.info(f"✅ Phase 1 Complete ({duration:.1f}s):")
+        logger.info(f"   📈 Accessible: {len(accessible_videos)}")
+        logger.info(f"   🔒 Members-only filtered: {members_only_count}")
+        logger.info(f"   📊 Success rate: {(len(accessible_videos)/len(videos)*100):.1f}%")
+        logger.info(f"   💡 Saved {members_only_count * 30:.0f}s of wasted processing time")
+        
+        return accessible_videos
+
     def run(self) -> None:
-        """Run the complete ingestion pipeline"""
+        """Run the complete ingestion pipeline with smart 3-phase optimization"""
         start_time = datetime.now()
         logger.info("🚀 Starting enhanced YouTube ingestion pipeline")
         logger.info(f"Config: source={self.config.source}, concurrency={self.config.concurrency}")
@@ -571,7 +622,26 @@ class EnhancedYouTubeIngester:
                 logger.warning("No videos found to process")
                 return
             
-            # Process videos
+            # Smart 3-Phase Pipeline for medium/large batches - lowered threshold for better optimization
+            if len(videos) > 15 and self.config.source in ['api', 'yt-dlp']:
+                logger.info("📊 Using SMART 3-PHASE pipeline for large batch optimization")
+                logger.info("   🎯 Phase 1: Pre-filter accessibility")
+                logger.info("   📥 Phase 2: Bulk download accessible videos")  
+                logger.info("   🎙️ Phase 3: Enhanced ASR processing")
+                
+                # Phase 1: Pre-filter videos (async)
+                import asyncio
+                accessible_videos = asyncio.run(self.phase1_prefilter_videos(videos))
+                
+                if not accessible_videos:
+                    logger.warning("No accessible videos found after Phase 1 filtering")
+                    return
+                
+                # Phase 2 & 3: Process accessible videos normally
+                logger.info(f"📥 PHASE 2 & 3: Processing {len(accessible_videos)} accessible videos")
+                videos = accessible_videos
+            
+            # Process videos (Phase 2 & 3 combined)
             if self.config.concurrency > 1:
                 self.run_concurrent(videos)
             else:
