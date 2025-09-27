@@ -67,6 +67,9 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         
         # Audio storage is handled by parent class now
         
+        # Add alias for compatibility
+        self.downloader = self.audio_downloader
+        
         # Lazy-loaded Enhanced ASR components
         self._enhanced_asr = None
         self._voice_enrollment = None
