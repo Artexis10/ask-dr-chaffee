@@ -105,8 +105,8 @@ class IngestionConfig:
     chaffee_only_storage: bool = False  # Store all speakers
     embed_chaffee_only: bool = True     # But only embed Chaffee content for search
     
-    # RTX 5080 Optimizations
-    assume_monologue: bool = True       # Smart fast-path for solo content
+    # RTX 5080 Optimizations (Performance Defaults)
+    assume_monologue: bool = True       # SMART fast-path for solo content (DEFAULT)
     optimize_gpu_memory: bool = True    # Optimize VRAM usage
     reduce_vad_overhead: bool = True    # Skip VAD when possible
     
@@ -940,13 +940,13 @@ Examples:
     parser.add_argument('--overwrite-profile', action='store_true',
                        help='Overwrite existing Chaffee profile')
     
-    # RTX 5080 Performance Optimizations
+    # RTX 5080 Performance Optimizations (enabled by default)
     parser.add_argument('--no-assume-monologue', dest='assume_monologue', action='store_false',
-                       help='Disable monologue fast-path optimization')
+                       help='Disable smart monologue fast-path (3x speedup on solo content - DEFAULT: enabled)')
     parser.add_argument('--no-gpu-optimization', dest='optimize_gpu_memory', action='store_false', 
-                       help='Disable GPU memory optimizations')
+                       help='Disable GPU memory optimizations (DEFAULT: enabled)')
     parser.add_argument('--enable-vad', dest='reduce_vad_overhead', action='store_false',
-                       help='Enable VAD processing (slower but more accurate silence detection)')
+                       help='Enable VAD processing - slower but more accurate silence detection (DEFAULT: disabled)')
     
     # Debug options
     parser.add_argument('--verbose', '-v', action='store_true',
