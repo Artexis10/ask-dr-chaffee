@@ -238,7 +238,7 @@ class EnhancedASR:
                 sim = enrollment.compute_similarity(emb, chaffee_profile)
                 similarities.append(sim)
             
-            avg_similarity = np.mean(similarities)
+            avg_similarity = float(np.mean(similarities))  # Ensure scalar value
             # Use LOWER threshold for fast-path to catch more solo content
             threshold = max(0.55, self.config.chaffee_min_sim - 0.05)  # More lenient for speed
             
@@ -1009,6 +1009,7 @@ class EnhancedASR:
             logger.info(f"Starting enhanced ASR transcription: {audio_path}")
             
             # Check monologue fast-path first
+            logger.info(f" FAST-PATH DEBUG: assume_monologue = {self.config.assume_monologue}")
             if self.config.assume_monologue:
                 fast_result = self._check_monologue_fast_path(audio_path)
                 if fast_result:
