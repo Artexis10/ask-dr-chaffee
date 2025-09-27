@@ -40,7 +40,7 @@ export WHISPER_PARALLEL_MODELS="6"    # GPU resource management
 ### **Basic Usage**
 ```bash
 # Maximum RTX 5080 Performance (recommended)
-python ingest_youtube_enhanced.py --source yt-dlp --concurrency 12 --limit 100
+python ingest_youtube_enhanced.py --source yt-dlp --concurrency 10 --limit 100
 
 # YouTube Data API (quota-friendly)
 python ingest_youtube_enhanced.py --source api --limit 50 --newest-first
@@ -77,7 +77,7 @@ python ingest_youtube_enhanced.py --no-assume-monologue --enable-vad --limit 50
 
 ### **Processing Control**
 ```bash
---concurrency N               # Concurrent workers (default: 4, recommend: 12 for RTX 5080)
+--concurrency N               # Concurrent workers (default: 4, recommend: 10 for RTX 5080)
 --limit N                     # Maximum videos to process
 --skip-shorts                 # Skip videos < 120 seconds
 --newest-first               # Process newest first (default: true)
@@ -114,7 +114,7 @@ python ingest_youtube_enhanced.py --no-assume-monologue --enable-vad --limit 50
 # Process 200 videos with storage optimization
 python ingest_youtube_enhanced.py \
   --source yt-dlp \
-  --concurrency 12 \
+  --concurrency 10 \
   --limit 200 \
   --chaffee-only-storage \
   --skip-shorts
@@ -174,7 +174,7 @@ export DIARIZATION_BATCH_SIZE="2"
 
 python ingest_youtube_enhanced.py \
   --source yt-dlp \
-  --concurrency 12 \
+  --concurrency 10 \
   --limit 100 \
   --skip-shorts
 ```
