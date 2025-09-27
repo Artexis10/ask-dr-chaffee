@@ -98,6 +98,13 @@ class IngestionConfig:
     proxy_rotate: bool = False
     proxy_rotate_interval: int = 10
     
+    # Speaker identification (MANDATORY for Dr. Chaffee content)
+    enable_speaker_id: bool = True  # FORCED - cannot be disabled
+    voices_dir: str = 'voices'
+    chaffee_min_sim: float = 0.62
+    chaffee_only_storage: bool = False  # Store all speakers
+    embed_chaffee_only: bool = True     # But only embed Chaffee content for search
+    
     def __post_init__(self):
         """Set defaults from environment"""
         if self.channel_url is None:
@@ -134,6 +141,23 @@ class IngestionConfig:
             self.audio_storage_dir = Path(os.getenv('AUDIO_STORAGE_DIR', './audio_storage'))
             self.audio_storage_dir.mkdir(exist_ok=True)
             logger.info(f"Audio will be stored in: {self.audio_storage_dir}")
+        
+        # Configure speaker identification from environment
+        if self.voices_dir is None:
+            self.voices_dir = os.getenv('VOICES_DIR', 'voices')
+        
+        if self.chaffee_min_sim is None:
+            self.chaffee_min_sim = float(os.getenv('CHAFFEE_MIN_SIM', '0.62'))
+        
+        # MANDATORY: Verify Chaffee profile exists - CANNOT proceed without it
+        chaffee_profile_path = os.path.join(self.voices_dir, 'chaffee.json')
+        if not os.path.exists(chaffee_profile_path):
+            raise FileNotFoundError(f"CRITICAL: Chaffee voice profile not found at {chaffee_profile_path}. "
+                                  f"Speaker identification is MANDATORY to prevent misattribution. "
+                                  f"Cannot proceed without Dr. Chaffee's voice profile!")
+        
+        logger.info(f"✅ Chaffee voice profile loaded from: {chaffee_profile_path}")
+        logger.info(f"🎯 Speaker identification enabled (threshold: {self.chaffee_min_sim})")
 
 @dataclass 
 class ProcessingStats:
@@ -145,6 +169,9 @@ class ProcessingStats:
     youtube_transcripts: int = 0
     whisper_transcripts: int = 0
     segments_created: int = 0
+    chaffee_segments: int = 0
+    guest_segments: int = 0
+    unknown_segments: int = 0
     
     def log_summary(self):
         """Log final statistics"""
@@ -156,6 +183,13 @@ class ProcessingStats:
         logger.info(f"YouTube transcripts: {self.youtube_transcripts}")
         logger.info(f"Whisper transcripts: {self.whisper_transcripts}")
         logger.info(f"Total segments created: {self.segments_created}")
+        logger.info(f"🎯 Speaker attribution breakdown:")
+        logger.info(f"   Chaffee segments: {self.chaffee_segments}")
+        logger.info(f"   Guest segments: {self.guest_segments}")
+        logger.info(f"   Unknown segments: {self.unknown_segments}")
+        if self.segments_created > 0:
+            chaffee_pct = (self.chaffee_segments / self.segments_created) * 100
+            logger.info(f"   Chaffee percentage: {chaffee_pct:.1f}%")
         
         if self.total > 0:
             success_rate = (self.processed / self.total) * 100
@@ -185,7 +219,7 @@ class EnhancedYouTubeIngester:
         # Get initial proxy
         proxies = self.proxy_manager.get_proxy()
         
-        # Use Enhanced Transcript Fetcher for better functionality
+        # Use Enhanced Transcript Fetcher with speaker identification
         self.transcript_fetcher = EnhancedTranscriptFetcher(
             whisper_model=config.whisper_model,
             ffmpeg_path=config.ffmpeg_path,
@@ -195,7 +229,11 @@ class EnhancedYouTubeIngester:
             # Audio storage options
             store_audio_locally=config.store_audio_locally,
             audio_storage_dir=str(config.audio_storage_dir) if config.audio_storage_dir else None,
-            production_mode=config.production_mode
+            production_mode=config.production_mode,
+            # Speaker identification (MANDATORY)
+            enable_speaker_id=config.enable_speaker_id,
+            voices_dir=config.voices_dir,
+            chaffee_min_sim=config.chaffee_min_sim
         )
         self.embedder = EmbeddingGenerator()
         
@@ -485,12 +523,22 @@ class EnhancedYouTubeIngester:
             segment_count = self.segments_db.batch_insert_segments(
                 segment_dicts, 
                 video_id,
-                chaffee_only_storage=False,  # Store all speakers
-                embed_chaffee_only=True      # But only embed Chaffee content for search
+                chaffee_only_storage=self.config.chaffee_only_storage,
+                embed_chaffee_only=self.config.embed_chaffee_only
             )
             
             self.stats.processed += 1
             self.stats.segments_created += segment_count
+            
+            # Update speaker-specific stats
+            for segment in segment_dicts:
+                speaker = segment.get('speaker_label', 'GUEST')
+                if speaker == 'CHAFFEE':
+                    self.stats.chaffee_segments += 1
+                elif speaker == 'GUEST':
+                    self.stats.guest_segments += 1
+                else:
+                    self.stats.unknown_segments += 1
             
             # Log completion with additional info
             extra_info = ""
@@ -498,6 +546,15 @@ class EnhancedYouTubeIngester:
                 extra_info = f" (local file: {video_id})"
             elif metadata.get('stored_audio_path'):
                 extra_info = f" (audio stored: {Path(metadata['stored_audio_path']).name})"
+            
+            # Log speaker identification results if available
+            if metadata.get('enhanced_asr_used') and metadata.get('speaker_distribution'):
+                chaffee_pct = metadata.get('chaffee_percentage', 0.0)
+                logger.info(f"🎯 Speaker identification results for {video_id}:")
+                logger.info(f"   Chaffee: {chaffee_pct:.1f}%")
+                logger.info(f"   Total speakers detected: {len(metadata.get('speaker_distribution', {}))}")
+                for speaker, count in metadata.get('speaker_distribution', {}).items():
+                    logger.info(f"   {speaker}: {count} segments")
             
             logger.info(f"✅ Completed {video_id}: {len(segments)} segments, {method} transcript{extra_info}")
             return True
@@ -693,6 +750,48 @@ class EnhancedYouTubeIngester:
             
             # Close database connection
             self.db.close_connection()
+    
+    def setup_chaffee_profile(self, audio_sources: list, overwrite: bool = False) -> bool:
+        """Setup Chaffee voice profile for speaker identification"""
+        try:
+            logger.info("Setting up Chaffee voice profile")
+            
+            success = False
+            for source in audio_sources:
+                if source.startswith('http'):
+                    # YouTube URL
+                    if 'youtube.com/watch?v=' in source or 'youtu.be/' in source:
+                        video_id = source.split('v=')[1].split('&')[0] if 'v=' in source else source.split('/')[-1]
+                        success = self.transcript_fetcher.enroll_speaker_from_video(
+                            video_id, 
+                            'Chaffee', 
+                            overwrite=overwrite
+                        )
+                    else:
+                        logger.warning(f"Unsupported URL format: {source}")
+                        continue
+                else:
+                    # Local audio file
+                    from backend.scripts.common.voice_enrollment import VoiceEnrollment
+                    enrollment = VoiceEnrollment(voices_dir=self.config.voices_dir)
+                    profile = enrollment.enroll_speaker(
+                        name='Chaffee',
+                        audio_sources=[source],
+                        overwrite=overwrite
+                    )
+                    success = profile is not None
+                
+                if success:
+                    logger.info(f"Successfully enrolled Chaffee from: {source}")
+                    break
+                else:
+                    logger.warning(f"Failed to enroll Chaffee from: {source}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Failed to setup Chaffee profile: {e}")
+            return False
 
 def parse_args() -> IngestionConfig:
     """Parse command line arguments"""
@@ -719,6 +818,15 @@ Examples:
 
   # Production mode (no audio storage)
   python ingest_youtube_enhanced.py --source api --production-mode --limit 100
+
+  # Speaker identification features
+  python ingest_youtube_enhanced.py --source yt-dlp --limit 50 --chaffee-min-sim 0.65
+  
+  # Setup Chaffee voice profile
+  python ingest_youtube_enhanced.py --setup-chaffee audio_sample.wav --overwrite-profile
+  
+  # Storage optimization for large batches
+  python ingest_youtube_enhanced.py --source api --chaffee-only-storage --limit 200
 
   # Dry run to see what would be processed
   python ingest_youtube_enhanced.py --dry-run --limit 10
@@ -801,6 +909,23 @@ Examples:
     parser.add_argument('--youtube-api-key',
                        help='YouTube Data API key (default: env YOUTUBE_API_KEY)')
     
+    # Speaker identification (MANDATORY for Dr. Chaffee content)
+    parser.add_argument('--enable-speaker-id', action='store_true', default=True,
+                       help='Enable speaker identification (MANDATORY - always enabled for accuracy)')
+    parser.add_argument('--voices-dir', default=os.getenv('VOICES_DIR', 'voices'),
+                       help='Voice profiles directory')
+    parser.add_argument('--chaffee-min-sim', type=float, 
+                       default=float(os.getenv('CHAFFEE_MIN_SIM', '0.62')),
+                       help='Minimum similarity threshold for Chaffee')
+    parser.add_argument('--chaffee-only-storage', action='store_true',
+                       help='Store only Chaffee segments in database (saves space)')
+    parser.add_argument('--embed-all-speakers', dest='embed_chaffee_only', action='store_false',
+                       help='Generate embeddings for all speakers (default: Chaffee only)')
+    parser.add_argument('--setup-chaffee', nargs='+', metavar='AUDIO_SOURCE',
+                       help='Setup Chaffee profile from audio files or YouTube URLs')
+    parser.add_argument('--overwrite-profile', action='store_true',
+                       help='Overwrite existing Chaffee profile')
+    
     # Debug options
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
@@ -835,7 +960,13 @@ Examples:
         # Content filtering options
         skip_live=args.skip_live,
         skip_upcoming=args.skip_upcoming,
-        skip_members_only=args.skip_members_only
+        skip_members_only=args.skip_members_only,
+        # Speaker identification options
+        enable_speaker_id=args.enable_speaker_id,
+        voices_dir=args.voices_dir,
+        chaffee_min_sim=args.chaffee_min_sim,
+        chaffee_only_storage=args.chaffee_only_storage,
+        embed_chaffee_only=args.embed_chaffee_only
     )
     
     return config
