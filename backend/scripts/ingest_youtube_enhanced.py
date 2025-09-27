@@ -533,8 +533,8 @@ class EnhancedYouTubeIngester:
             # Update speaker-specific stats
             for segment in segment_dicts:
                 speaker = segment.get('speaker_label', 'GUEST')
-                # Enhanced ASR uses 'CH' for Chaffee, 'GUEST' for guests
-                if speaker in ['CH', 'CHAFFEE']:  # Support both formats
+                # Enhanced ASR uses multiple formats: 'CH', 'Chaffee', 'CHAFFEE'
+                if speaker in ['CH', 'CHAFFEE', 'Chaffee']:  # Support all formats
                     self.stats.chaffee_segments += 1
                 elif speaker == 'GUEST':
                     self.stats.guest_segments += 1
