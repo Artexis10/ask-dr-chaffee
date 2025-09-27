@@ -58,7 +58,7 @@ class WhisperConfig:
         config.compute_type = os.getenv('WHISPER_COMPUTE', config.compute_type)
         config.beam_size = int(os.getenv('WHISPER_BEAM', str(config.beam_size)))
         config.chunk_length = int(os.getenv('WHISPER_CHUNK', str(config.chunk_length)))
-        config.vad_filter = os.getenv('WHISPER_VAD', str(config.vad_filter)).lower() == 'true'
+        config.vad_filter = os.getenv('VAD_FILTER', os.getenv('WHISPER_VAD', str(config.vad_filter))).lower() == 'true'
         config.language = os.getenv('WHISPER_LANG', config.language)
         config.task = os.getenv('WHISPER_TASK', config.task)
         

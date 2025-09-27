@@ -105,6 +105,11 @@ class IngestionConfig:
     chaffee_only_storage: bool = False  # Store all speakers
     embed_chaffee_only: bool = True     # But only embed Chaffee content for search
     
+    # RTX 5080 Optimizations
+    assume_monologue: bool = True       # Smart fast-path for solo content
+    optimize_gpu_memory: bool = True    # Optimize VRAM usage
+    reduce_vad_overhead: bool = True    # Skip VAD when possible
+    
     def __post_init__(self):
         """Set defaults from environment"""
         if self.channel_url is None:
@@ -219,7 +224,7 @@ class EnhancedYouTubeIngester:
         # Get initial proxy
         proxies = self.proxy_manager.get_proxy()
         
-        # Use Enhanced Transcript Fetcher with speaker identification
+        # Use Enhanced Transcript Fetcher with RTX 5080 optimizations
         self.transcript_fetcher = EnhancedTranscriptFetcher(
             whisper_model=config.whisper_model,
             ffmpeg_path=config.ffmpeg_path,
@@ -233,7 +238,11 @@ class EnhancedYouTubeIngester:
             # Speaker identification (MANDATORY)
             enable_speaker_id=config.enable_speaker_id,
             voices_dir=config.voices_dir,
-            chaffee_min_sim=config.chaffee_min_sim
+            chaffee_min_sim=config.chaffee_min_sim,
+            # RTX 5080 Performance Optimizations
+            assume_monologue=config.assume_monologue,
+            optimize_gpu_memory=config.optimize_gpu_memory,
+            reduce_vad_overhead=config.reduce_vad_overhead
         )
         self.embedder = EmbeddingGenerator()
         
@@ -828,6 +837,12 @@ Examples:
   
   # Storage optimization for large batches
   python ingest_youtube_enhanced.py --source api --chaffee-only-storage --limit 200
+  
+  # RTX 5080 Maximum Performance (default)
+  python ingest_youtube_enhanced.py --source yt-dlp --concurrency 12 --limit 100
+  
+  # Conservative mode (disable optimizations)
+  python ingest_youtube_enhanced.py --source yt-dlp --no-assume-monologue --enable-vad --limit 50
 
   # Dry run to see what would be processed
   python ingest_youtube_enhanced.py --dry-run --limit 10
@@ -927,6 +942,14 @@ Examples:
     parser.add_argument('--overwrite-profile', action='store_true',
                        help='Overwrite existing Chaffee profile')
     
+    # RTX 5080 Performance Optimizations
+    parser.add_argument('--no-assume-monologue', dest='assume_monologue', action='store_false',
+                       help='Disable monologue fast-path optimization')
+    parser.add_argument('--no-gpu-optimization', dest='optimize_gpu_memory', action='store_false', 
+                       help='Disable GPU memory optimizations')
+    parser.add_argument('--enable-vad', dest='reduce_vad_overhead', action='store_false',
+                       help='Enable VAD processing (slower but more accurate silence detection)')
+    
     # Debug options
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Enable verbose logging')
@@ -967,7 +990,11 @@ Examples:
         voices_dir=args.voices_dir,
         chaffee_min_sim=args.chaffee_min_sim,
         chaffee_only_storage=args.chaffee_only_storage,
-        embed_chaffee_only=args.embed_chaffee_only
+        embed_chaffee_only=args.embed_chaffee_only,
+        # RTX 5080 Performance Optimizations
+        assume_monologue=args.assume_monologue,
+        optimize_gpu_memory=args.optimize_gpu_memory,
+        reduce_vad_overhead=args.reduce_vad_overhead
     )
     
     return config
