@@ -236,7 +236,13 @@ class EnhancedASR:
             
             for emb in test_embeddings:
                 sim = enrollment.compute_similarity(emb, chaffee_profile)
-                similarities.append(sim)
+                logger.debug(f"Similarity result type: {type(sim)}, value: {sim}")
+                # Ensure scalar similarity
+                if hasattr(sim, 'item'):
+                    sim = sim.item()
+                elif isinstance(sim, (list, tuple)) and len(sim) == 1:
+                    sim = sim[0]
+                similarities.append(float(sim))
             
             avg_similarity = float(np.mean(similarities))  # Ensure scalar value
             # Use LOWER threshold for fast-path to catch more solo content
