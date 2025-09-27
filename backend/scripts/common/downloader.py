@@ -72,16 +72,31 @@ class AudioDownloader:
             return opts_str.split()
     
     def _build_ytdlp_config(self, video_id: str, output_path: str) -> Dict[str, Any]:
-        """Build yt-dlp configuration dictionary."""
+        """Build yt-dlp configuration dictionary with stealth options."""
         config = {
             'outtmpl': output_path,
-            'format': 'bestaudio/best',
+            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio[acodec=opus]/bestaudio/best',  # Prioritize high-quality formats
             'extract_flat': False,
             'writethumbnail': False,
             'writeinfojson': False,
             'writesubtitles': False,
             'writeautomaticsub': False,
             'ignoreerrors': False,
+            # GPT-5's anti-blocking recommendations 
+            'source_address': '0.0.0.0',  # Force IPv4 
+            'sleep_requests': 5,
+            'min_sleep_interval': 2,  # Required with max_sleep_interval
+            'max_sleep_interval': 15,
+            # Try Firefox cookies (GPT-5 most reliable option)
+            'cookiesfrombrowser': ('firefox', None, None, None),
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ApyleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://www.youtube.com/',
+            },
+            'retries': 10,
+            'retry_sleep': 3,
+            'fragment_retries': 10,
+            'socket_timeout': 60,
         }
         
         # Add proxy if configured
@@ -208,9 +223,14 @@ class AudioDownloader:
         """
         cmd = [self.ffmpeg_path, '-i', input_path]
         
-        # Audio normalization: mono, 16kHz, 16-bit PCM
+        # Audio normalization optimized for Whisper: mono, 16kHz, 16-bit PCM
         if config.normalize_audio:
-            cmd.extend(['-ac', '1', '-ar', '16000', '-sample_fmt', 's16', '-vn'])
+            cmd.extend([
+                '-ac', '1',           # Convert to mono (speech doesn't need stereo)
+                '-ar', '16000',       # 16kHz sample rate (Whisper's native rate)
+                '-sample_fmt', 's16', # 16-bit depth (sufficient for speech)
+                '-vn'                 # No video stream
+            ])
         
         # Silence removal (conservative settings)
         if config.remove_silence:

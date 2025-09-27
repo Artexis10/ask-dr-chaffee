@@ -52,24 +52,41 @@ except ImportError:
 class TranscriptFetcher:
     """Fetch transcripts with multiple fallback strategies"""
     
-    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = None, whisper_upgrade: str = None, ffmpeg_path: str = None, proxies: dict = None, api_key: str = None, credentials_path: str = None, enable_preprocessing: bool = True):
+    def __init__(self, yt_dlp_path: str = "yt-dlp", whisper_model: str = None, whisper_upgrade: str = None, ffmpeg_path: str = None, proxies: dict = None, api_key: str = None, credentials_path: str = None, enable_preprocessing: bool = True, store_audio_locally: bool = True, audio_storage_dir: str = None, production_mode: bool = False):
         self.yt_dlp_path = yt_dlp_path
         self.whisper_model = whisper_model or os.getenv('WHISPER_MODEL', 'small.en')
         self.whisper_upgrade = whisper_upgrade or os.getenv('WHISPER_UPGRADE', 'medium.en')
         self._whisper_model_cache = {}  # Cache multiple models
         self.ffmpeg_path = ffmpeg_path
         self.proxies = proxies
-        self.api_key = api_key or os.getenv('YOUTUBE_API_KEY')
-        self.credentials_path = credentials_path or os.getenv('YOUTUBE_CREDENTIALS_PATH')
-        self._api_client = None
+        self.api_key = api_key
+        self.credentials_path = credentials_path
+        self.enable_preprocessing = enable_preprocessing
+        self._api_client = None  # Lazy loaded
         
-        # Initialize audio downloader
-        self.downloader = AudioDownloader(ffmpeg_path=ffmpeg_path)
-        self.preprocessing_config = AudioPreprocessingConfig(
-            normalize_audio=enable_preprocessing,
-            remove_silence=False,  # Conservative default, can be enabled per request
-            pipe_mode=False
-        )
+        # Audio storage configuration
+        self.production_mode = production_mode or os.getenv('PRODUCTION_MODE', 'false').lower() == 'true'
+        self.store_audio_locally = store_audio_locally and not self.production_mode
+        self.audio_storage_dir = None
+        
+        if self.store_audio_locally:
+            from pathlib import Path
+            storage_dir = audio_storage_dir or os.getenv('AUDIO_STORAGE_DIR', './audio_storage')
+            self.audio_storage_dir = Path(storage_dir)
+            self.audio_storage_dir.mkdir(exist_ok=True)
+            logger.info(f"Audio will be stored in: {self.audio_storage_dir}")
+        elif self.production_mode:
+            logger.info("Production mode: Audio storage disabled")
+        
+        # Initialize AudioDownloader with current settings
+        from .downloader import AudioDownloader
+        self.audio_downloader = AudioDownloader(ffmpeg_path=ffmpeg_path)
+        
+        logger.info(f"TranscriptFetcher initialized with model: {self.whisper_model}")
+        if self.proxies:
+            logger.info(f"Proxy configured: {self.proxies}")
+        if self.api_key:
+            logger.info("YouTube API key provided for enhanced transcript fetching")
     
     def _get_whisper_model(self, model_name: str = None):
         """Lazy load Whisper model"""
@@ -182,21 +199,7 @@ class TranscriptFetcher:
         
         logger.debug(f"Fetching YouTube transcript for {video_id}")
         
-        # Try YouTube Data API first if OAuth2 credentials available (requires channel permissions)
-        if self.credentials_path:
-            api_client = self._get_api_client()
-            if api_client:
-                try:
-                    logger.info(f"Fetching transcript via YouTube Data API for {video_id}")
-                    segments = api_client.get_transcript_segments(video_id, language_code=languages[0])
-                    if segments:
-                        logger.info(f"Successfully fetched transcript via YouTube Data API for {video_id}")
-                        return segments
-                    logger.info(f"No transcript found via YouTube Data API for {video_id}")
-                except Exception as e:
-                    logger.warning(f"Error fetching transcript via YouTube Data API: {e}")
-        
-        logger.debug(f"Using YouTube Transcript API as fallback for {video_id}")
+        logger.debug(f"Using YouTube Transcript API for {video_id}")
         
         # Use YouTube Transcript API for third-party videos
         try:
@@ -259,9 +262,19 @@ class TranscriptFetcher:
             cmd = [
                 self.yt_dlp_path,
                 '--extract-audio',
-                '--audio-format', 'mp3',
+                '--audio-format', 'wav',  # Lossless format, better for Whisper
                 '--audio-quality', '0',  # Best quality
                 '--no-playlist',
+                # Latest nightly anti-blocking fixes (2025.09.26):
+                '--extractor-args', 'youtube:player_client=web_safari',  # Use web_safari client (latest fix)
+                '--user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                '--referer', 'https://www.youtube.com/',
+                '-4',  # Force IPv4 (fixes many 403s)
+                '--retry-sleep', '3',  # Pause between retries  
+                '--retries', '10',  # More retries
+                '--fragment-retries', '10',
+                '--sleep-requests', '2',  # Sleep between requests
+                '--socket-timeout', '60',  # Longer timeout
                 '-o', str(output_path),
                 f'https://www.youtube.com/watch?v={video_id}'
             ]
@@ -306,8 +319,21 @@ class TranscriptFetcher:
                 audio_file = audio_files[0]
                 logger.debug(f"Audio downloaded: {audio_file}")
                 
+                # Store audio locally if configured
+                stored_path = None
+                if self.store_audio_locally:
+                    stored_path = self._store_audio_permanently(audio_file, video_id)
+                    if stored_path:
+                        logger.info(f"Audio stored at: {stored_path}")
+                
                 # Transcribe with parallel Whisper (bypasses GIL)
                 segments, metadata = self.transcribe_with_whisper_parallel(audio_file)
+                
+                # Add storage info to metadata
+                if stored_path:
+                    metadata = metadata or {}
+                    metadata['stored_audio_path'] = str(stored_path)
+                
                 return segments
                 
             except subprocess.TimeoutExpired:
@@ -316,6 +342,27 @@ class TranscriptFetcher:
             except Exception as e:
                 logger.error(f"Error downloading audio for {video_id}: {e}")
                 return None
+    
+    def _store_audio_permanently(self, temp_audio_path: Path, video_id: str) -> Optional[Path]:
+        """Store downloaded audio file permanently"""
+        try:
+            if not self.audio_storage_dir:
+                return None
+            
+            # Create filename based on video ID and extension
+            stored_filename = f"{video_id}{temp_audio_path.suffix}"
+            stored_path = self.audio_storage_dir / stored_filename
+            
+            # Copy file to permanent location
+            import shutil
+            shutil.copy2(temp_audio_path, stored_path)
+            
+            logger.info(f"Audio stored permanently: {stored_path}")
+            return stored_path
+            
+        except Exception as e:
+            logger.error(f"Failed to store audio permanently: {e}")
+            return None
     
     def transcribe_with_whisper_parallel(self, audio_path: Path, model_name: str = None) -> Tuple[Optional[List[TranscriptSegment]], Dict[str, Any]]:
         """

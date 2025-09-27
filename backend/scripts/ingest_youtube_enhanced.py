@@ -25,7 +25,9 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.common.list_videos_yt_dlp import YtDlpVideoLister, VideoInfo
 from scripts.common.list_videos_api import YouTubeAPILister
+from scripts.common.local_file_lister import LocalFileLister, LocalFileInfo
 from scripts.common.transcript_fetch import TranscriptFetcher, TranscriptSegment
+from scripts.common.enhanced_transcript_fetch import EnhancedTranscriptFetcher
 from scripts.common.database_upsert import DatabaseUpserter, ChunkData
 from scripts.common.embeddings import EmbeddingGenerator
 from scripts.common.transcript_processor import TranscriptProcessor
@@ -56,9 +58,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class IngestionConfig:
     """Configuration for ingestion pipeline"""
-    source: str = 'api'  # 'api' or 'yt-dlp' (API is now default)
+    source: str = 'api'  # 'api', 'yt-dlp', or 'local' (API is now default)
     channel_url: Optional[str] = None
     from_json: Optional[Path] = None
+    from_files: Optional[Path] = None  # Directory containing local video/audio files
+    file_patterns: List[str] = None  # File patterns to match (e.g., ['*.mp4', '*.wav'])
     concurrency: int = 4
     skip_shorts: bool = False
     newest_first: bool = True
@@ -69,6 +73,11 @@ class IngestionConfig:
     force_whisper: bool = False
     cleanup_audio: bool = True
     since_published: Optional[str] = None  # ISO8601 or YYYY-MM-DD format
+    
+    # Audio storage configuration
+    store_audio_locally: bool = True   # Store downloaded audio files locally
+    audio_storage_dir: Optional[Path] = None  # Directory to store audio files
+    production_mode: bool = False      # Disable audio storage in production
     
     # Content filtering
     skip_live: bool = True
@@ -103,6 +112,27 @@ class IngestionConfig:
                 self.youtube_api_key = os.getenv('YOUTUBE_API_KEY')
             if not self.youtube_api_key:
                 raise ValueError("YOUTUBE_API_KEY required for API source")
+        
+        # Handle local file processing
+        if self.source == 'local':
+            if not self.from_files:
+                raise ValueError("--from-files directory required for local source")
+            if not self.from_files.exists():
+                raise ValueError(f"Local files directory does not exist: {self.from_files}")
+        
+        # Set up file patterns if not provided
+        if self.file_patterns is None:
+            self.file_patterns = ['*.mp4', '*.mkv', '*.avi', '*.mov', '*.wav', '*.mp3', '*.m4a', '*.webm']
+        
+        # Handle audio storage configuration
+        if self.production_mode:
+            self.store_audio_locally = False
+            logger.info("Production mode enabled: Audio storage disabled")
+        
+        if self.store_audio_locally and self.audio_storage_dir is None:
+            self.audio_storage_dir = Path(os.getenv('AUDIO_STORAGE_DIR', './audio_storage'))
+            self.audio_storage_dir.mkdir(exist_ok=True)
+            logger.info(f"Audio will be stored in: {self.audio_storage_dir}")
 
 @dataclass 
 class ProcessingStats:
@@ -153,25 +183,28 @@ class EnhancedYouTubeIngester:
         # Get initial proxy
         proxies = self.proxy_manager.get_proxy()
         
-        self.transcript_fetcher = TranscriptFetcher(
+        # Use Enhanced Transcript Fetcher for better functionality
+        self.transcript_fetcher = EnhancedTranscriptFetcher(
             whisper_model=config.whisper_model,
             ffmpeg_path=config.ffmpeg_path,
             proxies=proxies,
             api_key=config.youtube_api_key,
-            credentials_path=os.getenv('YOUTUBE_CREDENTIALS_PATH')
-        )
-        self.embedder = EmbeddingGenerator()
-        self.processor = TranscriptProcessor(
-            chunk_duration_seconds=int(os.getenv('CHUNK_DURATION_SECONDS', 45))
+            credentials_path=os.getenv('YOUTUBE_CREDENTIALS_PATH'),
+            # Audio storage options
+            store_audio_locally=config.store_audio_locally,
+            audio_storage_dir=str(config.audio_storage_dir) if config.audio_storage_dir else None,
+            production_mode=config.production_mode
         )
         
-        # Initialize video lister based on source
+        # Initialize video/file lister based on source
         if config.source == 'api':
             if not config.youtube_api_key:
                 raise ValueError("YouTube API key required for API source")
             self.video_lister = YouTubeAPILister(config.youtube_api_key, config.db_url)
         elif config.source == 'yt-dlp':
             self.video_lister = YtDlpVideoLister()
+        elif config.source == 'local':
+            self.video_lister = LocalFileLister()
         else:
             raise ValueError(f"Unknown source: {config.source}")
     
@@ -179,7 +212,10 @@ class EnhancedYouTubeIngester:
         """List videos using configured source"""
         logger.info(f"Listing videos using {self.config.source} source")
         
-        if self.config.from_json:
+        if self.config.source == 'local':
+            # Handle local file source
+            return self._list_local_files()
+        elif self.config.from_json:
             # Load from JSON file (yt-dlp only)
             if self.config.source != 'yt-dlp':
                 raise ValueError("--from-json only supported with yt-dlp source")
@@ -212,24 +248,60 @@ class EnhancedYouTubeIngester:
                     skip_members_only=self.config.skip_members_only
                 )
             else:
+                # yt-dlp lister has different signature
                 videos = self.video_lister.list_channel_videos(
                     self.config.channel_url,
-                    max_results=self.config.limit,
-                    newest_first=self.config.newest_first
-                )     # Apply filters
-        if self.config.skip_shorts:
-            videos = [v for v in videos if not v.duration_s or v.duration_s >= 120]
-            logger.info(f"Filtered out shorts, {len(videos)} videos remaining")
+                    use_cache=True
+                )
         
-        # Apply sorting
-        if self.config.newest_first:
-            videos.sort(key=lambda v: v.published_at or datetime.min, reverse=True)
-        
-        # Apply limit
-        if self.config.limit:
-            videos = videos[:self.config.limit]
+        # Apply filters (only for non-local sources)
+        if self.config.source != 'local':
+            if self.config.skip_shorts:
+                videos = [v for v in videos if not v.duration_s or v.duration_s >= 120]
+                logger.info(f"Filtered out shorts, {len(videos)} videos remaining")
+            
+            # Apply sorting
+            if self.config.newest_first:
+                videos.sort(key=lambda v: v.published_at or datetime.min, reverse=True)
+            
+            # Apply limit
+            if self.config.limit:
+                videos = videos[:self.config.limit]
         
         logger.info(f"Found {len(videos)} videos to process")
+        return videos
+    
+    def _list_local_files(self) -> List[VideoInfo]:
+        """List local video/audio files for processing"""
+        logger.info(f"Scanning local files from: {self.config.from_files}")
+        
+        file_infos = self.video_lister.list_files_from_directory(
+            self.config.from_files,
+            patterns=self.config.file_patterns,
+            recursive=True,  # Always scan subdirectories for local files
+            max_results=self.config.limit,
+            newest_first=self.config.newest_first
+        )
+        
+        # Convert LocalFileInfo objects to VideoInfo objects
+        videos = []
+        for file_info in file_infos:
+            # Get duration if possible
+            try:
+                duration = self.video_lister.get_file_duration(file_info.file_path)
+                file_info.duration_s = duration
+            except Exception as e:
+                logger.debug(f"Could not get duration for {file_info.file_path}: {e}")
+            
+            # Apply duration filter for local files too
+            if self.config.skip_shorts and file_info.duration_s and file_info.duration_s < 120:
+                logger.debug(f"Skipping short file: {file_info.file_path} ({file_info.duration_s}s)")
+                continue
+            
+            video_info = file_info.to_video_info()
+            videos.append(video_info)
+        
+        logger.info(f"Found {len(videos)} local files to process")
         return videos
     
     def should_skip_video(self, video: VideoInfo) -> Tuple[bool, str]:
@@ -268,13 +340,28 @@ class EnhancedYouTubeIngester:
             self.db.upsert_ingest_state(video_id, video, status='pending')
             
             # Step 1: Fetch transcript with enhanced metadata
-            segments, method, metadata = self.transcript_fetcher.fetch_transcript(
-                video_id,
-                max_duration_s=self.config.max_duration,
-                force_whisper=self.config.force_whisper,
-                cleanup_audio=self.config.cleanup_audio,
-                enable_silence_removal=False  # Conservative default
-            )
+            # Determine if this is a local file based on the video info
+            is_local_file = video.url and video.url.startswith('file://')
+            
+            if hasattr(self.transcript_fetcher, 'fetch_transcript_with_speaker_id'):
+                # Use enhanced transcript fetcher with speaker ID support
+                segments, method, metadata = self.transcript_fetcher.fetch_transcript_with_speaker_id(
+                    video_id,
+                    max_duration_s=self.config.max_duration,
+                    force_enhanced_asr=self.config.force_whisper,
+                    cleanup_audio=self.config.cleanup_audio,
+                    enable_silence_removal=False,  # Conservative default
+                    is_local_file=is_local_file
+                )
+            else:
+                # Fallback to standard transcript fetcher
+                segments, method, metadata = self.transcript_fetcher.fetch_transcript(
+                    video_id,
+                    max_duration_s=self.config.max_duration,
+                    force_whisper=self.config.force_whisper,
+                    cleanup_audio=self.config.cleanup_audio,
+                    enable_silence_removal=False  # Conservative default
+                )
             
             if not segments:
                 error_msg = metadata.get('error', 'Failed to fetch transcript')
@@ -352,8 +439,13 @@ class EnhancedYouTubeIngester:
             )
             
             # Step 4: Upsert to database with metadata tracking
-            # Always use 'youtube' as the source_type regardless of the data source method
-            source_type = 'youtube'
+            # Determine source type based on actual source
+            if self.config.source == 'local':
+                source_type = 'local_file'
+            elif self.config.source == 'api':
+                source_type = 'youtube_api'
+            else:
+                source_type = 'youtube'  # Default for yt-dlp
             
             source_id = self.db.upsert_source(
                 video, 
@@ -373,7 +465,14 @@ class EnhancedYouTubeIngester:
             self.stats.processed += 1
             self.stats.chunks_created += chunk_count
             
-            logger.info(f"✅ Completed {video_id}: {len(chunks)} chunks, {method} transcript")
+            # Log completion with additional info
+            extra_info = ""
+            if self.config.source == 'local':
+                extra_info = f" (local file: {Path(video.url.replace('file://', '')).name})"
+            elif metadata.get('stored_audio_path'):
+                extra_info = f" (audio stored: {Path(metadata['stored_audio_path']).name})"
+            
+            logger.info(f"✅ Completed {video_id}: {len(chunks)} chunks, {method} transcript{extra_info}")
             return True
             
         except Exception as e:
@@ -486,6 +585,7 @@ def parse_args() -> IngestionConfig:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+
   # Basic yt-dlp ingestion
   python ingest_youtube_enhanced.py --source yt-dlp --limit 20
 
@@ -494,6 +594,15 @@ Examples:
 
   # Process from pre-dumped JSON
   python ingest_youtube_enhanced.py --from-json backend/data/videos.json --concurrency 8
+
+  # Process local video/audio files
+  python ingest_youtube_enhanced.py --source local --from-files ./video_collection --concurrency 4
+
+  # Process specific file types with audio storage disabled
+  python ingest_youtube_enhanced.py --source local --from-files ./podcasts --file-patterns *.mp3 *.wav --no-store-audio
+
+  # Production mode (no audio storage)
+  python ingest_youtube_enhanced.py --source api --production-mode --limit 100
 
   # Dry run to see what would be processed
   python ingest_youtube_enhanced.py --dry-run --limit 10
@@ -504,10 +613,14 @@ Examples:
     )
     
     # Source configuration
-    parser.add_argument('--source', choices=['api', 'yt-dlp'], default='api',
-                       help='Data source: api for YouTube Data API (default), yt-dlp for scraping fallback')
+    parser.add_argument('--source', choices=['api', 'yt-dlp', 'local'], default='api',
+                       help='Data source: api for YouTube Data API (default), yt-dlp for scraping fallback, local for files')
     parser.add_argument('--from-json', type=Path,
-                       help='Process videos from JSON file instead of fetching')
+                       help='Process videos from JSON file instead of fetching (yt-dlp only)')
+    parser.add_argument('--from-files', type=Path,
+                       help='Process local video/audio files from directory (local source only)')
+    parser.add_argument('--file-patterns', nargs='+', 
+                       help='File patterns to match (e.g. *.mp4 *.wav), default: all supported formats')
     parser.add_argument('--channel-url',
                        help='YouTube channel URL (default: env YOUTUBE_CHANNEL_URL)')
     parser.add_argument('--since-published',
@@ -558,6 +671,16 @@ Examples:
     parser.add_argument('--db-url',
                        help='Database URL (default: env DATABASE_URL)')
     
+    # Audio storage configuration
+    parser.add_argument('--store-audio-locally', action='store_true', default=True,
+                       help='Store downloaded audio files locally (default: true)')
+    parser.add_argument('--no-store-audio', dest='store_audio_locally', action='store_false',
+                       help='Disable local audio storage')
+    parser.add_argument('--audio-storage-dir', type=Path,
+                       help='Directory to store audio files (default: ./audio_storage)')
+    parser.add_argument('--production-mode', action='store_true',
+                       help='Production mode: disables audio storage regardless of other flags')
+    
     # API configuration
     parser.add_argument('--youtube-api-key',
                        help='YouTube Data API key (default: env YOUTUBE_API_KEY)')
@@ -577,6 +700,8 @@ Examples:
         source=args.source,
         channel_url=args.channel_url,
         from_json=args.from_json,
+        from_files=args.from_files,
+        file_patterns=args.file_patterns,
         concurrency=args.concurrency,
         skip_shorts=args.skip_shorts,
         newest_first=args.newest_first,
@@ -587,6 +712,10 @@ Examples:
         force_whisper=args.force_whisper,
         db_url=args.db_url,
         youtube_api_key=args.youtube_api_key,
+        # Audio storage options
+        store_audio_locally=args.store_audio_locally,
+        audio_storage_dir=args.audio_storage_dir,
+        production_mode=args.production_mode,
         # Content filtering options
         skip_live=args.skip_live,
         skip_upcoming=args.skip_upcoming,

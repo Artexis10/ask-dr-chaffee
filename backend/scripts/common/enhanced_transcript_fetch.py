@@ -35,9 +35,13 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                  voices_dir: str = None,
                  chaffee_min_sim: float = None,
                  guest_min_sim: float = None,
-                 assume_monologue: bool = None):
+                 assume_monologue: bool = None,
+                 # Audio storage options
+                 store_audio_locally: bool = True,
+                 audio_storage_dir: str = None,
+                 production_mode: bool = False):
         
-        # Initialize base class
+        # Initialize base class with audio storage parameters
         super().__init__(
             yt_dlp_path=yt_dlp_path,
             whisper_model=whisper_model,
@@ -46,7 +50,10 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
             proxies=proxies,
             api_key=api_key,
             credentials_path=credentials_path,
-            enable_preprocessing=enable_preprocessing
+            enable_preprocessing=enable_preprocessing,
+            store_audio_locally=store_audio_locally,
+            audio_storage_dir=audio_storage_dir,
+            production_mode=production_mode
         )
         
         # Enhanced ASR configuration
@@ -58,11 +65,13 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         self.guest_min_sim = guest_min_sim or float(os.getenv('GUEST_MIN_SIM', '0.82'))
         self.assume_monologue = assume_monologue if assume_monologue is not None else os.getenv('ASSUME_MONOLOGUE', 'true').lower() == 'true'
         
+        # Audio storage is handled by parent class now
+        
         # Lazy-loaded Enhanced ASR components
         self._enhanced_asr = None
         self._voice_enrollment = None
         
-        logger.info(f"Enhanced Transcript Fetcher initialized (speaker_id={self.enable_speaker_id})")
+        logger.info(f"Enhanced Transcript Fetcher initialized (speaker_id={self.enable_speaker_id}, audio_storage={self.store_audio_locally})")
     
     def _get_enhanced_asr(self):
         """Lazy load Enhanced ASR system"""
@@ -190,26 +199,28 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
     
     def fetch_transcript_with_speaker_id(
         self, 
-        video_id: str, 
+        video_id_or_path: str, 
         max_duration_s: Optional[int] = None,
         force_enhanced_asr: bool = False,
         cleanup_audio: bool = True,
-        enable_silence_removal: bool = False
+        enable_silence_removal: bool = False,
+        is_local_file: bool = False
     ) -> Tuple[Optional[List[TranscriptSegment]], str, Dict[str, Any]]:
         """
         Fetch transcript with optional speaker identification
         
         Args:
-            video_id: YouTube video ID or local audio file path
+            video_id_or_path: YouTube video ID or local audio/video file path
             max_duration_s: Maximum duration for processing
             force_enhanced_asr: Skip YouTube transcripts and use Enhanced ASR
             cleanup_audio: Clean up temporary audio files
             enable_silence_removal: Enable audio preprocessing
+            is_local_file: True if video_id_or_path is a local file path
             
         Returns:
             (segments, method, metadata) where method indicates processing used
         """
-        metadata = {"video_id": video_id, "preprocessing_flags": {}}
+        metadata = {"video_id": video_id_or_path, "preprocessing_flags": {}, "is_local_file": is_local_file}
         
         # Check if Enhanced ASR is available and should be used
         use_enhanced_asr = (
@@ -223,31 +234,36 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                 logger.warning("Enhanced ASR requested but not available, falling back to standard method")
                 use_enhanced_asr = False
         
-        # Try YouTube transcript first (unless forced to use Enhanced ASR)
-        if not force_enhanced_asr and not use_enhanced_asr:
-            youtube_segments = self.fetch_youtube_transcript(video_id)
+        # Try YouTube transcript first (unless forced to use Enhanced ASR or local file)
+        if not force_enhanced_asr and not use_enhanced_asr and not is_local_file:
+            youtube_segments = self.fetch_youtube_transcript(video_id_or_path)
             if youtube_segments:
                 metadata.update({"source": "youtube", "segment_count": len(youtube_segments)})
                 return youtube_segments, 'youtube', metadata
         
         # If we have speaker profiles and Enhanced ASR available, use it
         if use_enhanced_asr and self._check_speaker_profiles_available():
-            logger.info(f"Using Enhanced ASR with speaker identification for {video_id}")
+            logger.info(f"Using Enhanced ASR with speaker identification for {video_id_or_path}")
             
             try:
-                # Download audio if video_id looks like a YouTube ID
-                if len(video_id) == 11 and video_id.isalnum():
-                    # YouTube video ID - need to download audio first
-                    audio_path = self._download_audio_for_enhanced_asr(video_id)
-                    if not audio_path:
-                        logger.error("Failed to download audio for Enhanced ASR")
-                        return self._fallback_to_standard_whisper(video_id, metadata)
-                else:
-                    # Assume it's a local file path
-                    audio_path = video_id
+                # Handle audio source - local file or YouTube download
+                if is_local_file or os.path.exists(video_id_or_path):
+                    # Local file path
+                    audio_path = video_id_or_path
                     if not os.path.exists(audio_path):
                         logger.error(f"Audio file not found: {audio_path}")
                         return None, 'failed', metadata
+                    downloaded_audio = False
+                elif len(video_id_or_path) == 11 and video_id_or_path.replace('-', '').replace('_', '').isalnum():
+                    # YouTube video ID - need to download audio first
+                    audio_path = self._download_audio_for_enhanced_asr(video_id_or_path)
+                    if not audio_path:
+                        logger.error("Failed to download audio for Enhanced ASR")
+                        return self._fallback_to_standard_whisper(video_id_or_path, metadata)
+                    downloaded_audio = True
+                else:
+                    logger.error(f"Invalid video ID or file path: {video_id_or_path}")
+                    return None, 'failed', metadata
                 
                 # Process with Enhanced ASR
                 enhanced_asr = self._get_enhanced_asr()
@@ -257,12 +273,23 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                     segments, enhanced_metadata = self._convert_enhanced_result_to_segments(result)
                     metadata.update(enhanced_metadata)
                     
-                    # Cleanup if we downloaded the audio
-                    if cleanup_audio and len(video_id) == 11:
-                        try:
-                            os.unlink(audio_path)
-                        except:
-                            pass
+                    # Handle cleanup and storage
+                    if downloaded_audio:
+                        if self.store_audio_locally:
+                            # Store audio permanently
+                            stored_path = self._store_audio_permanently(audio_path, video_id_or_path)
+                            if stored_path:
+                                metadata["stored_audio_path"] = str(stored_path)
+                                logger.info(f"Audio stored at: {stored_path}")
+                        
+                        if cleanup_audio:
+                            # Only cleanup if not storing or storage failed
+                            if not self.store_audio_locally or not metadata.get("stored_audio_path"):
+                                try:
+                                    os.unlink(audio_path)
+                                    logger.debug(f"Cleaned up temporary audio: {audio_path}")
+                                except Exception as e:
+                                    logger.warning(f"Failed to cleanup temporary audio: {e}")
                     
                     method = 'enhanced_asr'
                     if result.metadata.get('monologue_fast_path'):
@@ -272,21 +299,31 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                     return segments, method, metadata
                 else:
                     logger.warning("Enhanced ASR failed, falling back to standard Whisper")
-                    return self._fallback_to_standard_whisper(video_id, metadata)
+                    return self._fallback_to_standard_whisper(video_id_or_path, metadata)
                     
             except Exception as e:
                 logger.error(f"Enhanced ASR processing failed: {e}")
-                return self._fallback_to_standard_whisper(video_id, metadata)
+                return self._fallback_to_standard_whisper(video_id_or_path, metadata)
         
         # Fallback to standard transcript fetching
         logger.info("Using standard transcript fetching (no speaker ID)")
-        return super().fetch_transcript(
-            video_id, 
-            max_duration_s=max_duration_s,
-            force_whisper=force_enhanced_asr,
-            cleanup_audio=cleanup_audio,
-            enable_silence_removal=enable_silence_removal
-        )
+        
+        if is_local_file:
+            # For local files, use Whisper directly
+            return self._transcribe_local_file(
+                video_id_or_path, 
+                max_duration_s=max_duration_s,
+                enable_silence_removal=enable_silence_removal,
+                metadata=metadata
+            )
+        else:
+            return super().fetch_transcript(
+                video_id_or_path, 
+                max_duration_s=max_duration_s,
+                force_whisper=force_enhanced_asr,
+                cleanup_audio=cleanup_audio,
+                enable_silence_removal=enable_silence_removal
+            )
     
     def _download_audio_for_enhanced_asr(self, video_id: str) -> Optional[str]:
         """Download audio file for Enhanced ASR processing"""
@@ -298,15 +335,38 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
             temp_dir = tempfile.mkdtemp()
             output_template = os.path.join(temp_dir, f'{video_id}.%(ext)s')
             
-            # Use yt-dlp to download audio - use webm format and let yt-dlp handle conversion
+            # Use yt-dlp with latest nightly anti-blocking fixes + browser cookie fallbacks
             cmd = [
                 self.yt_dlp_path,
-                '--format', 'bestaudio',
-                '--no-playlist',
+                '--format', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',  # Prioritize best quality, prefer lossless formats
+                '--no-playlist', 
                 '--ignore-errors',
+                # Latest nightly fixes (2025.09.26):
+                '--extractor-args', 'youtube:player_client=web_safari',  # Use web_safari client (latest fix)
+                '-4',  # Force IPv4 (fixes many 403s)
+                '--retry-sleep', '3',  # Pause between retries  
+                '--retries', '10',  # More retries
+                '--fragment-retries', '10',
+                '--sleep-requests', '5',  # Longer sleep between requests
+                '--min-sleep-interval', '2',  # Min sleep time (required)
+                '--max-sleep-interval', '15',  # Max sleep time
+                '--socket-timeout', '60',  # Longer timeout
+                '--user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                '--referer', 'https://www.youtube.com/',
                 '-o', output_template,
                 f'https://www.youtube.com/watch?v={video_id}'
             ]
+            
+            # Add GPT-5's browser cookie solution (Firefox most reliable)
+            # Check for cookies.txt file first (manual export)
+            cookies_file = os.path.join(os.path.dirname(output_template), 'cookies.txt')
+            if os.path.exists('cookies.txt'):
+                cmd.extend(['--cookies', 'cookies.txt'])
+                logger.info("Using manual cookies.txt file")
+            else:
+                # Try Firefox browser cookies (GPT-5 recommendation: most reliable)
+                cmd.extend(['--cookies-from-browser', 'firefox'])
+                logger.info("Attempting to use Firefox cookies (GPT-5 recommended)")
             
             if self.ffmpeg_path:
                 cmd.extend(['--ffmpeg-location', self.ffmpeg_path])
@@ -355,22 +415,68 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             return None
     
-    def _fallback_to_standard_whisper(self, video_id: str, metadata: Dict[str, Any]) -> Tuple[Optional[List[TranscriptSegment]], str, Dict[str, Any]]:
+    def _store_audio_permanently(self, temp_audio_path: str, video_id: str) -> Optional[Path]:
+        """Store downloaded audio file permanently using parent class method"""
+        return super()._store_audio_permanently(Path(temp_audio_path), video_id)
+    
+    def _transcribe_local_file(
+        self, 
+        file_path: str, 
+        max_duration_s: Optional[int] = None,
+        enable_silence_removal: bool = False,
+        metadata: Dict[str, Any] = None
+    ) -> Tuple[Optional[List[TranscriptSegment]], str, Dict[str, Any]]:
+        """Transcribe a local audio/video file using Whisper"""
+        if metadata is None:
+            metadata = {}
+        
+        logger.info(f"Transcribing local file with Whisper: {file_path}")
+        
+        try:
+            # Use parent class method but with local file
+            segments, whisper_metadata = self.transcribe_with_whisper_fallback(
+                Path(file_path),
+                model_name=self.whisper_model,
+                enable_silence_removal=enable_silence_removal
+            )
+            
+            if segments:
+                metadata.update(whisper_metadata)
+                metadata["source"] = "local_file"
+                metadata["file_path"] = file_path
+                return segments, "whisper_local", metadata
+            else:
+                metadata["error"] = "transcription_failed"
+                return None, 'failed', metadata
+                
+        except Exception as e:
+            logger.error(f"Local file transcription failed: {e}")
+            metadata["error"] = str(e)
+            return None, 'failed', metadata
+    
+    def _fallback_to_standard_whisper(self, video_id_or_path: str, metadata: Dict[str, Any]) -> Tuple[Optional[List[TranscriptSegment]], str, Dict[str, Any]]:
         """Fallback to standard Whisper processing"""
         logger.info("Falling back to standard Whisper transcription")
         
         try:
-            segments, method, whisper_metadata = super().fetch_transcript(
-                video_id, 
-                force_whisper=True,
-                cleanup_audio=True
-            )
-            
-            # Merge metadata
-            metadata.update(whisper_metadata)
-            metadata['enhanced_asr_fallback'] = True
-            
-            return segments, "whisper", metadata
+            # Check if it's a local file
+            if metadata.get("is_local_file") or os.path.exists(video_id_or_path):
+                return self._transcribe_local_file(
+                    video_id_or_path,
+                    metadata=metadata
+                )
+            else:
+                segments, method, whisper_metadata = super().fetch_transcript(
+                    video_id_or_path, 
+                    force_whisper=True,
+                    cleanup_audio=True
+                )
+                
+                # Merge metadata
+                metadata.update(whisper_metadata)
+                metadata['enhanced_asr_fallback'] = True
+                
+                return segments, "whisper", metadata
             
         except Exception as e:
             logger.error(f"Standard Whisper fallback also failed: {e}")

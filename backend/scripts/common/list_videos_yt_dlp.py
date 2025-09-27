@@ -119,13 +119,19 @@ class YtDlpVideoLister:
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # yt-dlp command for flat playlist extraction
+        # yt-dlp command for flat playlist extraction with latest anti-blocking fixes
         cmd = [
             self.yt_dlp_path,
             "--flat-playlist",
             "--dump-json",
             "--no-warnings",
             "--ignore-errors",
+            # Latest nightly anti-blocking fixes (2025.09.26):
+            '--extractor-args', 'youtube:player_client=web_safari',  # Use web_safari client (latest fix)
+            '--user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '--referer', 'https://www.youtube.com/',
+            '-4',  # Force IPv4 (fixes many 403s)
+            '--sleep-requests', '2',  # Sleep between requests
             f"{channel_url}/videos"
         ]
         
@@ -184,6 +190,11 @@ class YtDlpVideoLister:
             self.yt_dlp_path,
             "--dump-json",
             "--no-warnings",
+            # Latest nightly anti-blocking fixes (2025.09.26):
+            '--extractor-args', 'youtube:player_client=web_safari',  # Use web_safari client (latest fix)
+            '--user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '--referer', 'https://www.youtube.com/',
+            '-4',  # Force IPv4 (fixes many 403s)
             f"https://www.youtube.com/watch?v={video_id}"
         ]
         
