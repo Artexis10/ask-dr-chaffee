@@ -91,6 +91,8 @@ ask-dr-chaffee/
 4. **Ingest Content (Development Mode)**
    ```bash
    make seed-youtube  # First 10 videos using API
+   # OR for Enhanced ASR with speaker identification:
+   # make seed-youtube-enhanced-asr
    # OR for full ingestion:
    # make backfill-youtube
    ```
@@ -134,6 +136,8 @@ ask-dr-chaffee/
    ```powershell
    Set-Location backend
    python scripts/ingest_youtube_enhanced.py --source api --limit 10 --newest-first --skip-shorts
+   # OR for Enhanced ASR with speaker identification:
+   # python scripts/ingest_youtube_enhanced_asr.py --source api --limit 10 --enable-speaker-id
    ```
 
 5. **Start Frontend**
@@ -309,6 +313,13 @@ ANSWER_TOPK=40             # Max chunks to consider for answers
 ANSWER_TTL_HOURS=336       # Cache TTL (14 days)
 SUMMARIZER_MODEL=gpt-3.5-turbo  # LLM model for answer generation
 ANSWER_STYLE_DEFAULT=concise     # Answer style (concise|detailed)
+
+# Enhanced ASR Configuration (for speaker identification)
+CHAFFEE_MIN_SIM=0.60       # Minimum similarity threshold for Dr. Chaffee identification
+USE_SIMPLE_DIARIZATION=false  # Use HuggingFace diarization instead of simple method
+HUGGINGFACE_TOKEN=         # HuggingFace token for gated models (pyannote)
+SPEAKER_ATTRIBUTION_MARGIN=0.10  # Required margin between best and second-best speaker match
+MIN_SPEAKER_DURATION=3.0   # Minimum segment duration for speaker attribution (seconds)
 ```
 
 ### Available Commands
@@ -332,6 +343,11 @@ make sync-youtube          # Sync recent videos with date filtering
 make whisper-missing       # Process videos marked for Whisper transcription
 make fetch-subs            # Batch subtitle extraction via yt-dlp
 make ingest-youtube-fallback # Use yt-dlp fallback for video discovery
+
+# Enhanced ASR with Speaker Identification
+make seed-youtube-enhanced-asr    # Development mode with Enhanced ASR (10 videos)
+make ingest-youtube-enhanced-asr  # Full ingestion with Enhanced ASR and speaker ID
+make sync-youtube-enhanced-asr    # Sync recent videos with Enhanced ASR
 
 # Video Discovery
 make list-youtube          # Dump channel videos to JSON
@@ -406,6 +422,12 @@ python scripts/ingest_youtube_enhanced.py --source api --since-published 2024-01
 python scripts/ingest_youtube_enhanced.py --include-live --include-upcoming                           # Include live/upcoming streams
 python scripts/ingest_youtube_enhanced.py --source yt-dlp --concurrency 4 --newest-first              # yt-dlp fallback
 
+# Enhanced ASR with Speaker Identification
+python scripts/ingest_youtube_enhanced_asr.py --source api --limit 10 --enable-speaker-id              # Development with speaker ID
+python scripts/ingest_youtube_enhanced_asr.py --source api --enable-speaker-id --concurrency 4         # Full ingestion with speaker ID
+python scripts/ingest_youtube_enhanced_asr.py --source local --from-files ./audio --enable-speaker-id  # Local files with speaker ID
+python scripts/ingest_youtube_enhanced_asr.py --source api --enable-speaker-id --chaffee-min-sim 0.60  # Custom similarity threshold
+
 # Testing & Validation  
 python scripts/ingest_youtube_enhanced.py --source yt-dlp --limit 5 --dry-run                         # Dry run
 python scripts/common/transcript_fetch.py dQw4w9WgXcQ                                                 # Test transcript
@@ -441,6 +463,8 @@ python scripts/common/list_videos_api.py "https://www.youtube.com/@anthonychaffe
 ## 🔧 Advanced Usage
 
 ### CLI Examples
+
+#### Basic Enhanced Pipeline
 ```bash
 # Basic ingestion with API (default)
 python backend/scripts/ingest_youtube_enhanced.py --source api --limit 50 --skip-shorts
@@ -462,6 +486,39 @@ python backend/scripts/ingest_youtube_enhanced.py --force-whisper --whisper-mode
 
 # Dry run to preview processing
 python backend/scripts/ingest_youtube_enhanced.py --dry-run --limit 10
+```
+
+#### Enhanced ASR with Speaker Identification
+```bash
+# Basic Enhanced ASR ingestion
+python backend/scripts/ingest_youtube_enhanced_asr.py --source api --limit 10 --enable-speaker-id
+
+# Production Enhanced ASR processing
+python backend/scripts/ingest_youtube_enhanced_asr.py --source api --enable-speaker-id --concurrency 4
+
+# Enhanced ASR with custom speaker threshold
+python backend/scripts/ingest_youtube_enhanced_asr.py --source api --enable-speaker-id --chaffee-min-sim 0.60
+
+# Enhanced ASR with local files
+python backend/scripts/ingest_youtube_enhanced_asr.py --source local --from-files ./audio_files --enable-speaker-id
+
+# Enhanced ASR with HuggingFace diarization
+python backend/scripts/ingest_youtube_enhanced_asr.py --source api --enable-speaker-id --use-advanced-diarization
+
+# Enhanced ASR dry run
+python backend/scripts/ingest_youtube_enhanced_asr.py --source api --limit 5 --enable-speaker-id --dry-run
+```
+
+#### Voice Enrollment for Speaker Identification
+```bash
+# Enroll Dr. Chaffee's voice profile
+python backend/scripts/asr_cli.py enroll --name Chaffee --audio voice_samples/*.wav --min-duration 60
+
+# Enroll from YouTube URLs
+python backend/scripts/asr_cli.py enroll --name Chaffee --url "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Test speaker identification
+python backend/scripts/asr_cli.py transcribe test_audio.wav --enable-speaker-id --format json
 ```
 
 ### Windows: Install FFmpeg
@@ -506,6 +563,14 @@ Get-IngestionMetrics         # View detailed metrics
 - **Selective Processing**: Skip completed videos automatically
 - **Batch Checkpointing**: Resume from last checkpoint with `make batch-resume` or `Resume-BatchIngestion` (Windows)
 
+## 📚 Additional Documentation
+
+- **[Backend Organization](BACKEND_ORGANIZATION.md)** - Cleaned-up backend structure and guidelines
+- **[yt-dlp Usage Guide](YTDLP_USAGE.md)** - Comprehensive yt-dlp configuration and troubleshooting
+- **[Enhanced ASR README](ENHANCED_ASR_README.md)** - Speaker identification and voice enrollment
+- **[Production Deployment](PRODUCTION_DEPLOYMENT.md)** - Production deployment strategies
+- **[Proxy Solutions](PROXY_SOLUTIONS_ANALYSIS.md)** - Proxy configuration for YouTube access
+
 ## ⚠️ Important Notes
 
 - **Educational Content**: All content is for educational purposes only
@@ -514,3 +579,4 @@ Get-IngestionMetrics         # View detailed metrics
 - **API Quotas**: YouTube Data API has daily quotas - monitor usage
 - **Storage Requirements**: ~1GB per 1000 videos (including embeddings)
 - **Processing Time**: Allow 2-5 minutes per video for full pipeline
+- **Enhanced ASR Requirements**: GPU recommended for optimal speaker identification performance
