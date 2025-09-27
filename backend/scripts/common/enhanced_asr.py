@@ -239,10 +239,14 @@ class EnhancedASR:
                 similarities.append(sim)
             
             avg_similarity = np.mean(similarities)
-            threshold = self.config.chaffee_min_sim + 0.03  # Higher threshold for fast-path
+            # Use LOWER threshold for fast-path to catch more solo content
+            threshold = max(0.55, self.config.chaffee_min_sim - 0.05)  # More lenient for speed
+            
+            logger.info(f"Fast-path check: avg_sim={avg_similarity:.3f}, threshold={threshold:.3f}")
             
             if avg_similarity >= threshold:
-                logger.info(f"Monologue fast-path triggered: avg_sim={avg_similarity:.3f} >= {threshold:.3f}")
+                logger.info(f"🚀 MONOLOGUE FAST-PATH TRIGGERED: {avg_similarity:.3f} >= {threshold:.3f}")
+                logger.info(f"⚡ Skipping diarization for speed optimization")
                 
                 # Transcribe without diarization
                 result = self._transcribe_whisper_only(audio_path)
@@ -255,18 +259,19 @@ class EnhancedASR:
                     for word in result.words:
                         word.speaker = 'Chaffee'
                         word.speaker_confidence = avg_similarity
-                    
                     result.metadata['monologue_fast_path'] = True
                     result.metadata['chaffee_similarity'] = avg_similarity
                     
                     return result
-            
-            logger.info(f"Monologue test failed: avg_sim={avg_similarity:.3f} < {threshold:.3f}")
-            return None
+            else:
+                logger.info(f"❌ Fast-path rejected: {avg_similarity:.3f} < {threshold:.3f}")
+                logger.info(f"📝 Falling back to full pipeline with diarization")
             
         except Exception as e:
-            logger.warning(f"Monologue fast-path check failed: {e}")
-            return None
+            logger.error(f"Failed to check monologue fast-path: {e}")
+            logger.info(f"📝 Falling back to full pipeline due to error")
+        
+        return None
     
     def _transcribe_whisper_only(self, audio_path: str) -> Optional[TranscriptionResult]:
         """Transcribe using optimized two-stage approach: distil-large-v3 + selective large-v3 refinement"""
