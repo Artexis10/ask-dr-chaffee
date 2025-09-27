@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 # Import existing transcript fetcher
 from .transcript_fetch import TranscriptFetcher as BaseTranscriptFetcher
 from .transcript_common import TranscriptSegment
+from .segment_optimizer import SegmentOptimizer
 
 class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
     """
@@ -66,6 +67,14 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         self.assume_monologue = assume_monologue if assume_monologue is not None else os.getenv('ASSUME_MONOLOGUE', 'true').lower() == 'true'
         
         # Audio storage is handled by parent class now
+        
+        # Initialize segment optimizer for better semantic search quality
+        self.segment_optimizer = SegmentOptimizer(
+            target_min_chars=120,   # Minimum chars for good search
+            target_max_chars=300,   # Maximum for focused context  
+            max_gap_seconds=2.0,    # Max gap to merge across
+            max_merge_duration=30.0 # Max duration of merged segment
+        )
         
         # Add alias for compatibility
         self.downloader = self.audio_downloader
@@ -172,8 +181,39 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                     'unknown_segments': summary.get('unknown_segments', 0)
                 })
             
-            logger.info(f"Converted Enhanced ASR result: {len(segments)} segments with speaker ID")
-            return segments, metadata
+            # Optimize segments for better semantic search quality
+            logger.info(f"Optimizing {len(segments)} segments for semantic search")
+            optimized_segments = self.segment_optimizer.optimize_segments(segments)
+            
+            # Convert back to TranscriptSegment objects
+            final_segments = []
+            for opt_seg in optimized_segments:
+                transcript_seg = TranscriptSegment(
+                    start=opt_seg.start,
+                    end=opt_seg.end,
+                    text=opt_seg.text,
+                    speaker_label=opt_seg.speaker_label,
+                    speaker_confidence=opt_seg.speaker_confidence,
+                    avg_logprob=opt_seg.avg_logprob,
+                    compression_ratio=opt_seg.compression_ratio,
+                    no_speech_prob=opt_seg.no_speech_prob,
+                    temperature_used=opt_seg.temperature_used,
+                    re_asr=opt_seg.re_asr,
+                    is_overlap=opt_seg.is_overlap,
+                    needs_refinement=opt_seg.needs_refinement
+                )
+                final_segments.append(transcript_seg)
+            
+            # Update metadata with optimization info
+            metadata.update({
+                'segment_optimization': True,
+                'original_segment_count': len(segments),
+                'optimized_segment_count': len(final_segments),
+                'optimization_reduction': len(segments) - len(final_segments)
+            })
+            
+            logger.info(f"Segment optimization complete: {len(segments)} → {len(final_segments)} segments")
+            return final_segments, metadata
             
         except Exception as e:
             logger.error(f"Failed to convert Enhanced ASR result: {e}")
