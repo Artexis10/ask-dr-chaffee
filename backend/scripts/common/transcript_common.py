@@ -8,10 +8,19 @@ from typing import List, Dict, Any, Optional
 
 @dataclass
 class TranscriptSegment:
-    """Normalized transcript segment"""
+    """Normalized transcript segment with speaker attribution"""
     start: float
     end: float  
     text: str
+    speaker_label: Optional[str] = None
+    speaker_confidence: Optional[float] = None
+    avg_logprob: Optional[float] = None
+    compression_ratio: Optional[float] = None
+    no_speech_prob: Optional[float] = None
+    temperature_used: Optional[float] = None
+    re_asr: bool = False
+    is_overlap: bool = False
+    needs_refinement: bool = False
     
     @classmethod
     def from_youtube_transcript(cls, data) -> 'TranscriptSegment':

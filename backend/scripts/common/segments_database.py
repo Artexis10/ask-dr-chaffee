@@ -77,8 +77,8 @@ class SegmentsDatabase:
         
         # Filter segments if chaffee_only_storage is enabled
         if chaffee_only_storage:
-            segments = [seg for seg in segments if seg.get('speaker_label') == 'CH']
-            logger.info(f"Chaffee-only storage: filtered to {len(segments)} CH segments")
+            segments = [seg for seg in segments if seg.get('speaker_label') in ['CH', 'Chaffee']]
+            logger.info(f"Chaffee-only storage: filtered to {len(segments)} Chaffee segments")
         
         if not segments:
             logger.info("No segments to insert after filtering")
@@ -106,7 +106,8 @@ class SegmentsDatabase:
                     embedding = None
                     if segment.get('embedding'):
                         speaker_label = segment.get('speaker_label', 'GUEST')
-                        if not embed_chaffee_only or speaker_label == 'CH':
+                        # Accept both 'CH' and 'Chaffee' labels for embedding
+                        if not embed_chaffee_only or speaker_label in ['CH', 'Chaffee']:
                             embedding = segment['embedding']
                     
                     values.append((

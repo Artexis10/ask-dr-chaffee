@@ -134,35 +134,24 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                 # Create TranscriptSegment with speaker info embedded in text
                 text = segment_data['text'].strip()
                 
-                # Add speaker prefix if available and not unknown
-                if ('speaker' in segment_data and 
-                    segment_data['speaker'] and 
-                    segment_data['speaker'] != enhanced_result.metadata.get('unknown_label', 'Unknown')):
-                    
-                    speaker = segment_data['speaker']
-                    confidence = segment_data.get('speaker_confidence', 0.0)
-                    
-                    # For database storage, we can embed speaker info in metadata
-                    # but keep text clean for readability
-                    segment = TranscriptSegment(
-                        start=segment_data['start'],
-                        end=segment_data['end'],
-                        text=text
-                    )
-                    
-                    # Add speaker metadata to the segment object if supported
-                    if hasattr(segment, 'metadata'):
-                        segment.metadata = {
-                            'speaker': speaker,
-                            'speaker_confidence': confidence,
-                            'has_speaker_id': True
-                        }
-                    
-                else:
-                    segment = TranscriptSegment(
-                        start=segment_data['start'],
-                        end=segment_data['end'], 
-                        text=text
+                # Create TranscriptSegment with speaker information
+                speaker_label = segment_data.get('speaker', 'GUEST')
+                if speaker_label == enhanced_result.metadata.get('unknown_label', 'Unknown'):
+                    speaker_label = 'GUEST'
+                
+                segment = TranscriptSegment(
+                    start=segment_data['start'],
+                    end=segment_data['end'],
+                    text=text,
+                    speaker_label=speaker_label,
+                    speaker_confidence=segment_data.get('speaker_confidence', None),
+                    avg_logprob=segment_data.get('avg_logprob', None),
+                    compression_ratio=segment_data.get('compression_ratio', None),
+                    no_speech_prob=segment_data.get('no_speech_prob', None),
+                    temperature_used=segment_data.get('temperature_used', 0.0),
+                    re_asr=segment_data.get('re_asr', False),
+                    is_overlap=segment_data.get('is_overlap', False),
+                    needs_refinement=segment_data.get('needs_refinement', False)
                     )
                 
                 segments.append(segment)
@@ -194,7 +183,8 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
                 segment = TranscriptSegment(
                     start=segment_data['start'],
                     end=segment_data['end'],
-                    text=segment_data['text'].strip()
+                    text=segment_data['text'].strip(),
+                    speaker_label='GUEST'  # Default fallback
                 )
                 segments.append(segment)
             

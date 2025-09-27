@@ -422,12 +422,12 @@ class EnhancedYouTubeIngester:
             logger.debug(f"Processing {len(segments)} segments for {video_id}")
             
             # Step 3: Generate embeddings
-            texts = [segment.get('text', '') for segment in segments]
+            texts = [segment.text for segment in segments]
             embeddings = self.embedder.generate_embeddings(texts)
             
             # Attach embeddings to segments
             for segment, embedding in zip(segments, embeddings):
-                segment['embedding'] = embedding
+                segment.embedding = embedding
             
             logger.debug(f"Generated {len(embeddings)} embeddings for {video_id}")
             
@@ -447,9 +447,43 @@ class EnhancedYouTubeIngester:
                 metadata={'provenance': provenance, **extra_metadata}
             )
             
+            # Convert TranscriptSegment objects to dictionaries for database insertion
+            def safe_float_convert(value, default=0.0):
+                """Convert numpy/other numeric types to Python float"""
+                if value is None:
+                    return default
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return default
+            
+            segment_dicts = []
+            for segment in segments:
+                if hasattr(segment, '__dict__'):
+                    # Convert TranscriptSegment object to dictionary with proper type conversion
+                    segment_dict = {
+                        'start': safe_float_convert(segment.start),
+                        'end': safe_float_convert(segment.end),
+                        'text': str(segment.text),
+                        'speaker_label': str(segment.speaker_label or 'GUEST'),
+                        'speaker_confidence': safe_float_convert(segment.speaker_confidence, None),
+                        'avg_logprob': safe_float_convert(segment.avg_logprob, None),
+                        'compression_ratio': safe_float_convert(segment.compression_ratio, None),
+                        'no_speech_prob': safe_float_convert(segment.no_speech_prob, None),
+                        'temperature_used': safe_float_convert(segment.temperature_used, 0.0),
+                        're_asr': bool(segment.re_asr),
+                        'is_overlap': bool(segment.is_overlap),
+                        'needs_refinement': bool(segment.needs_refinement),
+                        'embedding': getattr(segment, 'embedding', None)
+                    }
+                    segment_dicts.append(segment_dict)
+                else:
+                    # Already a dictionary
+                    segment_dicts.append(segment)
+            
             # Insert segments with speaker attribution
             segment_count = self.segments_db.batch_insert_segments(
-                segments, 
+                segment_dicts, 
                 video_id,
                 chaffee_only_storage=False,  # Store all speakers
                 embed_chaffee_only=True      # But only embed Chaffee content for search
