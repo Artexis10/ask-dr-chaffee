@@ -399,7 +399,15 @@ class EnhancedYouTubeIngester:
                 logger.info(f"Transcript quality for {video_id}: score={quality_info['score']}, issues={quality_info.get('issues', [])}")
             
             # Extract provenance and extra metadata for database storage
-            provenance = method  # 'youtube', 'whisper', or 'whisper_upgraded'
+            # Map transcript methods to database provenance values
+            provenance_mapping = {
+                'youtube': 'yt_caption',
+                'whisper': 'whisper',
+                'whisper_upgraded': 'whisper',
+                'enhanced_asr': 'whisper',  # Enhanced ASR is still Whisper-based
+                'yt_dlp': 'yt_dlp'
+            }
+            provenance = provenance_mapping.get(method, 'whisper')  # Default to whisper
             extra_metadata = {
                 'transcript_method': method,
                 'segment_count': len(segments)

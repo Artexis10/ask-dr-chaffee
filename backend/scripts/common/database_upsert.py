@@ -213,7 +213,11 @@ class DatabaseUpserter:
         conn = self.get_connection()
         
         with conn.cursor() as cur:
-            playback_url = f"https://www.youtube.com/watch?v={video_info.video_id}"
+            # Generate appropriate URL based on source type and video info
+            if hasattr(video_info, 'url') and video_info.url:
+                playback_url = video_info.url  # Use actual URL (local files, etc.)
+            else:
+                playback_url = f"https://www.youtube.com/watch?v={video_info.video_id}"  # Default for YouTube
             
             # Build metadata object
             metadata = extra_metadata or {}
