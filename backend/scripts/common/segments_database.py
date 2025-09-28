@@ -29,7 +29,10 @@ class SegmentsDatabase:
     
     def upsert_source(self, video_id: str, title: str, 
                      source_type: str = 'youtube', 
-                     metadata: Optional[Dict] = None) -> int:
+                     metadata: Optional[Dict] = None,
+                     published_at = None,
+                     duration_s = None,
+                     view_count = None) -> int:
         """Upsert video source and return source_id"""
         try:
             conn = self.get_connection()
@@ -49,10 +52,10 @@ class SegmentsDatabase:
                     import json
                     metadata_json = json.dumps(metadata or {})
                     cur.execute("""
-                        INSERT INTO sources (source_type, source_id, title, metadata, created_at)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO sources (source_type, source_id, title, published_at, duration_s, view_count, metadata, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
-                    """, (source_type, video_id, title, metadata_json, datetime.now()))
+                    """, (source_type, video_id, title, published_at, duration_s, view_count, metadata_json, datetime.now()))
                     
                     source_id = cur.fetchone()[0]
                     conn.commit()

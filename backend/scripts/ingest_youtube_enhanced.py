@@ -489,7 +489,10 @@ class EnhancedYouTubeIngester:
                 video_id, 
                 video.title,
                 source_type=source_type,
-                metadata={'provenance': provenance, **extra_metadata}
+                metadata={'provenance': provenance, **extra_metadata},
+                published_at=video.published_at,
+                duration_s=video.duration_s,
+                view_count=video.view_count
             )
             
             # Convert TranscriptSegment objects to dictionaries for database insertion
