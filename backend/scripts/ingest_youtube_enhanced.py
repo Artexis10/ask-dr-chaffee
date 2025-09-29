@@ -22,6 +22,7 @@ import argparse
 import asyncio
 import codecs
 import hashlib
+import inspect
 import logging
 import queue
 import tempfile
@@ -281,7 +282,14 @@ class IngestionConfig:
             if self.youtube_api_key is None:
                 self.youtube_api_key = os.getenv('YOUTUBE_API_KEY')
             if not self.youtube_api_key:
-                raise ValueError("YOUTUBE_API_KEY required for API source")
+                # Check if we're in setup-chaffee mode
+                setup_chaffee_mode = False
+                for frame in inspect.stack():
+                    if 'setup_chaffee_mode' in frame.frame.f_locals and frame.frame.f_locals['setup_chaffee_mode']:
+                        setup_chaffee_mode = True
+                        break
+                if not setup_chaffee_mode:
+                    raise ValueError("YOUTUBE_API_KEY required for API source")
         
         # Handle local file processing
         if self.source == 'local':
@@ -1747,12 +1755,39 @@ class EnhancedYouTubeIngester:
                     # YouTube URL
                     if 'youtube.com/watch?v=' in source or 'youtu.be/' in source:
                         video_id = source.split('v=')[1].split('&')[0] if 'v=' in source else source.split('/')[-1]
-                        success = self.transcript_fetcher.enroll_speaker_from_video(
-                            video_id, 
-                            'Chaffee', 
-                            overwrite=overwrite,
-                            update=update
-                        )
+                        # Check if we should update or overwrite
+                        if update:
+                            # For update, we need to first check if the profile exists
+                            from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
+                            enrollment = VoiceEnrollment(voices_dir=self.config.voices_dir)
+                            if enrollment.load_profile('chaffee'):
+                                # Profile exists, so we'll download the audio and update manually
+                                audio_path = self.transcript_fetcher._download_audio(video_id)
+                                if audio_path:
+                                    profile = enrollment.enroll_speaker(
+                                        name='Chaffee',
+                                        audio_sources=[audio_path],
+                                        overwrite=False,
+                                        update=True
+                                    )
+                                    success = profile is not None
+                                else:
+                                    logger.error(f"Failed to download audio for {video_id}")
+                                    success = False
+                            else:
+                                # Profile doesn't exist, so we'll create it
+                                success = self.transcript_fetcher.enroll_speaker_from_video(
+                                    video_id, 
+                                    'Chaffee', 
+                                    overwrite=True
+                                )
+                        else:
+                            # Normal enrollment (create or overwrite)
+                            success = self.transcript_fetcher.enroll_speaker_from_video(
+                                video_id, 
+                                'Chaffee', 
+                                overwrite=overwrite
+                            )
                     else:
                         logger.warning(f"Unsupported URL format: {source}")
                         continue
@@ -1960,7 +1995,7 @@ Examples:
     
     # Create config
     config = IngestionConfig(
-        source=args.source if not setup_chaffee_mode else 'api',
+        source=args.source,  # Allow any source with setup-chaffee
         channel_url=args.channel_url,
         from_json=args.from_json,
         from_files=args.from_files,
