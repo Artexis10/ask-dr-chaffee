@@ -31,7 +31,7 @@ class TestVoiceEnrollment(unittest.TestCase):
     @patch('backend.scripts.common.voice_enrollment.EncoderClassifier')
     def test_voice_profile_creation(self, mock_encoder):
         """Test creating and saving voice profile"""
-        from backend.scripts.common.voice_enrollment import VoiceEnrollment, VoiceProfile
+        from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment, VoiceProfile
         
         # Mock SpeechBrain model
         mock_model = Mock()
@@ -64,7 +64,7 @@ class TestVoiceEnrollment(unittest.TestCase):
     
     def test_similarity_computation(self):
         """Test cosine similarity computation"""
-        from backend.scripts.common.voice_enrollment import VoiceEnrollment, VoiceProfile
+        from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment, VoiceProfile
         
         enrollment = VoiceEnrollment(voices_dir=str(self.voices_dir))
         
