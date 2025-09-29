@@ -146,67 +146,67 @@ class EnhancedASR:
         return self._whisperx_model
     
     def _get_diarization_pipeline(self):
-        """Lazy load diarization pipeline"""
+        """Lazy load diarization pipeline using pyannote for high accuracy"""
         if self._diarization_pipeline is None:
             try:
                 # Debug environment variables
                 logger.info("=== Diarization Environment Variables ===")
-                logger.info(f"USE_SIMPLE_DIARIZATION={os.getenv('USE_SIMPLE_DIARIZATION', 'true')}")
-                logger.info(f"DIARIZE={os.getenv('DIARIZE', 'false')}")
+                logger.info(f"DIARIZE={os.getenv('DIARIZE', 'true')}")
                 logger.info(f"MIN_SPEAKERS={os.getenv('MIN_SPEAKERS', 'None')}")
                 logger.info(f"MAX_SPEAKERS={os.getenv('MAX_SPEAKERS', 'None')}")
                 logger.info(f"HUGGINGFACE_HUB_TOKEN={os.getenv('HUGGINGFACE_HUB_TOKEN', 'None')[:5] if os.getenv('HUGGINGFACE_HUB_TOKEN') else 'None'}...")
                 
-                # Check if we should use simple diarization
-                use_simple = os.getenv('USE_SIMPLE_DIARIZATION', 'true').lower() == 'true'
+                # Always use pyannote diarization for high accuracy
+                from pyannote.audio import Pipeline
                 
-                if use_simple:
-                    # Use our simple diarization that doesn't require authentication
-                    logger.info("Using simple energy-based diarization (no HuggingFace auth required)")
-                    from backend.scripts.common.simple_diarization import simple_energy_based_diarization
-                    self._diarization_pipeline = simple_energy_based_diarization
-                else:
-                    # Use pyannote diarization (requires authentication)
-                    from pyannote.audio import Pipeline
+                logger.info(f"Loading pyannote diarization pipeline: {self.config.diarization_model}")
+                try:
+                    # Try to load the model with explicit cache path
+                    cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+                                            "pretrained_models")
+                    os.makedirs(cache_dir, exist_ok=True)
                     
-                    logger.info(f"Loading diarization pipeline: {self.config.diarization_model}")
+                    logger.info(f"Using cache directory: {cache_dir}")
+                    
+                    # Try both token parameter names depending on pyannote.audio version
                     try:
-                        # Try to load the model with explicit cache path
-                        cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
-                                                "pretrained_models")
-                        os.makedirs(cache_dir, exist_ok=True)
+                        self._diarization_pipeline = Pipeline.from_pretrained(
+                            self.config.diarization_model,
+                            use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
+                            cache_dir=cache_dir
+                        )
+                    except TypeError:
+                        self._diarization_pipeline = Pipeline.from_pretrained(
+                            self.config.diarization_model,
+                            token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
+                            cache_dir=cache_dir
+                        )
+                    
+                    if self._device == "cuda":
+                        self._diarization_pipeline = self._diarization_pipeline.to(torch.device("cuda"))
                         
-                        logger.info(f"Using cache directory: {cache_dir}")
-                        
-                        # Try both token parameter names depending on pyannote.audio version
-                        try:
-                            self._diarization_pipeline = Pipeline.from_pretrained(
-                                self.config.diarization_model,
-                                use_auth_token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
-                                cache_dir=cache_dir
-                            )
-                        except TypeError:
-                            self._diarization_pipeline = Pipeline.from_pretrained(
-                                self.config.diarization_model,
-                                token=os.getenv('HUGGINGFACE_HUB_TOKEN'),
-                                cache_dir=cache_dir
-                            )
-                        
-                        if self._device == "cuda":
-                            self._diarization_pipeline = self._diarization_pipeline.to(torch.device("cuda"))
-                            
-                        logger.info("Successfully loaded pyannote diarization pipeline")
-                    except Exception as e:
-                        logger.error(f"Failed to load pyannote pipeline: {e}")
-                        raise
+                    logger.info("Successfully loaded pyannote diarization pipeline")
+                except Exception as e:
+                    logger.error(f"Failed to load pyannote pipeline: {e}")
+                    raise
                 
             except ImportError:
                 raise ImportError("pyannote.audio not available. Install with: pip install pyannote.audio")
             except Exception as e:
                 logger.error(f"Failed to load diarization pipeline: {e}")
-                logger.info("Using simple energy-based diarization as fallback")
-                from backend.scripts.common.simple_diarization import simple_energy_based_diarization
-                self._diarization_pipeline = simple_energy_based_diarization
+                # Create a fallback diarization function that just returns a single speaker
+                def fallback_diarization(audio_path):
+                    try:
+                        import librosa
+                        duration = librosa.get_duration(path=audio_path)
+                        logger.warning(f"Using fallback single-speaker diarization for {duration:.2f}s audio")
+                        return [(0.0, duration, 0)]
+                    except Exception:
+                        logger.error("Failed to get audio duration, using 60s default")
+                        return [(0.0, 60.0, 0)]
+                
+                self._diarization_pipeline = fallback_diarization
+                logger.warning("Using fallback single-speaker diarization")
         
         return self._diarization_pipeline
     
@@ -629,82 +629,81 @@ class EnhancedASR:
                 result_segments[idx]['merged_into'] = first_idx
     
     def _perform_diarization(self, audio_path: str) -> Optional[List[Tuple[float, float, int]]]:
-        """Perform speaker diarization"""
+        """Perform speaker diarization using pyannote for high accuracy"""
         try:
             # Get the configured diarization pipeline
             diarization_pipeline = self._get_diarization_pipeline()
             
-            logger.info("Performing speaker diarization...")
+            logger.info("Performing speaker diarization with pyannote...")
             
-            # Check if we're using simple diarization or pyannote
-            use_simple = os.getenv('USE_SIMPLE_DIARIZATION', 'true').lower() == 'true'
+            # Convert audio to WAV format for pyannote compatibility
+            wav_path = audio_path.replace('.webm', '_diarization.wav').replace('.mp4', '_diarization.wav').replace('.m4a', '_diarization.wav')
             
-            if use_simple:
-                # Simple energy-based diarization
-                segments = diarization_pipeline(audio_path)
-            else:
-                # pyannote diarization
-                logger.info("Using pyannote diarization")
+            try:
+                import librosa
+                import soundfile as sf
+                # Load and convert to 16kHz mono WAV
+                audio_data, sr = librosa.load(audio_path, sr=16000, mono=True)
+                sf.write(wav_path, audio_data, sr)
+                logger.info(f"Converted audio to WAV format: {wav_path}")
+                diarization_audio_path = wav_path
+            except Exception as e:
+                logger.warning(f"Failed to convert audio format: {e}")
+                diarization_audio_path = audio_path
+            
+            # Set max/min speakers if specified in environment
+            min_speakers = os.getenv('MIN_SPEAKERS')
+            max_speakers = os.getenv('MAX_SPEAKERS')
+            diarization_params = {}
+            
+            if min_speakers and min_speakers.isdigit():
+                diarization_params['min_speakers'] = int(min_speakers)
+                logger.info(f"Setting minimum speakers to {min_speakers}")
                 
-                # Convert audio to WAV format for pyannote compatibility
-                wav_path = audio_path.replace('.webm', '_diarization.wav').replace('.mp4', '_diarization.wav').replace('.m4a', '_diarization.wav')
-                
+            if max_speakers and max_speakers.isdigit():
+                diarization_params['max_speakers'] = int(max_speakers)
+                logger.info(f"Setting maximum speakers to {max_speakers}")
+            
+            # Run pyannote diarization with optimal parameters
+            logger.info(f"Running pyannote diarization with params: {diarization_params}")
+            diarization = diarization_pipeline(diarization_audio_path, **diarization_params)
+            
+            # Get the number of speakers detected
+            try:
+                num_speakers = len(set(s for _, _, s in diarization.itertracks(yield_label=True)))
+                logger.info(f"Pyannote detected {num_speakers} speakers")
+            except Exception as e:
+                logger.warning(f"Could not determine number of speakers: {e}")
+                num_speakers = 'unknown'
+            
+            # Convert pyannote format to our format
+            segments = []
+            for turn, _, speaker in diarization.itertracks(yield_label=True):
+                # Extract speaker ID from pyannote format (e.g., 'SPEAKER_0' -> 0)
                 try:
-                    import librosa
-                    import soundfile as sf
-                    # Load and convert to 16kHz mono WAV
-                    audio_data, sr = librosa.load(audio_path, sr=16000, mono=True)
-                    sf.write(wav_path, audio_data, sr)
-                    logger.info(f"Converted audio to WAV format: {wav_path}")
-                    diarization_audio_path = wav_path
-                except Exception as e:
-                    logger.warning(f"Failed to convert audio format: {e}")
-                    diarization_audio_path = audio_path
-                
-                # Let pyannote determine the optimal number of speakers
-                logger.info("Running pyannote diarization with automatic speaker detection")
-                diarization = diarization_pipeline(diarization_audio_path)
-                
-                # Get the number of speakers detected
+                    speaker_id = int(speaker.split('_')[1])
+                    segments.append((turn.start, turn.end, speaker_id))
+                except (ValueError, IndexError):
+                    logger.warning(f"Couldn't parse speaker ID from {speaker}, using 0")
+                    segments.append((turn.start, turn.end, 0))
+            
+            # Sort by start time
+            segments.sort(key=lambda x: x[0])
+            
+            # Log segments
+            logger.info(f"Diarization found {len(segments)} segments with {len(set(s[2] for s in segments))} unique speakers")
+            for i, (start, end, speaker_id) in enumerate(segments[:10]):
+                logger.info(f"Segment {i}: {start:.2f}-{end:.2f} -> Speaker {speaker_id}")
+            if len(segments) > 10:
+                logger.info(f"... and {len(segments) - 10} more segments")
+            
+            # Cleanup temporary WAV file
+            if 'wav_path' in locals() and wav_path != audio_path and os.path.exists(wav_path):
                 try:
-                    num_speakers = len(set(s for _, _, s in diarization.itertracks(yield_label=True)))
-                    logger.info(f"Pyannote automatically detected {num_speakers} speakers")
+                    os.unlink(wav_path)
+                    logger.info(f"Cleaned up temporary WAV file: {wav_path}")
                 except Exception as e:
-                    logger.warning(f"Could not determine number of speakers: {e}")
-                    num_speakers = 'unknown'
-                
-                # Log diarization results
-                logger.info(f"Diarization result type: {type(diarization)}")
-                logger.info(f"Diarization result: {diarization}")
-                
-                # Convert pyannote format to our format
-                segments = []
-                for turn, _, speaker in diarization.itertracks(yield_label=True):
-                    # Extract speaker ID from pyannote format (e.g., 'SPEAKER_0' -> 0)
-                    try:
-                        speaker_id = int(speaker.split('_')[1])
-                        segments.append((turn.start, turn.end, speaker_id))
-                    except (ValueError, IndexError):
-                        logger.warning(f"Couldn't parse speaker ID from {speaker}, using 0")
-                        segments.append((turn.start, turn.end, 0))
-                
-                # Sort by start time
-                segments.sort(key=lambda x: x[0])
-                
-                # Log segments
-                logger.info(f"Diarization found {len(segments)} segments with {len(set(s[2] for s in segments))} unique speakers")
-                for i, (start, end, speaker_id) in enumerate(segments[:10]):
-                    logger.info(f"Segment {i}: {start:.2f}-{end:.2f} -> Speaker {speaker_id}")
-                if len(segments) > 10:
-                    logger.info(f"... and {len(segments) - 10} more segments")
-                
-                # Cleanup temporary WAV file
-                if 'wav_path' in locals() and wav_path != audio_path and os.path.exists(wav_path):
-                    try:
-                        os.unlink(wav_path)
-                        logger.info(f"Cleaned up temporary WAV file: {wav_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed to cleanup temporary WAV file: {e}")
+                    logger.warning(f"Failed to cleanup temporary WAV file: {e}")
             
             logger.info(f"Diarization found {len(segments)} segments")
             return segments
@@ -712,6 +711,8 @@ class EnhancedASR:
         except Exception as e:
             logger.error(f"Diarization failed: {e}")
             logger.warning("Diarization failed, using single unknown speaker")
+            import traceback
+            traceback.print_exc()
             
             # Fallback: create a single segment for the entire audio
             try:
