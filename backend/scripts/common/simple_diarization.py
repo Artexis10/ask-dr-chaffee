@@ -1,99 +1,236 @@
 #!/usr/bin/env python3
 """
-Simple diarization module that doesn't require HuggingFace authentication
+Enhanced simple diarization module that doesn't require HuggingFace authentication
+Uses spectral features and clustering for better speaker differentiation
 """
 
+import os
 import numpy as np
 import librosa
-from typing import List, Tuple, Optional
+import soundfile as sf
+import tempfile
+from typing import List, Tuple, Optional, Dict, Any
 import logging
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import warnings
+
+# Suppress warnings
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
 
 logger = logging.getLogger(__name__)
+
+def extract_audio_features(audio: np.ndarray, sr: int, frame_size: int = 1024, hop_length: int = 512) -> Dict[str, np.ndarray]:
+    """
+    Extract audio features for speaker differentiation
+    
+    Args:
+        audio: Audio signal
+        sr: Sample rate
+        frame_size: Frame size for feature extraction
+        hop_length: Hop length for feature extraction
+        
+    Returns:
+        Dictionary of audio features
+    """
+    features = {}
+    
+    # Energy features
+    features['rms'] = librosa.feature.rms(y=audio, frame_length=frame_size, hop_length=hop_length)[0]
+    
+    # Spectral features
+    features['spectral_centroid'] = librosa.feature.spectral_centroid(y=audio, sr=sr, n_fft=frame_size, hop_length=hop_length)[0]
+    features['spectral_bandwidth'] = librosa.feature.spectral_bandwidth(y=audio, sr=sr, n_fft=frame_size, hop_length=hop_length)[0]
+    features['spectral_rolloff'] = librosa.feature.spectral_rolloff(y=audio, sr=sr, n_fft=frame_size, hop_length=hop_length)[0]
+    
+    # MFCC features (good for speaker characteristics)
+    mfccs = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13, n_fft=frame_size, hop_length=hop_length)
+    for i, mfcc in enumerate(mfccs):
+        features[f'mfcc_{i+1}'] = mfcc
+    
+    # Pitch features
+    try:
+        f0, voiced_flag, _ = librosa.pyin(audio, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), sr=sr, frame_length=frame_size, hop_length=hop_length)
+        # Replace NaN values with 0
+        f0 = np.nan_to_num(f0)
+        features['pitch'] = f0
+        features['voiced'] = voiced_flag.astype(float)
+    except Exception:
+        # Fallback if pitch extraction fails
+        features['pitch'] = np.zeros_like(features['rms'])
+        features['voiced'] = np.zeros_like(features['rms'])
+    
+    return features
+
 def simple_energy_based_diarization(
     audio_path: str, 
-    min_segment_duration: float = 3.0,
+    min_segment_duration: float = 2.0,
     energy_threshold: float = 0.01,
     pause_duration: float = 0.5,
     use_spectral_features: bool = True,  # Use spectral features for better speaker differentiation
-    spectral_threshold: float = 0.5   # Threshold for spectral change detection
+    spectral_threshold: float = 0.5,   # Threshold for spectral change detection
+    max_speakers: int = 2,  # Maximum number of speakers to detect
+    min_speech_duration: float = 1.0  # Minimum speech duration in seconds
 ) -> List[Tuple[float, float, int]]:
     """
-    Simple energy-based diarization that doesn't require HuggingFace authentication
+    Enhanced diarization that doesn't require HuggingFace authentication
+    Uses energy detection, spectral features, and clustering for better speaker differentiation
     
+    Args:
         audio_path: Path to audio file
         min_segment_duration: Minimum segment duration in seconds
         energy_threshold: Energy threshold for silence detection
         pause_duration: Pause duration in seconds to consider a new segment
-        spectral_features: Whether to use spectral features for speaker differentiation
+        use_spectral_features: Whether to use spectral features for speaker differentiation
         spectral_threshold: Threshold for spectral change detection
+        max_speakers: Maximum number of speakers to detect
+        min_speech_duration: Minimum speech duration in seconds
         
     Returns:
         List of (start, end, speaker_id) tuples
     """
     try:
+        logger.info(f"Processing audio file: {audio_path}")
+        
         # Load audio
         audio, sr = librosa.load(audio_path, sr=16000)
+        duration = len(audio) / sr
+        logger.info(f"Audio duration: {duration:.2f} seconds")
         
-        # Calculate energy
-        energy = librosa.feature.rms(y=audio, frame_length=1024, hop_length=512)[0]
-        times = librosa.times_like(energy, sr=sr, hop_length=512)
+        # Extract features
+        frame_size = 1024
+        hop_length = 512
+        features = extract_audio_features(audio, sr, frame_size, hop_length)
         
-        # Find segments based on energy
-        is_speech = energy > energy_threshold
+        # Calculate time points for each frame
+        times = librosa.times_like(features['rms'], sr=sr, hop_length=hop_length)
         
-        # Find segment boundaries
-        boundaries = np.where(np.diff(is_speech.astype(int)) != 0)[0]
+        # Voice activity detection based on energy
+        is_speech = features['rms'] > energy_threshold
         
-        if len(boundaries) == 0:
-            # No boundaries found, treat the whole audio as one segment
-            if is_speech[0]:
-                return [(0.0, len(audio) / sr, 0)]
-            else:
-                return []
+        # Find speech segments
+        speech_segments = []
+        in_speech = False
+        speech_start = 0
         
-        # Convert boundaries to time
-        boundary_times = times[boundaries]
+        for i, speech in enumerate(is_speech):
+            if speech and not in_speech:
+                # Speech start
+                speech_start = times[i]
+                in_speech = True
+            elif not speech and in_speech:
+                # Speech end
+                speech_end = times[i]
+                if speech_end - speech_start >= min_speech_duration:
+                    speech_segments.append((speech_start, speech_end))
+                in_speech = False
         
-        # Create segments
-        segments = []
-        speaker_id = 0
+        # Add final segment if still in speech
+        if in_speech and times[-1] - speech_start >= min_speech_duration:
+            speech_segments.append((speech_start, times[-1]))
         
-        # Add first segment if it starts with speech
-        if is_speech[0]:
-            start_time = 0.0
-            if len(boundary_times) > 0:
-                end_time = boundary_times[0]
-                if end_time - start_time >= min_segment_duration:
-                    segments.append((start_time, end_time, speaker_id))
-        
-        # Process remaining segments
-        for i in range(0, len(boundary_times) - 1, 2):
-            if i + 1 >= len(boundary_times):
-                break
-                
-            start_time = boundary_times[i]
-            end_time = boundary_times[i + 1]
+        if not speech_segments:
+            logger.warning("No speech segments found")
+            # Return a single segment for the entire audio as fallback
+            return [(0.0, duration, 0)]
             
-            # Only add if segment is long enough
-            if end_time - start_time >= min_segment_duration:
-                segments.append((start_time, end_time, speaker_id))
+        logger.info(f"Found {len(speech_segments)} speech segments")
+        
+        # Merge segments that are close together
+        merged_segments = []
+        current_start, current_end = speech_segments[0]
+        
+        for start, end in speech_segments[1:]:
+            if start - current_end <= pause_duration:
+                # Merge with current segment
+                current_end = end
+            else:
+                # Add current segment and start a new one
+                if current_end - current_start >= min_segment_duration:
+                    merged_segments.append((current_start, current_end))
+                current_start, current_end = start, end
+        
+        # Add the last segment
+        if current_end - current_start >= min_segment_duration:
+            merged_segments.append((current_start, current_end))
+        
+        logger.info(f"After merging: {len(merged_segments)} segments")
+        
+        # If not using spectral features or only one segment, return simple segments
+        if not use_spectral_features or len(merged_segments) <= 1:
+            return [(start, end, 0) for start, end in merged_segments]
+        
+        # Extract features for each segment for speaker clustering
+        segment_features = []
+        
+        for start, end in merged_segments:
+            # Convert time to frame indices
+            start_idx = int(start * sr / hop_length)
+            end_idx = int(end * sr / hop_length)
+            
+            # Ensure indices are within bounds
+            start_idx = max(0, min(start_idx, len(times) - 1))
+            end_idx = max(0, min(end_idx, len(times) - 1))
+            
+            if start_idx >= end_idx:
+                continue
+            
+            # Extract segment features
+            segment_feature_vector = []
+            
+            # Use key features for speaker differentiation
+            for feature_name in ['spectral_centroid', 'spectral_bandwidth', 'spectral_rolloff', 
+                               'mfcc_1', 'mfcc_2', 'mfcc_3', 'mfcc_4', 'pitch']:
+                if feature_name in features:
+                    # Get mean and std of feature in this segment
+                    feature_mean = np.mean(features[feature_name][start_idx:end_idx])
+                    feature_std = np.std(features[feature_name][start_idx:end_idx])
+                    segment_feature_vector.extend([feature_mean, feature_std])
+            
+            segment_features.append(segment_feature_vector)
+        
+        # Perform speaker clustering if we have enough segments
+        if len(segment_features) >= 2:
+            try:
+                # Normalize features
+                scaler = StandardScaler()
+                scaled_features = scaler.fit_transform(segment_features)
                 
-                # If there's a long pause, increment speaker ID
-                if i + 2 < len(boundary_times) and boundary_times[i + 2] - end_time > pause_duration:
-                    speaker_id += 1
-        
-        # Add last segment if it ends with speech
-        if len(boundary_times) > 0 and is_speech[-1]:
-            start_time = boundary_times[-1]
-            end_time = times[-1]
-            if end_time - start_time >= min_segment_duration:
-                segments.append((start_time, end_time, speaker_id))
-        
-        logger.info(f"Simple diarization found {len(segments)} segments with {speaker_id + 1} speakers")
-        return segments
+                # Reduce dimensionality if we have many features
+                if scaled_features.shape[1] > 10:
+                    pca = PCA(n_components=min(10, scaled_features.shape[0]))
+                    scaled_features = pca.fit_transform(scaled_features)
+                
+                # Determine number of clusters (speakers)
+                n_clusters = min(max_speakers, len(segment_features))
+                
+                # Perform clustering
+                kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+                labels = kmeans.fit_predict(scaled_features)
+                
+                logger.info(f"Clustered into {n_clusters} speakers")
+                
+                # Create final segments with speaker IDs
+                final_segments = []
+                for i, ((start, end), speaker_id) in enumerate(zip(merged_segments, labels)):
+                    final_segments.append((start, end, int(speaker_id)))
+                
+                return final_segments
+            except Exception as e:
+                logger.error(f"Clustering failed: {e}")
+                # Fall back to simple segments
+                return [(start, end, 0) for start, end in merged_segments]
+        else:
+            # Not enough segments for clustering
+            return [(start, end, 0) for start, end in merged_segments]
         
     except Exception as e:
-        logger.error(f"Simple diarization failed: {e}")
+        logger.error(f"Enhanced diarization failed: {e}")
+        import traceback
+        traceback.print_exc()
+        
         # Return a single segment for the entire audio as fallback
         try:
             duration = librosa.get_duration(path=audio_path)
