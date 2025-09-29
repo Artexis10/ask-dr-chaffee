@@ -165,7 +165,7 @@ def create_example_scripts():
 import sys
 sys.path.append('backend/scripts')
 
-from backend.scripts.common.voice_enrollment import VoiceEnrollment
+from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
 from backend.scripts.common.enhanced_asr import EnhancedASR
 
 # 1. Enroll Dr. Chaffee (replace with actual audio file)
@@ -196,7 +196,7 @@ def run_basic_test():
     
     try:
         # Test voice enrollment system
-        from backend.scripts.common.voice_enrollment import VoiceEnrollment
+        from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
         enrollment = VoiceEnrollment()
         print("  ✅ Voice enrollment system loaded")
         

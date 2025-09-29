@@ -25,7 +25,7 @@ def setup_logging(verbose: bool = False):
 def enroll_command(args):
     """Handle voice enrollment command"""
     try:
-        from backend.scripts.common.voice_enrollment import VoiceEnrollment
+        from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
         
         enrollment = VoiceEnrollment(voices_dir=args.voices_dir)
         
@@ -72,7 +72,7 @@ def enroll_command(args):
 def list_voices_command(args):
     """Handle list voices command"""
     try:
-        from backend.scripts.common.voice_enrollment import VoiceEnrollment
+        from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
         
         enrollment = VoiceEnrollment(voices_dir=args.voices_dir)
         profiles = enrollment.list_profiles()
@@ -99,7 +99,7 @@ def list_voices_command(args):
 def voice_info_command(args):
     """Handle voice info command"""
     try:
-        from backend.scripts.common.voice_enrollment import VoiceEnrollment
+        from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
         
         enrollment = VoiceEnrollment(voices_dir=args.voices_dir)
         profile_info = enrollment.get_profile_info(args.name)

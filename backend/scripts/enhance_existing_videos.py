@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.scripts.common.database import get_db_connection
 from backend.scripts.common.enhanced_transcript_fetch import EnhancedTranscriptFetcher
-from backend.scripts.common.voice_enrollment import VoiceEnrollment
+from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
 
 logger = logging.getLogger(__name__)
 

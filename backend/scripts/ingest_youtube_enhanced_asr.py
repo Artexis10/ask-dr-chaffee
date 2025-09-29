@@ -496,7 +496,7 @@ class EnhancedYouTubeIngestion:
                         logger.warning(f"Could not extract video ID from URL: {source}")
                 else:
                     # Assume it's a local file - use voice enrollment directly
-                    from backend.scripts.common.voice_enrollment import VoiceEnrollment
+                    from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
                     enrollment = VoiceEnrollment(voices_dir=self.voices_dir)
                     profile = enrollment.enroll_speaker(
                         name='Chaffee',
