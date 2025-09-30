@@ -7,6 +7,7 @@ import os
 import json
 import logging
 import numpy as np
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any
 import threading
@@ -422,6 +423,152 @@ class VoiceEnrollment:
         except Exception as e:
             logger.error(f"Failed to compute single similarity: {e}")
             return 0.0
+    
+    def enroll_speaker(self, name: str, audio_sources: List[str], overwrite: bool = False, update: bool = False, min_duration: float = 30.0) -> Optional[Dict]:
+        """
+        Enroll a speaker from audio sources
+        
+        Args:
+            name: Name for the speaker profile
+            audio_sources: List of audio sources (file paths or YouTube URLs)
+            overwrite: Whether to overwrite existing profile
+            update: Whether to update existing profile
+            min_duration: Minimum audio duration required
+            
+        Returns:
+            Speaker profile dictionary if successful, None otherwise
+        """
+        try:
+            # Check if profile exists
+            profile_path = self.voices_dir / f"{name.lower()}.json"
+            
+            if profile_path.exists():
+                if not (overwrite or update):
+                    logger.error(f"Profile '{name}' already exists. Use overwrite=True or update=True")
+                    return None
+                    
+                if update:
+                    # Load existing profile
+                    with open(profile_path, 'r', encoding='utf-8') as f:
+                        profile = json.load(f)
+                        
+                    # Get existing embeddings
+                    existing_embeddings = [np.array(emb) for emb in profile.get('embeddings', [])]
+                    logger.info(f"Loaded {len(existing_embeddings)} existing embeddings from profile '{name}'")
+                else:
+                    # For overwrite, start with empty embeddings
+                    existing_embeddings = []
+            else:
+                # New profile
+                existing_embeddings = []
+            
+            # Process new sources
+            all_embeddings = list(existing_embeddings)  # Start with existing embeddings if updating
+            processed_sources = []
+            total_duration = 0.0
+            
+            # Process each audio source
+            for source in audio_sources:
+                logger.info(f"Processing audio source: {source}")
+                
+                # Handle YouTube URLs
+                if source.startswith('http') and ('youtube.com' in source or 'youtu.be' in source):
+                    # Extract video ID
+                    import re
+                    video_id = None
+                    patterns = [
+                        r'(?:youtube\.com/watch\?v=|youtu.be/)([a-zA-Z0-9_-]+)',
+                        r'youtube\.com/shorts/([a-zA-Z0-9_-]+)'
+                    ]
+                    
+                    for pattern in patterns:
+                        match = re.search(pattern, source)
+                        if match:
+                            video_id = match.group(1)
+                            break
+                    
+                    if not video_id:
+                        logger.error(f"Could not extract video ID from URL: {source}")
+                        continue
+                    
+                    # Check if audio file already exists in audio_storage
+                    audio_storage_dir = Path(os.getenv('AUDIO_STORAGE_DIR', 'audio_storage'))
+                    audio_file = audio_storage_dir / f"{video_id}.wav"
+                    
+                    if audio_file.exists():
+                        logger.info(f"Using existing audio file: {audio_file}")
+                        source = str(audio_file)
+                    else:
+                        logger.warning(f"Audio file not found for {video_id}, skipping URL: {source}")
+                        continue
+                
+                # Handle local audio files
+                if os.path.exists(source):
+                    # Extract embeddings
+                    embeddings = self._extract_embeddings_from_audio(source)
+                    
+                    if embeddings:
+                        # Get audio duration
+                        import librosa
+                        duration = librosa.get_duration(path=source)
+                        
+                        if duration >= min_duration:
+                            all_embeddings.extend(embeddings)
+                            processed_sources.append(source)
+                            total_duration += duration
+                            logger.info(f"Added {len(embeddings)} embeddings from {source} ({duration:.1f}s)")
+                            
+                            # Clean up audio file if flag is set
+                            if os.getenv('CLEANUP_AUDIO_AFTER_PROCESSING', 'false').lower() == 'true':
+                                try:
+                                    os.remove(source)
+                                    logger.info(f"Cleaned up audio file: {source}")
+                                except Exception as e:
+                                    logger.warning(f"Failed to clean up {source}: {e}")
+                        else:
+                            logger.warning(f"Audio too short: {duration:.1f}s < {min_duration:.1f}s")
+                    else:
+                        logger.warning(f"No embeddings extracted from {source}")
+                else:
+                    logger.error(f"Audio source not found: {source}")
+            
+            if not all_embeddings:
+                logger.error("No embeddings extracted from any source")
+                return None
+                
+            logger.info(f"Extracted a total of {len(all_embeddings)} embeddings")
+            
+            # Calculate centroid
+            centroid = np.mean(all_embeddings, axis=0).tolist()
+            
+            # Create profile
+            profile = {
+                'name': name.lower(),
+                'centroid': centroid,
+                'embeddings': [emb.tolist() for emb in all_embeddings],
+                'threshold': 0.62,  # Default threshold
+                'created_at': datetime.now().isoformat(),
+                'audio_sources': processed_sources,
+                'metadata': {
+                    'source': 'voice_enrollment_optimized.py',
+                    'num_embeddings': len(all_embeddings),
+                    'total_duration': total_duration
+                }
+            }
+            
+            # Save profile
+            with open(profile_path, 'w', encoding='utf-8') as f:
+                json.dump(profile, f, indent=2)
+                
+            logger.info(f"✅ Successfully {'updated' if update else 'created'} profile '{name}' with {len(all_embeddings)} embeddings")
+            
+            return profile
+            
+        except Exception as e:
+            logger.error(f"Failed to enroll speaker: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
     
     def identify_speaker(self, audio_path: Union[str, Path], threshold: float = 0.75) -> Tuple[Optional[str], float]:
         """Identify speaker from audio file"""

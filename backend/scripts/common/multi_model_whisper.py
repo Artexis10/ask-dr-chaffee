@@ -91,10 +91,32 @@ class MultiModelWhisperManager:
                 
                 logger.info(f"🎯 Model {model_id}: Transcribing {audio_path.name}")
                 
+                # CRITICAL FIX: Convert Path to native OS string format to avoid utf_8_encode errors
+                # On Windows, faster-whisper's internal C libraries expect native string format
+                import os
+                if isinstance(audio_path, Path):
+                    # Use os.fspath() which is the official way to convert Path to OS-native string
+                    audio_path_str = os.fspath(audio_path)
+                else:
+                    audio_path_str = str(audio_path)
+                
+                # DEBUG: Log the type and representation
+                logger.debug(f"🐛 Model {model_id}: audio_path type={type(audio_path)}, audio_path_str type={type(audio_path_str)}, isinstance bytes={isinstance(audio_path_str, bytes)}")
+                logger.debug(f"🐛 Model {model_id}: audio_path_str repr={repr(audio_path_str)}")
+                
+                # Ensure it's a proper string, not bytes
+                if isinstance(audio_path_str, bytes):
+                    logger.warning(f"⚠️ Model {model_id}: audio_path_str IS BYTES, decoding...")
+                    audio_path_str = audio_path_str.decode('utf-8', errors='replace')
+                
+                # Final type check
+                if not isinstance(audio_path_str, str):
+                    raise TypeError(f"audio_path_str must be str, got {type(audio_path_str)}: {repr(audio_path_str)}")
+                
                 # Optimized transcription settings for maximum throughput
-                logger.info(f"🎯 Model {model_id}: Starting transcription for {audio_path.name}")
+                logger.info(f"🎯 Model {model_id}: Starting transcription for {os.path.basename(audio_path_str)}")
                 segments, info = model.transcribe(
-                    str(audio_path),
+                    audio_path_str,  # Use the properly converted string
                     language="en",
                     beam_size=1,          # Fastest beam search
                     word_timestamps=False, # Skip word-level timing for speed
@@ -118,11 +140,14 @@ class MultiModelWhisperManager:
                             logger.warning(f"🎯 Model {model_id}: Reached segment limit ({max_segments}), stopping")
                             break
                             
-                        if len(segment.text.strip()) > 3:  # Filter very short segments
+                        # Ensure text is a proper string (avoid bytes on Windows)
+                        text_value = segment.text.decode('utf-8', errors='replace') if isinstance(segment.text, bytes) else str(segment.text)
+                        text_value = text_value.strip()
+                        if len(text_value) > 3:  # Filter very short segments
                             ts = TranscriptSegment(
                                 start=segment.start,
                                 end=segment.end,
-                                text=segment.text.strip()
+                                text=text_value
                             )
                             transcript_segments.append(ts)
                             segment_count += 1

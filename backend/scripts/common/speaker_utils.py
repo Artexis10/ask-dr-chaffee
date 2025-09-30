@@ -109,25 +109,25 @@ class SpeakerProfiler:
                 if speaker_conf >= self.ch_hi:
                     self.consecutive_count += 1
                     if self.consecutive_count >= self.min_runs:
-                        self.current_state = "CH"
-                        speaker_label = "CH"
+                        self.current_state = "Chaffee"
+                        speaker_label = "Chaffee"
                     else:
                         speaker_label = "GUEST"  # Still transitioning
                 else:
                     self.consecutive_count = 0
                     speaker_label = "GUEST"
             
-            elif self.current_state == "CH":
+            elif self.current_state == "Chaffee":
                 if speaker_conf <= self.ch_lo:
                     self.consecutive_count += 1
                     if self.consecutive_count >= self.min_runs:
                         self.current_state = "GUEST"
                         speaker_label = "GUEST"
                     else:
-                        speaker_label = "CH"  # Still transitioning
+                        speaker_label = "Chaffee"  # Still transitioning
                 else:
                     self.consecutive_count = 0
-                    speaker_label = "CH"
+                    speaker_label = "Chaffee"
             else:
                 speaker_label = "GUEST"
             

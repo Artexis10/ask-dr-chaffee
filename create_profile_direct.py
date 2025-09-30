@@ -8,6 +8,7 @@ import json
 import logging
 import tempfile
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 # Configure logging
@@ -134,11 +135,46 @@ def create_profile_from_seeds():
         
         # Create profile from audio files
         logger.info(f"Creating profile from {len(audio_files)} audio files")
-        profile = enrollment.enroll_speaker(
-            name="chaffee",
-            audio_sources=audio_files,
-            overwrite=True
-        )
+        
+        # Extract embeddings from all audio files
+        all_embeddings = []
+        for audio_file in audio_files:
+            logger.info(f"Extracting embeddings from {audio_file}")
+            embeddings = enrollment._extract_embeddings_from_audio(audio_file)
+            if embeddings:
+                all_embeddings.extend(embeddings)
+                logger.info(f"Extracted {len(embeddings)} embeddings from {audio_file}")
+            else:
+                logger.warning(f"No embeddings extracted from {audio_file}")
+        
+        if not all_embeddings:
+            logger.error("No embeddings extracted from any audio file")
+            return False
+            
+        logger.info(f"Extracted a total of {len(all_embeddings)} embeddings")
+        
+        # Calculate centroid
+        import numpy as np
+        centroid = np.mean(all_embeddings, axis=0).tolist()
+        
+        # Create profile
+        profile = {
+            'name': 'chaffee',
+            'centroid': centroid,
+            'embeddings': [emb.tolist() for emb in all_embeddings],
+            'threshold': 0.62,
+            'created_at': datetime.now().isoformat(),
+            'audio_sources': [os.path.basename(f) for f in audio_files],
+            'metadata': {
+                'source': 'create_profile_direct.py',
+                'num_embeddings': len(all_embeddings)
+            }
+        }
+        
+        # Save profile
+        profile_path = voices_dir / "chaffee.json"
+        with open(profile_path, 'w', encoding='utf-8') as f:
+            json.dump(profile, f, indent=2)
         
         if not profile:
             logger.error("Failed to create profile")

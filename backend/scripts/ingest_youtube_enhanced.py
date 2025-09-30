@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+
+# CRITICAL: UTF-8 fix MUST be first - before docstring, before any imports
+# Windows defaults to cp1252 encoding which causes yt-dlp to crash
+import sys
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 """
 Enhanced YouTube transcript ingestion script for Ask Dr. Chaffee.
 RTX 5080 Optimized for 1200h ingestion in ≤24h (GPT-5 specification).
@@ -17,7 +25,6 @@ concurrent processing pipeline and comprehensive error handling.
 """
 
 import os
-import sys
 import argparse
 import asyncio
 import codecs
@@ -282,12 +289,25 @@ class IngestionConfig:
             if self.youtube_api_key is None:
                 self.youtube_api_key = os.getenv('YOUTUBE_API_KEY')
             if not self.youtube_api_key:
-                # Check if we're in setup-chaffee mode
+                # Skip API key check if we're in setup-chaffee mode
+                # This allows using a dummy key for setup-chaffee
                 setup_chaffee_mode = False
-                for frame in inspect.stack():
-                    if 'setup_chaffee_mode' in frame.frame.f_locals and frame.frame.f_locals['setup_chaffee_mode']:
-                        setup_chaffee_mode = True
-                        break
+                try:
+                    # Check if we're being called from a function with setup_chaffee_mode
+                    for frame in inspect.stack():
+                        if 'setup_chaffee_mode' in frame.frame.f_locals:
+                            if frame.frame.f_locals['setup_chaffee_mode']:
+                                setup_chaffee_mode = True
+                                break
+                except Exception:
+                    # If we can't check the stack, assume we're not in setup-chaffee mode
+                    pass
+                    
+                # Also check if --setup-chaffee was passed as an argument
+                import sys
+                if '--setup-chaffee' in sys.argv:
+                    setup_chaffee_mode = True
+                    
                 if not setup_chaffee_mode:
                     raise ValueError("YOUTUBE_API_KEY required for API source")
         
@@ -464,7 +484,16 @@ class ProcessingStats:
         logger.info(f"   Guest segments: {self.guest_segments}")
         logger.info(f"   Unknown segments: {self.unknown_segments}")
         if self.segments_created > 0:
-            chaffee_pct = (self.chaffee_segments / self.segments_created) * 100
+            # Ensure the speaker counts don't exceed total segments created
+            # (This can happen due to counting bugs or duplicate processing)
+            total_speaker_segments = self.chaffee_segments + self.guest_segments + self.unknown_segments
+            if total_speaker_segments > self.segments_created:
+                logger.warning(f"   ⚠️  Speaker count mismatch: {total_speaker_segments} speaker segments > {self.segments_created} total segments")
+                logger.warning(f"   This indicates a counting bug or duplicate processing. Using segments_created for percentage calculation.")
+                # Recalculate based on segments_created
+                chaffee_pct = (self.chaffee_segments / total_speaker_segments) * 100 if total_speaker_segments > 0 else 0.0
+            else:
+                chaffee_pct = (self.chaffee_segments / self.segments_created) * 100
             logger.info(f"   Chaffee percentage: {chaffee_pct:.1f}%")
         
         # Pipeline optimization stats

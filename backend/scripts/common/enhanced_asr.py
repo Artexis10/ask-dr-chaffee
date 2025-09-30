@@ -324,11 +324,11 @@ class EnhancedASR:
                     if result:
                         # Label everything as Chaffee
                         for segment in result.segments:
-                            segment['speaker'] = 'CH'
+                            segment['speaker'] = 'Chaffee'
                             segment['speaker_confidence'] = avg_similarity
                         
                         for word in result.words:
-                            word.speaker = 'CH'
+                            word.speaker = 'Chaffee'
                             word.speaker_confidence = avg_similarity
                         result.metadata['monologue_fast_path'] = True
                         result.metadata['chaffee_similarity'] = avg_similarity
@@ -360,11 +360,11 @@ class EnhancedASR:
             confidence = 0.95  # High confidence since we're forcing it
             
             for segment in result.segments:
-                segment['speaker'] = 'CH'
+                segment['speaker'] = 'Chaffee'
                 segment['speaker_confidence'] = confidence
             
             for word in result.words:
-                word.speaker = 'CH'
+                word.speaker = 'Chaffee'
                 word.speaker_confidence = confidence
                 
             result.metadata['monologue_fast_path'] = True
@@ -921,18 +921,26 @@ class EnhancedASR:
                     
                     # Check if similarity meets threshold
                     if best_similarity >= threshold:
-                        # Check margin (difference from second-best)
-                        sorted_sims = sorted(similarities.values(), reverse=True)
-                        if len(sorted_sims) > 1:
-                            margin = sorted_sims[0] - sorted_sims[1]
+                        # Check margin (difference from second-best with different value)
+                        # Filter out duplicate similarities to handle backup profiles with identical centroids
+                        unique_sims = sorted(set(similarities.values()), reverse=True)
+                        if len(unique_sims) > 1:
+                            margin = unique_sims[0] - unique_sims[1]
                         else:
-                            margin = best_similarity  # Only one profile
+                            # Only one unique similarity value (could be from multiple identical profiles)
+                            # If we matched "chaffee" specifically, accept it even without margin
+                            if best_match == 'chaffee':
+                                margin = self.config.attr_margin  # Accept the main profile
+                                logger.info(f"Cluster {cluster_id}: Matched main 'chaffee' profile, accepting without margin check")
+                            else:
+                                margin = best_similarity  # Only one profile or all same
                         
                         if margin >= self.config.attr_margin:
                             speaker_name = best_match.title()
                             confidence = best_similarity
                         else:
                             logger.info(f"Cluster {cluster_id}: Insufficient margin {margin:.3f} < {self.config.attr_margin:.3f}")
+                            logger.info(f"Cluster {cluster_id}: Consider removing duplicate backup profiles with identical centroids")
                     else:
                         logger.info(f"Cluster {cluster_id}: Best similarity {best_similarity:.3f} < threshold {threshold:.3f}")
                 

@@ -299,21 +299,30 @@ class VoiceEnrollment:
                     
                     with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
                         try:
+                            # First, download the audio as mp3 (more reliable)
+                            output_file = os.path.join(os.path.dirname(tmp_file.name), f"{os.path.basename(tmp_file.name)}.mp3")
                             cmd = [
                                 'yt-dlp',
-                                '-x',
-                                '--audio-format', 'wav',
-                                '--audio-quality', '0',
                                 '--format', 'bestaudio',
+                                '--extract-audio',
+                                '--audio-format', 'mp3',
+                                '--audio-quality', '0',
                                 '--no-check-certificate',
                                 '--no-playlist',
                                 '--ignore-errors',
-                                '-o', tmp_file.name,
+                                '-o', output_file,
                                 source
                             ]
                             
                             logger.info(f"Downloading audio from {source}")
-                            subprocess.run(cmd, check=True, capture_output=True)
+                            try:
+                                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                                logger.info(f"Download successful")
+                            except subprocess.CalledProcessError as e:
+                                logger.error(f"yt-dlp command failed with return code {e.returncode}")
+                                logger.error(f"STDOUT: {e.stdout}")
+                                logger.error(f"STDERR: {e.stderr}")
+                                raise
                             
                             # Extract embeddings
                             embeddings = self._extract_embeddings_from_audio(tmp_file.name)

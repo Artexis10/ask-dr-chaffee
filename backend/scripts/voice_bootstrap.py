@@ -25,8 +25,67 @@ sys.path.append(project_root)
 sys.path.append(backend_dir)
 sys.path.append(os.path.join(script_dir, 'common'))
 
-from backend.scripts.common.voice_storage import get_voice_storage, save_voice_profile, voice_exists
 from backend.scripts.common.voice_enrollment_optimized import VoiceEnrollment
+
+# Simple voice storage implementation to replace the missing module
+class VoiceStorage:
+    """Voice profile storage manager"""
+    
+    def __init__(self, voices_dir: str = 'voices'):
+        self.voices_dir = Path(voices_dir)
+        self.voices_dir.mkdir(exist_ok=True)
+        
+    def exists(self, name: str) -> bool:
+        """Check if a voice profile exists"""
+        profile_path = self.voices_dir / f"{name.lower()}.json"
+        return profile_path.exists()
+        
+    def load(self, name: str) -> Optional[Dict]:
+        """Load a voice profile"""
+        profile_path = self.voices_dir / f"{name.lower()}.json"
+        if not profile_path.exists():
+            return None
+            
+        try:
+            with open(profile_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load profile {name}: {e}")
+            return None
+            
+    def save(self, name: str, profile: Dict) -> bool:
+        """Save a voice profile"""
+        profile_path = self.voices_dir / f"{name.lower()}.json"
+        try:
+            with open(profile_path, 'w', encoding='utf-8') as f:
+                json.dump(profile, f, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save profile {name}: {e}")
+            return False
+            
+    def list_profiles(self) -> List[str]:
+        """List available voice profiles"""
+        profiles = []
+        for file_path in self.voices_dir.glob("*.json"):
+            if file_path.stem.endswith('.meta'):
+                continue
+            profiles.append(file_path.stem)
+        return profiles
+
+def get_voice_storage(voices_dir: str = 'voices') -> VoiceStorage:
+    """Get a voice storage instance"""
+    return VoiceStorage(voices_dir)
+    
+def voice_exists(name: str, voices_dir: str = 'voices') -> bool:
+    """Check if a voice profile exists"""
+    storage = get_voice_storage(voices_dir)
+    return storage.exists(name)
+    
+def save_voice_profile(name: str, profile: Dict, voices_dir: str = 'voices') -> bool:
+    """Save a voice profile"""
+    storage = get_voice_storage(voices_dir)
+    return storage.save(name, profile)
 
 logger = logging.getLogger(__name__)
 
@@ -156,29 +215,199 @@ def perform_purity_check(fetcher,
         else:
             logger.warning(f"❌ Purity check failed (profile missing: {profile_name})")
             return False
-            
     except Exception as e:
         logger.error(f"Purity check failed with error: {e}")
         return False
 
 
-def build_voice_profile(seed_file_path: Path, 
-                       profile_name: str, 
-                       overwrite: bool = False,
-                       update: bool = False) -> bool:
+def build_voice_profile(seed_file_path: Path, profile_name: str, overwrite: bool = False, update: bool = False) -> bool:
     """
-    Build a voice profile from seed URLs using direct download and embedding extraction
+    Build a voice profile from seed URLs
     
     Args:
         seed_file_path: Path to seed configuration file
         profile_name: Name for the voice profile
         overwrite: Whether to overwrite existing profile
-        update: Whether to update existing profile with new content
+        update: Whether to update existing profile
         
     Returns:
         True if successful, False otherwise
     """
     try:
+        # Validate seed file
+        logger.info(f"Loading seed configuration from {seed_file_path}")
+        seeds_data = validate_seed_file(seed_file_path)
+        
+        # Get voice storage
+        storage = get_voice_storage()
+        
+        # Check if profile exists
+        if storage.exists(profile_name):
+            if overwrite:
+                logger.info(f"🔄 Overwriting existing profile '{profile_name}'")
+            elif update:
+                logger.info(f"🔄 Updating existing profile '{profile_name}'")
+            else:
+                logger.error(f"Profile '{profile_name}' already exists. Use --overwrite or --update")
+                return False
+        else:
+            if update:
+                logger.warning(f"Profile '{profile_name}' does not exist. Creating new profile.")
+            mode_description = "Initial Creation"
+        
+        # Similarity threshold from environment (used for metadata)
+        min_similarity = float(os.getenv('CHAFFEE_MIN_SIM', '0.62'))
+            
+        # Extract URLs from seed data
+        urls = [source['url'] for source in seeds_data['sources']]
+        logger.info(f"🚀 Enrolling from {len(urls)} seed URLs using local audio files")
+        
+        # Find local audio files corresponding to the URLs
+        audio_dir = Path("audio_storage")
+        if not audio_dir.exists():
+            logger.error(f"Audio directory not found: {audio_dir}")
+            return False
+            
+        # Get all WAV files
+        audio_files = list(audio_dir.glob("*.wav"))
+        if not audio_files:
+            logger.error(f"No WAV files found in {audio_dir}")
+            return False
+            
+        logger.info(f"Found {len(audio_files)} WAV files in {audio_dir}")
+        
+        # Create voice enrollment
+        voices_dir = Path(os.getenv('VOICES_DIR', 'voices'))
+        enrollment = VoiceEnrollment(voices_dir=str(voices_dir))
+        
+        # Extract embeddings from all audio files
+        all_embeddings = []
+        for audio_file in audio_files:
+            try:
+                logger.info(f"Extracting embeddings from {audio_file}")
+                
+                # Use the same approach as ingest_youtube_enhanced.py
+                # Process audio in chunks to handle large files
+                from backend.scripts.ingest_youtube_enhanced import EnhancedTranscriptFetcher
+                
+                # Create a temporary fetcher just for audio processing
+                fetcher = EnhancedTranscriptFetcher(
+                    whisper_model="distil-large-v3",
+                    audio_storage=True,
+                    audio_storage_dir="audio_storage"
+                )
+                
+                # Use the fetcher's methods to process the audio
+                # This will handle chunking and memory management properly
+                audio_path = str(audio_file)
+                video_id = os.path.basename(audio_path).split('.')[0]
+                
+                # Use the enrollment method from the fetcher
+                success = fetcher.enroll_speaker_from_audio(
+                    audio_path=audio_path,
+                    speaker_name=profile_name,
+                    overwrite=overwrite
+                )
+                
+                if success:
+                    logger.info(f"Successfully processed {audio_file}")
+                else:
+                    logger.warning(f"Failed to process {audio_file}")
+                    
+            except Exception as e:
+                logger.error(f"Error processing {audio_file}: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continue with next file
+        
+        if not all_embeddings:
+            logger.error("No embeddings extracted from any audio file")
+            return False
+            
+        logger.info(f"Extracted a total of {len(all_embeddings)} embeddings")
+        
+        # Calculate centroid
+        import numpy as np
+        centroid = np.mean(all_embeddings, axis=0).tolist()
+        
+        # Create profile
+        profile = {
+            'name': profile_name.lower(),
+            'centroid': centroid,
+            'embeddings': [emb.tolist() for emb in all_embeddings],
+            'threshold': min_similarity,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'audio_sources': [os.path.basename(str(f)) for f in audio_files],
+            'metadata': {
+                'source': 'voice_bootstrap.py',
+                'num_embeddings': len(all_embeddings)
+            }
+        }
+        
+        # Save profile
+        success = storage.save(profile_name, profile)
+        if not success:
+            logger.error("Failed to save profile")
+            return False
+        
+        # Verify profile was created
+        if not storage.exists(profile_name):
+            logger.error("Failed to save profile")
+            return False
+            
+        # Load profile for validation
+        profile_data = storage.load(profile_name)
+        if not profile_data:
+            logger.error("Profile exists but cannot be loaded")
+            return False
+                
+        # Note: profile file is saved by the optimized pipeline. Proceed to metadata.
+        metadata = {
+            "version": 1,
+            "built_at": datetime.now(timezone.utc).isoformat(),
+            "seeds_hash": compute_seed_hash(seeds_data),
+            "min_sim": min_similarity,
+            "seed_file": str(seed_file_path),
+            "video_count": len(urls),
+            "method": "optimized_pipeline",
+            "mode": mode_description,
+            "pipeline_features": [
+                "ingest_youtube_enhanced",
+                "pipelined_concurrency",
+                "speaker_id_enrollment"
+            ]
+        }
+        metadata_path = storage.voices_dir / f"{profile_name.lower()}.meta.json"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+            
+        logger.info(f"✅ Voice profile '{profile_name}' built successfully!")
+        logger.info(f"   Profile: {storage.voices_dir / f'{profile_name.lower()}.json'}")
+        logger.info(f"   Embeddings: {profile_data.get('metadata', {}).get('num_embeddings', 0)}")
+        logger.info(f"   Method: Direct format selection with m4a audio")
+        
+        return True
+            
+    except Exception as e:
+        logger.error(f"❌ Voice profile creation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def build_voice_profile_from_local_audio(profile_name: str, overwrite: bool = False) -> bool:
+    """
+    Build a voice profile from local audio files
+    
+    Args:
+        profile_name: Name for the voice profile
+        overwrite: Whether to overwrite existing profile
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Get voice storage
         # Validate seed file
         logger.info(f"Loading seed configuration from {seed_file_path}")
         seeds_data = validate_seed_file(seed_file_path)
@@ -208,11 +437,15 @@ def build_voice_profile(seed_file_path: Path,
         logger.info(f"🚀 Enrolling from {len(urls)} seed URLs via optimized pipeline with DB ingestion")
 
         import subprocess
-        # Step 1: First create the voice profile with --setup-chaffee
+        # Set environment variable for dummy YouTube API key
+        os.environ['YOUTUBE_API_KEY'] = 'dummy_key_for_setup'
+        
+        # Step 1: First create the voice profile with --setup-chaffee and yt-dlp source
         cmd = [
             sys.executable, '-m', 'backend.scripts.ingest_youtube_enhanced',
-            '--setup-chaffee',
-            *urls,
+            '--source', 'yt-dlp',  # Use yt-dlp source
+            '--setup-chaffee'
+        ] + urls + [
             # Profile options
             '--voices-dir', os.getenv('VOICES_DIR', 'voices'),
             '--chaffee-min-sim', str(min_similarity),

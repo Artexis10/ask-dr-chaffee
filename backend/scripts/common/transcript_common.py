@@ -6,6 +6,12 @@ Common definitions for transcript processing to avoid circular imports
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
+def ensure_str(text):
+    """Ensure text is a string"""
+    if text is None:
+        return ""
+    return str(text).strip()
+
 @dataclass
 class TranscriptSegment:
     """Normalized transcript segment with speaker attribution"""
@@ -42,8 +48,18 @@ class TranscriptSegment:
     @classmethod
     def from_whisper_segment(cls, segment) -> 'TranscriptSegment':
         """Create from Whisper segment object"""
+        # Ensure text is a proper string (handle bytes on Windows)
+        text_value = segment.text
+        if isinstance(text_value, bytes):
+            try:
+                text_value = text_value.decode('utf-8', errors='replace')
+            except Exception:
+                text_value = str(text_value)
+        else:
+            text_value = str(text_value)
+        text_value = text_value.strip()
         return cls(
             start=segment.start,
             end=segment.end,
-            text=segment.text.strip()
+            text=text_value
         )

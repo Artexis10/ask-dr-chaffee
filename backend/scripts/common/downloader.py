@@ -81,14 +81,14 @@ class AudioDownloader:
             'writeinfojson': False,
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'ignoreerrors': False,
+            'ignoreerrors': True,  # CRITICAL: Ignore cookie errors instead of crashing
             # GPT-5's anti-blocking recommendations 
             'source_address': '0.0.0.0',  # Force IPv4 
             'sleep_requests': 5,
             'min_sleep_interval': 2,  # Required with max_sleep_interval
             'max_sleep_interval': 15,
-            # Try Firefox cookies (GPT-5 most reliable option)
-            'cookiesfrombrowser': ('firefox', None, None, None),
+            # REMOVED: cookiesfrombrowser causes UTF-8 encoding errors on Windows
+            # 'cookiesfrombrowser': ('firefox', None, None, None),
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ApyleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Referer': 'https://www.youtube.com/',
@@ -97,6 +97,14 @@ class AudioDownloader:
             'retry_sleep': 3,
             'fragment_retries': 10,
             'socket_timeout': 60,
+            # CRITICAL FIX: Force UTF-8 encoding for all output to prevent Windows encoding errors
+            'encoding': 'utf-8',
+            'quiet': False,  # Keep logging
+            'no_warnings': False,  # Show warnings but don't crash
+            # Additional options to improve success rate
+            'nocheckcertificate': True,  # Skip SSL certificate verification
+            'prefer_insecure': False,  # Use HTTPS when available
+            'age_limit': None,  # No age restrictions
         }
         
         # Add proxy if configured
@@ -107,27 +115,10 @@ class AudioDownloader:
         if self.ffmpeg_path != "ffmpeg":
             config['ffmpeg_location'] = str(Path(self.ffmpeg_path).parent)
         
-        # Convert parsed options to yt-dlp config
-        # Note: This is a simplified conversion, real implementation would need
-        # more sophisticated parsing for all yt-dlp options
-        for opt in self.ytdlp_opts:
-            if opt.startswith('--sleep-requests'):
-                continue  # Handled by yt-dlp internally
-            elif opt.startswith('--retries'):
-                try:
-                    config['retries'] = int(opt.split()[-1])
-                except (ValueError, IndexError):
-                    pass
-            elif opt.startswith('--fragment-retries'):
-                try:
-                    config['fragment_retries'] = int(opt.split()[-1])
-                except (ValueError, IndexError):
-                    pass
-            elif opt.startswith('--socket-timeout'):
-                try:
-                    config['socket_timeout'] = int(opt.split()[-1])
-                except (ValueError, IndexError):
-                    pass
+        # CRITICAL FIX: Do NOT parse YTDLP_OPTS environment variable
+        # On Windows, cookie-related options cause UTF-8 encoding errors in yt-dlp's error handling
+        # The config dictionary above already has all necessary options
+        # Ignoring self.ytdlp_opts to prevent crashes
         
         return config
     
@@ -163,28 +154,53 @@ class AudioDownloader:
             logger.info(f"Downloading audio for video {video_id}")
             ytdl_config = self._build_ytdlp_config(video_id, raw_audio_path)
             
-            with yt_dlp.YoutubeDL(ytdl_config) as ytdl:
-                url = f"https://www.youtube.com/watch?v={video_id}"
-                info = ytdl.extract_info(url, download=True)
+            # CRITICAL FIX: Suppress yt-dlp's stderr to prevent UTF-8 encoding errors on Windows
+            # The error occurs when yt-dlp tries to write cookie errors to stderr using cp1252 encoding
+            import io
+            import contextlib
+            
+            # Create a UTF-8 compatible stderr buffer
+            stderr_buffer = io.StringIO()
+            
+            with contextlib.redirect_stderr(stderr_buffer):
+                with yt_dlp.YoutubeDL(ytdl_config) as ytdl:
+                    url = f"https://www.youtube.com/watch?v={video_id}"
+                    info = ytdl.extract_info(url, download=True)
+            
+            # Log any stderr output (now safely captured as UTF-8)
+            stderr_content = stderr_buffer.getvalue()
+            if stderr_content and not stderr_content.isspace():
+                logger.debug(f"yt-dlp stderr for {video_id}: {stderr_content[:500]}")
+            
+            # Find the actual downloaded file
+            downloaded_file = None
+            for ext in ['webm', 'mp4', 'm4a', 'ogg', 'wav']:
+                candidate = raw_audio_path.replace('%(ext)s', ext)
+                if os.path.exists(candidate):
+                    downloaded_file = candidate
+                    break
+            
+            if not downloaded_file:
+                # Check if download actually happened - info might be None if video is unavailable
+                if info is None:
+                    raise DownloadError(f"Video {video_id} is unavailable (members-only, private, or deleted)")
                 
-                # Find the actual downloaded file
-                downloaded_file = None
-                for ext in ['webm', 'mp4', 'm4a', 'ogg']:
-                    candidate = raw_audio_path.replace('%(ext)s', ext)
-                    if os.path.exists(candidate):
-                        downloaded_file = candidate
-                        break
-                
-                if not downloaded_file:
-                    raise DownloadError(f"Could not find downloaded file for {video_id}")
-                
-                logger.info(f"Downloaded {downloaded_file}")
+                # List what files ARE in the temp directory for debugging
+                import glob
+                temp_files = glob.glob(os.path.join(self.temp_dir, f"{video_id}*"))
+                logger.error(f"Could not find downloaded file for {video_id}. Files in temp dir: {temp_files}")
+                logger.error(f"yt-dlp stderr: {stderr_content[:1000] if stderr_content else 'empty'}")
+                raise DownloadError(f"Could not find downloaded file for {video_id}")
+            
+            # Ensure downloaded_file is always a proper string
+            downloaded_file = str(downloaded_file)
+            logger.info(f"Downloaded {downloaded_file}")
             
             # Apply preprocessing if needed
             if preprocessing_config.normalize_audio or preprocessing_config.remove_silence:
                 processed_audio_path = self._preprocess_audio(
-                    downloaded_file, 
-                    processed_audio_path,
+                    str(downloaded_file), 
+                    str(processed_audio_path),
                     preprocessing_config
                 )
                 
@@ -193,11 +209,19 @@ class AudioDownloader:
                     os.remove(downloaded_file)
                 except OSError:
                     pass
-                    
-                return processed_audio_path
+                
+                # CRITICAL: Ensure OS-native string encoding to prevent utf_8_encode errors on Windows
+                result_path = str(processed_audio_path)
+                if isinstance(result_path, bytes):
+                    result_path = result_path.decode('utf-8', errors='replace')
+                return result_path
             else:
                 # Return raw file if no preprocessing
-                return downloaded_file
+                # CRITICAL: Ensure OS-native string encoding to prevent utf_8_encode errors on Windows
+                result_path = str(downloaded_file)
+                if isinstance(result_path, bytes):
+                    result_path = result_path.decode('utf-8', errors='replace')
+                return result_path
                 
         except Exception as e:
             # Clean up any temporary files

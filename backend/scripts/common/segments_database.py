@@ -80,7 +80,7 @@ class SegmentsDatabase:
         
         # Filter segments if chaffee_only_storage is enabled
         if chaffee_only_storage:
-            segments = [seg for seg in segments if seg.get('speaker_label') in ['CH', 'Chaffee']]
+            segments = [seg for seg in segments if seg.get('speaker_label') == 'Chaffee']
             logger.info(f"Chaffee-only storage: filtered to {len(segments)} Chaffee segments")
         
         if not segments:
@@ -109,8 +109,8 @@ class SegmentsDatabase:
                     embedding = None
                     if segment.get('embedding'):
                         speaker_label = segment.get('speaker_label', 'GUEST')
-                        # Accept both 'CH' and 'Chaffee' labels for embedding
-                        if not embed_chaffee_only or speaker_label in ['CH', 'Chaffee']:
+                        # Only embed Chaffee segments if embed_chaffee_only is enabled
+                        if not embed_chaffee_only or speaker_label == 'Chaffee':
                             embedding = segment['embedding']
                     
                     values.append((
@@ -222,7 +222,7 @@ class SegmentsDatabase:
                     'total_segments': total_segments,
                     'total_duration': total_duration,
                     'speaker_stats': speaker_stats,
-                    'chaffee_percentage': speaker_stats.get('CH', {}).get('percentage', 0)
+                    'chaffee_percentage': speaker_stats.get('Chaffee', {}).get('percentage', 0)
                 }
                 
         except Exception as e:

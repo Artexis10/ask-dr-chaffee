@@ -113,7 +113,7 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         """Lazy load voice enrollment system"""
         if self._voice_enrollment is None:
             try:
-                from .voice_enrollment import VoiceEnrollment
+                from .voice_enrollment_optimized import VoiceEnrollment
                 self._voice_enrollment = VoiceEnrollment(voices_dir=self.voices_dir)
             except ImportError as e:
                 logger.warning(f"Voice enrollment not available: {e}")
