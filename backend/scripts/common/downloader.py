@@ -47,6 +47,16 @@ class AudioDownloader:
             ffmpeg_path: Path to ffmpeg executable. If None, uses system PATH.
             temp_dir: Directory for temporary files. If None, uses system temp.
         """
+        # CRITICAL: Force UTF-8 encoding on Windows BEFORE any yt-dlp operations
+        # Set environment variable that Python respects for all I/O operations
+        import sys
+        if sys.platform == 'win32':
+            os.environ['PYTHONIOENCODING'] = 'utf-8'
+            # Also reconfigure existing streams
+            if hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+                sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        
         self.ffmpeg_path = ffmpeg_path or "ffmpeg"
         self.temp_dir = temp_dir or tempfile.gettempdir()
         
@@ -166,18 +176,23 @@ class AudioDownloader:
                 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
                 sys.stderr.reconfigure(encoding='utf-8', errors='replace')
             
-            # Create a UTF-8 compatible stderr buffer
-            stderr_buffer = io.StringIO()
-            
-            with contextlib.redirect_stderr(stderr_buffer):
+            # Wrap yt-dlp call to catch and handle UTF-8 encoding errors
+            # Don't redirect stderr - let yt-dlp write directly (with UTF-8 encoding we set above)
+            stderr_content = ""
+            try:
                 with yt_dlp.YoutubeDL(ytdl_config) as ytdl:
                     url = f"https://www.youtube.com/watch?v={video_id}"
                     info = ytdl.extract_info(url, download=True)
-            
-            # Log any stderr output (now safely captured as UTF-8)
-            stderr_content = stderr_buffer.getvalue()
-            if stderr_content and not stderr_content.isspace():
-                logger.debug(f"yt-dlp stderr for {video_id}: {stderr_content[:500]}")
+            except (UnicodeEncodeError, UnicodeDecodeError) as e:
+                # This happens when yt-dlp tries to print error messages with non-ASCII characters
+                # on Windows with cp1252 encoding. The download might have succeeded despite the error.
+                logger.warning(f"UTF-8 encoding error during download for {video_id}, checking for downloaded file")
+                # Check if file was downloaded anyway
+                info = None  # Will trigger file search below
+            except Exception as e:
+                # Catch any other exception - don't try to convert to string as it may trigger encoding errors
+                logger.warning(f"yt-dlp exception for {video_id}, checking for downloaded file")
+                info = None  # Will trigger file search below
             
             # DEBUG: Log info dict
             if info:
@@ -196,16 +211,25 @@ class AudioDownloader:
                     break
             
             if not downloaded_file:
-                # Check if download actually happened - info might be None if video is unavailable
-                if info is None:
-                    raise DownloadError(f"Video {video_id} is unavailable (members-only, private, or deleted)")
-                
                 # List what files ARE in the temp directory for debugging
                 import glob
                 temp_files = glob.glob(os.path.join(self.temp_dir, f"{video_id}*"))
                 logger.error(f"Could not find downloaded file for {video_id}. Files in temp dir: {temp_files}")
-                logger.error(f"yt-dlp stderr: {stderr_content[:1000] if stderr_content else 'empty'}")
-                raise DownloadError(f"Could not find downloaded file for {video_id}")
+                
+                # Check if this looks like a genuine download failure vs encoding error
+                if not temp_files and info is None:
+                    # No files and no info - likely a genuine unavailable video
+                    if "members-only" in stderr_content.lower() or "join this channel" in stderr_content.lower():
+                        raise DownloadError(f"Video {video_id} is members-only content")
+                    elif "private" in stderr_content.lower() or "unavailable" in stderr_content.lower():
+                        raise DownloadError(f"Video {video_id} is unavailable (private or deleted)")
+                    else:
+                        logger.error(f"yt-dlp stderr: {stderr_content[:1000] if stderr_content else 'empty'}")
+                        raise DownloadError(f"Could not download or find file for {video_id}")
+                else:
+                    # Files exist but we couldn't match them - likely encoding issue
+                    logger.error(f"Files exist but couldn't be matched. Stderr: {stderr_content[:500] if stderr_content else 'empty'}")
+                    raise DownloadError(f"Could not find downloaded file for {video_id}")
             
             # Ensure downloaded_file is always a proper string
             downloaded_file = str(downloaded_file)

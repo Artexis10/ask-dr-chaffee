@@ -555,8 +555,20 @@ class TranscriptFetcher:
             return whisper_segments, method, metadata
                 
         except Exception as e:
-            logger.error(f"Error in Whisper transcription for {video_id}: {e}")
-            metadata["error"] = str(e)
+            # Handle encoding errors safely - this is critical on Windows
+            try:
+                error_msg = str(e)
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                error_msg = repr(e)  # Use repr() which is safer
+            
+            # Also wrap logger call in case it triggers encoding errors
+            try:
+                logger.error(f"Error in Whisper transcription for {video_id}: {error_msg}")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                # If even logging fails, just log a generic message
+                logger.error(f"Error in Whisper transcription for {video_id}: [encoding error in error message]")
+            
+            metadata["error"] = error_msg
             return None, 'failed', metadata
             
         finally:
