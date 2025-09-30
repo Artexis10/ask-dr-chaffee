@@ -81,7 +81,7 @@ class AudioDownloader:
             'writeinfojson': False,
             'writesubtitles': False,
             'writeautomaticsub': False,
-            'ignoreerrors': True,  # CRITICAL: Ignore cookie errors instead of crashing
+            'ignoreerrors': False,  # Don't ignore errors - we need to see them to fix them properly
             # GPT-5's anti-blocking recommendations 
             'source_address': '0.0.0.0',  # Force IPv4 
             'sleep_requests': 5,
@@ -158,6 +158,13 @@ class AudioDownloader:
             # The error occurs when yt-dlp tries to write cookie errors to stderr using cp1252 encoding
             import io
             import contextlib
+            import sys
+            
+            # CRITICAL: Force UTF-8 encoding for stdout/stderr before yt-dlp runs
+            # This prevents "utf_8_encode() argument 1 must be str, not bytes" errors
+            if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+                sys.stderr.reconfigure(encoding='utf-8', errors='replace')
             
             # Create a UTF-8 compatible stderr buffer
             stderr_buffer = io.StringIO()
@@ -172,12 +179,20 @@ class AudioDownloader:
             if stderr_content and not stderr_content.isspace():
                 logger.debug(f"yt-dlp stderr for {video_id}: {stderr_content[:500]}")
             
+            # DEBUG: Log info dict
+            if info:
+                logger.debug(f"yt-dlp info for {video_id}: title={info.get('title', 'N/A')}, ext={info.get('ext', 'N/A')}")
+            else:
+                logger.warning(f"yt-dlp returned None for {video_id}")
+            
             # Find the actual downloaded file
             downloaded_file = None
             for ext in ['webm', 'mp4', 'm4a', 'ogg', 'wav']:
                 candidate = raw_audio_path.replace('%(ext)s', ext)
+                logger.debug(f"Checking for file: {candidate}")
                 if os.path.exists(candidate):
                     downloaded_file = candidate
+                    logger.debug(f"Found file: {downloaded_file}")
                     break
             
             if not downloaded_file:
