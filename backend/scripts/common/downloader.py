@@ -84,6 +84,24 @@ class AudioDownloader:
     
     def _build_ytdlp_config(self, video_id: str, output_path: str) -> Dict[str, Any]:
         """Build yt-dlp configuration dictionary with stealth options."""
+        
+        # Custom logger to redirect yt-dlp output and avoid Windows encoding issues
+        class YtDlpLogger:
+            def debug(self, msg):
+                # Suppress debug messages to avoid encoding issues
+                pass
+            
+            def info(self, msg):
+                # Only log important info messages
+                if msg.startswith('[download]') and '100%' in msg:
+                    logger.debug(f"yt-dlp: {msg}")
+            
+            def warning(self, msg):
+                logger.warning(f"yt-dlp: {msg}")
+            
+            def error(self, msg):
+                logger.error(f"yt-dlp: {msg}")
+        
         config = {
             'outtmpl': output_path,
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio[acodec=opus]/bestaudio/best',  # Prioritize high-quality formats
@@ -108,10 +126,11 @@ class AudioDownloader:
             'retry_sleep': 3,
             'fragment_retries': 10,
             'socket_timeout': 60,
-            # CRITICAL FIX: Force UTF-8 encoding for all output to prevent Windows encoding errors
-            'encoding': 'utf-8',
-            'quiet': False,  # Keep logging
-            'no_warnings': False,  # Show warnings but don't crash
+            # CRITICAL FIX: Use custom logger to avoid Windows encoding errors
+            'logger': YtDlpLogger(),
+            'noprogress': True,  # Disable progress bar to avoid encoding issues
+            'quiet': True,  # Suppress console output - use logger instead
+            'no_warnings': False,  # Show warnings via logger
             # Additional options to improve success rate
             'nocheckcertificate': True,  # Skip SSL certificate verification
             'prefer_insecure': False,  # Use HTTPS when available
