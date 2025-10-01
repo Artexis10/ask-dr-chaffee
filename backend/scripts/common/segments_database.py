@@ -32,34 +32,55 @@ class SegmentsDatabase:
                      metadata: Optional[Dict] = None,
                      published_at = None,
                      duration_s = None,
-                     view_count = None) -> int:
+                     view_count = None,
+                     channel_name = None,
+                     channel_url = None,
+                     thumbnail_url = None,
+                     like_count = None,
+                     comment_count = None,
+                     description = None,
+                     tags = None,
+                     url = None) -> int:
         """Upsert video source and return source_id"""
         try:
             conn = self.get_connection()
             with conn.cursor() as cur:
-                # Check if source exists
-                cur.execute(
-                    "SELECT id FROM sources WHERE source_type = %s AND source_id = %s",
-                    (source_type, video_id)
-                )
-                result = cur.fetchone()
+                import json
+                metadata_json = json.dumps(metadata or {})
+                # Pass tags as native Python list for PostgreSQL TEXT[] - psycopg2 handles conversion
+                tags_array = tags if tags else None
                 
-                if result:
-                    source_id = result[0]
-                    logger.debug(f"Source {video_id} already exists with id {source_id}")
-                else:
-                    # Insert new source
-                    import json
-                    metadata_json = json.dumps(metadata or {})
-                    cur.execute("""
-                        INSERT INTO sources (source_type, source_id, title, published_at, duration_s, view_count, metadata, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id
-                    """, (source_type, video_id, title, published_at, duration_s, view_count, metadata_json, datetime.now()))
-                    
-                    source_id = cur.fetchone()[0]
-                    conn.commit()
-                    logger.info(f"Created new source {video_id} with id {source_id}")
+                # Use INSERT ... ON CONFLICT for true upsert
+                cur.execute("""
+                    INSERT INTO sources (
+                        source_type, source_id, title, url, channel_name, channel_url,
+                        published_at, duration_s, view_count, like_count, comment_count,
+                        description, thumbnail_url, tags, metadata, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (source_type, source_id) DO UPDATE SET
+                        title = EXCLUDED.title,
+                        url = COALESCE(EXCLUDED.url, sources.url),
+                        channel_name = COALESCE(EXCLUDED.channel_name, sources.channel_name),
+                        channel_url = COALESCE(EXCLUDED.channel_url, sources.channel_url),
+                        published_at = COALESCE(EXCLUDED.published_at, sources.published_at),
+                        duration_s = COALESCE(EXCLUDED.duration_s, sources.duration_s),
+                        view_count = COALESCE(EXCLUDED.view_count, sources.view_count),
+                        like_count = COALESCE(EXCLUDED.like_count, sources.like_count),
+                        comment_count = COALESCE(EXCLUDED.comment_count, sources.comment_count),
+                        description = COALESCE(EXCLUDED.description, sources.description),
+                        thumbnail_url = COALESCE(EXCLUDED.thumbnail_url, sources.thumbnail_url),
+                        tags = COALESCE(EXCLUDED.tags, sources.tags),
+                        metadata = COALESCE(EXCLUDED.metadata, sources.metadata),
+                        updated_at = NOW()
+                    RETURNING id
+                """, (source_type, video_id, title, url, channel_name, channel_url,
+                      published_at, duration_s, view_count, like_count, comment_count,
+                      description, thumbnail_url, tags_array, metadata_json, datetime.now()))
+                
+                source_id = cur.fetchone()[0]
+                conn.commit()
+                logger.debug(f"Upserted source {video_id} with id {source_id}")
                 
                 return source_id
                 

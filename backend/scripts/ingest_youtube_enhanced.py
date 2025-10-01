@@ -668,9 +668,12 @@ class EnhancedYouTubeIngester:
         return videos
     
     def _list_from_urls(self, urls: List[str]) -> List[VideoInfo]:
-        """Extract video IDs from YouTube URLs and create VideoInfo objects"""
+        """Extract video IDs from YouTube URLs and fetch full metadata"""
         import re
         videos = []
+        
+        # Initialize yt-dlp lister for metadata fetching
+        lister = YtDlpVideoLister()
         
         for url in urls:
             # Extract video ID from various YouTube URL formats
@@ -680,16 +683,25 @@ class EnhancedYouTubeIngester:
             match = re.search(r'(?:v=|youtu\.be/|^)([a-zA-Z0-9_-]{11})(?:[&?]|$)', url)
             if match:
                 video_id = match.group(1)
-                # Create minimal VideoInfo
-                video = VideoInfo(
-                    video_id=video_id,
-                    title=f"Video {video_id}",
-                    published_at=None,
-                    duration_s=None,
-                    view_count=None
-                )
-                videos.append(video)
-                logger.info(f"Added video from URL: {video_id}")
+                
+                # Fetch full metadata from yt-dlp
+                logger.info(f"Fetching metadata for {video_id}...")
+                video = lister.get_video_metadata(video_id)
+                
+                if video:
+                    videos.append(video)
+                    logger.info(f"✅ Added video: {video.title[:60]}... ({video_id})")
+                else:
+                    # Fallback to minimal VideoInfo if metadata fetch fails
+                    logger.warning(f"⚠️  Could not fetch metadata for {video_id}, using minimal info")
+                    video = VideoInfo(
+                        video_id=video_id,
+                        title=f"Video {video_id}",
+                        published_at=None,
+                        duration_s=None,
+                        view_count=None
+                    )
+                    videos.append(video)
             else:
                 logger.warning(f"Could not extract video ID from URL: {url}")
         
@@ -868,7 +880,15 @@ class EnhancedYouTubeIngester:
                 metadata={'provenance': provenance, **extra_metadata},
                 published_at=video.published_at,
                 duration_s=video.duration_s,
-                view_count=video.view_count
+                view_count=video.view_count,
+                channel_name=video.channel_name,
+                channel_url=video.channel_url,
+                thumbnail_url=video.thumbnail_url,
+                like_count=video.like_count,
+                comment_count=video.comment_count,
+                description=video.description,
+                tags=video.tags,
+                url=video.url
             )
             
             # Convert TranscriptSegment objects to dictionaries for database insertion
@@ -1668,8 +1688,16 @@ class EnhancedYouTubeIngester:
                 source_type='youtube',
                 metadata=metadata,
                 published_at=getattr(video, 'published_at', None),
-                duration_s=getattr(video, 'duration', None),
-                view_count=getattr(video, 'view_count', None)
+                duration_s=getattr(video, 'duration_s', None),
+                view_count=getattr(video, 'view_count', None),
+                channel_name=getattr(video, 'channel_name', None),
+                channel_url=getattr(video, 'channel_url', None),
+                thumbnail_url=getattr(video, 'thumbnail_url', None),
+                like_count=getattr(video, 'like_count', None),
+                comment_count=getattr(video, 'comment_count', None),
+                description=getattr(video, 'description', None),
+                tags=getattr(video, 'tags', None),
+                url=getattr(video, 'url', None)
             )
             
             # Then insert segments
@@ -1968,8 +1996,8 @@ Examples:
     )
     
     # Source configuration
-    parser.add_argument('--source', choices=['api', 'yt-dlp', 'local'], default='api',
-                       help='Data source: api for YouTube Data API (default), yt-dlp for scraping fallback, local for files')
+    parser.add_argument('--source', choices=['api', 'yt-dlp', 'local'], default='yt-dlp',
+                       help='Data source: api for YouTube Data API, yt-dlp for main data (default), local for files')
     parser.add_argument('--from-url', nargs='+',
                        help='Process specific YouTube URL(s) - e.g. https://www.youtube.com/watch?v=VIDEO_ID')
     parser.add_argument('--from-json', type=Path,

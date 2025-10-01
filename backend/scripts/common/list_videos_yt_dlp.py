@@ -23,6 +23,13 @@ class VideoInfo:
     duration_s: Optional[int] = None
     view_count: Optional[int] = None
     description: Optional[str] = None
+    channel_name: Optional[str] = None
+    channel_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    like_count: Optional[int] = None
+    comment_count: Optional[int] = None
+    tags: Optional[List[str]] = None
+    url: Optional[str] = None
     
     @classmethod
     def from_yt_dlp(cls, data: Dict[str, Any]) -> 'VideoInfo':
@@ -43,13 +50,27 @@ class VideoInfo:
             except (ValueError, TypeError):
                 duration_s = None
         
+        # Get thumbnail (prefer maxresdefault, fallback to others)
+        thumbnail_url = None
+        if data.get('thumbnail'):
+            thumbnail_url = data['thumbnail']
+        elif data.get('thumbnails') and len(data['thumbnails']) > 0:
+            thumbnail_url = data['thumbnails'][-1].get('url')  # Last is usually highest quality
+        
         return cls(
             video_id=data['id'],
             title=data.get('title', f"Video {data['id']}"),
             published_at=published_at,
             duration_s=duration_s,
             view_count=data.get('view_count'),
-            description=data.get('description', '').strip() or None
+            description=data.get('description', '').strip() or None,
+            channel_name=data.get('channel') or data.get('uploader'),
+            channel_url=data.get('channel_url') or data.get('uploader_url'),
+            thumbnail_url=thumbnail_url,
+            like_count=data.get('like_count'),
+            comment_count=data.get('comment_count'),
+            tags=data.get('tags'),
+            url=data.get('webpage_url') or data.get('original_url') or f"https://www.youtube.com/watch?v={data['id']}"
         )
 
 class YtDlpVideoLister:
