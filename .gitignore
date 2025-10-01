@@ -91,6 +91,7 @@ coverage/
 # IDEs
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
@@ -170,3 +171,16 @@ setup_git_template.bat
 # Benchmarking and examples
 backend/scripts/bench_asr.py
 backend/scripts/examples/
+
+# Deprecated code
+backend/scripts/common/deprecated/
+*.corrupted
+
+# One-off test scripts
+recreate_*.py
+reset_db.py
+simple_test.py
+standardize_*.py
+speaker_test_results_*.json
+test_working_profile.json
+voice_enrollment_fixed.py
