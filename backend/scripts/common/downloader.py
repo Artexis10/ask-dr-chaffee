@@ -190,6 +190,16 @@ class AudioDownloader:
                 logger.warning(f"UTF-8 encoding error during download for {video_id}, checking for downloaded file")
                 # Check if file was downloaded anyway
                 info = None  # Will trigger file search below
+            except TypeError as e:
+                # TypeError: utf_8_encode() argument 1 must be str, not bytes
+                # This is another Windows encoding issue - download likely succeeded
+                error_msg = str(e)
+                if "utf_8_encode" in error_msg or "bytes" in error_msg:
+                    logger.warning(f"UTF-8 TypeError during download for {video_id}, checking for downloaded file")
+                    info = None  # Will trigger file search below
+                else:
+                    # Different TypeError - re-raise
+                    raise
             except DownloadError as e:
                 # yt-dlp's DownloadError - this is a real failure, log it properly
                 error_msg = str(e)
