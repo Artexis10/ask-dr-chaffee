@@ -80,7 +80,10 @@ class TranscriptFetcher:
         
         # Initialize AudioDownloader with current settings
         from .downloader import AudioDownloader
-        self.audio_downloader = AudioDownloader(ffmpeg_path=ffmpeg_path)
+        # Use system temp dir by default - caller can override via temp_dir parameter
+        import tempfile
+        self.temp_dir = tempfile.gettempdir()
+        self.audio_downloader = AudioDownloader(ffmpeg_path=ffmpeg_path, temp_dir=self.temp_dir)
         
         logger.info(f"TranscriptFetcher initialized with model: {self.whisper_model}")
         if self.proxies:

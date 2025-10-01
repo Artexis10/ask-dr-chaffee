@@ -190,10 +190,29 @@ class AudioDownloader:
                 logger.warning(f"UTF-8 encoding error during download for {video_id}, checking for downloaded file")
                 # Check if file was downloaded anyway
                 info = None  # Will trigger file search below
+            except DownloadError as e:
+                # yt-dlp's DownloadError - this is a real failure, log it properly
+                error_msg = str(e)
+                logger.error(f"yt-dlp DownloadError for {video_id}: {error_msg}")
+                # Check if it's a known error type
+                if "members-only" in error_msg.lower() or "join this channel" in error_msg.lower():
+                    raise DownloadError(f"Video {video_id} is members-only content")
+                elif "private" in error_msg.lower() or "unavailable" in error_msg.lower():
+                    raise DownloadError(f"Video {video_id} is unavailable (private or deleted)")
+                elif "429" in error_msg or "rate" in error_msg.lower():
+                    raise DownloadError(f"Rate limited by YouTube for {video_id}")
+                else:
+                    raise DownloadError(f"Download failed for {video_id}: {error_msg}")
             except Exception as e:
-                # Catch any other exception - don't try to convert to string as it may trigger encoding errors
-                logger.warning(f"yt-dlp exception for {video_id}, checking for downloaded file")
-                info = None  # Will trigger file search below
+                # Catch any other exception - log the type and message
+                error_type = type(e).__name__
+                try:
+                    error_msg = str(e)
+                except:
+                    error_msg = "<unable to convert error to string>"
+                logger.error(f"yt-dlp {error_type} for {video_id}: {error_msg}")
+                # Don't assume file was downloaded - raise the error
+                raise DownloadError(f"Download failed for {video_id}: {error_type}: {error_msg}")
             
             # DEBUG: Log info dict
             if info:
