@@ -1,5 +1,29 @@
 # Environment variables
 .env
+
+# Temporary/development files
+temp_audio/
+*.mp4
+*.mp3
+*.wav
+single_video.json
+test_single_video.json
+test_video.json
+analyze_*.py
+db/segments.db
+
+# Development scripts (one-off experiments)
+build_*.py
+create_*.py
+update_*.py
+verify_*.py
+setup_*.py
+cleanup_*.py
+find_*.py
+run_migration.py
+ingest_youtube_enhanced_fixed.py
+chaffee_profile_manager.py
+update_chaffee_urls.txt
 .env.local
 .env.development.local
 .env.test.local
