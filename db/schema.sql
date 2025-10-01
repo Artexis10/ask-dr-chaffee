@@ -1,17 +1,37 @@
 -- Create pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Sources table to track videos/recordings
+-- Sources table to track videos/recordings with immutable metadata
+-- Processing status and counts should be queried from segments table
 CREATE TABLE IF NOT EXISTS sources (
     id SERIAL PRIMARY KEY,
     source_type VARCHAR(20) NOT NULL CHECK (source_type IN ('youtube', 'zoom')),
     source_id VARCHAR(255) NOT NULL, -- YouTube video ID or Zoom recording ID
+    
+    -- Core metadata
     title TEXT NOT NULL,
     description TEXT,
-    duration_seconds INTEGER,
-    published_at TIMESTAMP,
     url TEXT,
+    
+    -- YouTube metadata (immutable)
+    published_at TIMESTAMP,
+    duration_s INTEGER,
+    view_count BIGINT,
+    like_count INTEGER,
+    comment_count INTEGER,
+    
+    -- Channel information
+    channel_name TEXT,
+    channel_url TEXT,
+    thumbnail_url TEXT,
+    
+    -- Content metadata
+    tags TEXT[],
+    
+    -- Flexible metadata (provenance, processing flags, etc.)
     metadata JSONB DEFAULT '{}',
+    
+    -- Audit trail
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     
@@ -36,6 +56,8 @@ CREATE TABLE IF NOT EXISTS chunks (
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_sources_type_published ON sources(source_type, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sources_created_at ON sources(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sources_channel_name ON sources(channel_name);
+CREATE INDEX IF NOT EXISTS idx_sources_like_count ON sources(like_count DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_chunks_source_id ON chunks(source_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_start_time ON chunks(start_time_seconds);
 
