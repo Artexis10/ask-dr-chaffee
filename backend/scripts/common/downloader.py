@@ -17,9 +17,10 @@ from yt_dlp.utils import DownloadError
 
 logger = logging.getLogger(__name__)
 
-# Semaphore to limit concurrent downloads (allow 3-5 simultaneous downloads to avoid rate limiting)
+# Semaphore to limit concurrent downloads (allow 8-10 simultaneous downloads)
 # Using semaphore instead of lock to allow controlled concurrency
-_download_semaphore = threading.Semaphore(5)  # Allow up to 5 concurrent downloads
+# Increased from 5 to 10 to feed 4 ASR workers with 24 I/O workers
+_download_semaphore = threading.Semaphore(10)  # Allow up to 10 concurrent downloads
 
 @dataclass
 class AudioPreprocessingConfig:
@@ -169,7 +170,7 @@ class AudioDownloader:
         """
         preprocessing_config = preprocessing_config or AudioPreprocessingConfig()
         
-        # Use semaphore to limit concurrent downloads (allows 5 simultaneous)
+        # Use semaphore to limit concurrent downloads (allows 10 simultaneous)
         with _download_semaphore:
             return self._download_and_process(video_id, preprocessing_config)
     
