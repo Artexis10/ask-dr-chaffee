@@ -1,0 +1,33 @@
+{
+  "chaffee": {
+    "name": "Dr. Anthony Chaffee",
+    "urls": [
+      "https://www.youtube.com/watch?v=zw2c7s7NcqI",
+      "https://www.youtube.com/watch?v=jLb5XUITtHQ",
+      "https://www.youtube.com/watch?v=1EojwUJIdtc",
+      "https://www.youtube.com/watch?v=tYWGVs2ax-A",
+      "https://www.youtube.com/watch?v=zl_QM65_TpA",
+      "https://www.youtube.com/watch?v=D3v8c2SM-wI",
+      "https://www.youtube.com/watch?v=CrI-qZnZjnw",
+      "https://www.youtube.com/watch?v=TR93yJqX7jE",
+      "https://www.youtube.com/watch?v=naRYI5Q-uYw",
+      "https://www.youtube.com/watch?v=4suBVks9UN0",
+      "https://www.youtube.com/watch?v=TcnYgWOVYtU",
+      "https://www.youtube.com/watch?v=ASEJEuUuFVk",
+      "https://www.youtube.com/watch?v=qZ2934vUfqw",
+      "https://www.youtube.com/watch?v=VlpZoxWx8wc",
+      "https://www.youtube.com/watch?v=ZwzSmk0CRhc",
+      "https://www.youtube.com/watch?v=oltJutx3Hjs",
+      "https://www.youtube.com/watch?v=p_p4z3hI1IY",
+      "https://www.youtube.com/watch?v=9Ywvc3XFy9c",
+      "https://www.youtube.com/watch?v=YUqP7QmF6oQ",
+      "https://www.youtube.com/watch?v=v0nQ0HCK3KE"
+    ],
+    "threshold": 0.62,
+    "metadata": {
+      "description": "Dr. Anthony Chaffee - Carnivore MD",
+      "created_at": "2025-09-29T16:55:00",
+      "source": "100% Chaffee monologue videos"
+    }
+  }
+}

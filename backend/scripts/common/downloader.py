@@ -202,13 +202,20 @@ class AudioDownloader:
             
             # Find the actual downloaded file
             downloaded_file = None
-            for ext in ['webm', 'mp4', 'm4a', 'ogg', 'wav']:
-                candidate = raw_audio_path.replace('%(ext)s', ext)
-                logger.debug(f"Checking for file: {candidate}")
-                if os.path.exists(candidate):
-                    downloaded_file = candidate
-                    logger.debug(f"Found file: {downloaded_file}")
-                    break
+            
+            # First check if processed file already exists (from previous run or preprocessing)
+            if os.path.exists(processed_audio_path):
+                downloaded_file = processed_audio_path
+                logger.debug(f"Found processed file: {downloaded_file}")
+            else:
+                # Check for raw downloaded files
+                for ext in ['webm', 'mp4', 'm4a', 'ogg', 'wav']:
+                    candidate = raw_audio_path.replace('%(ext)s', ext)
+                    logger.debug(f"Checking for file: {candidate}")
+                    if os.path.exists(candidate):
+                        downloaded_file = candidate
+                        logger.debug(f"Found file: {downloaded_file}")
+                        break
             
             if not downloaded_file:
                 # List what files ARE in the temp directory for debugging
@@ -234,6 +241,14 @@ class AudioDownloader:
             # Ensure downloaded_file is always a proper string
             downloaded_file = str(downloaded_file)
             logger.info(f"Downloaded {downloaded_file}")
+            
+            # If we found the processed file, skip preprocessing and return it
+            if downloaded_file == processed_audio_path:
+                logger.debug(f"Using existing processed file: {processed_audio_path}")
+                result_path = str(processed_audio_path)
+                if isinstance(result_path, bytes):
+                    result_path = result_path.decode('utf-8', errors='replace')
+                return result_path
             
             # Apply preprocessing if needed
             if preprocessing_config.normalize_audio or preprocessing_config.remove_silence:
