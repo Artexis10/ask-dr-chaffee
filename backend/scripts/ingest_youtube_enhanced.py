@@ -210,6 +210,7 @@ class IngestionConfig:
     """Configuration for ingestion pipeline"""
     source: str = 'api'  # 'api', 'yt-dlp', or 'local' (API is now default)
     channel_url: Optional[str] = None
+    from_url: Optional[List[str]] = None  # Direct YouTube URL(s)
     from_json: Optional[Path] = None
     from_files: Optional[Path] = None  # Directory containing local video/audio files
     file_patterns: List[str] = None  # File patterns to match (e.g., ['*.mp4', '*.wav'])
@@ -601,6 +602,9 @@ class EnhancedYouTubeIngester:
         if self.config.source == 'local':
             # Handle local file source
             return self._list_local_files()
+        elif self.config.from_url:
+            # Handle direct URL(s)
+            return self._list_from_urls(self.config.from_url)
         elif self.config.from_json:
             # Load from JSON file (yt-dlp only)
             if self.config.source != 'yt-dlp':
@@ -656,6 +660,35 @@ class EnhancedYouTubeIngester:
                 videos = videos[:self.config.limit]
         
         logger.info(f"Found {len(videos)} videos to process")
+        return videos
+    
+    def _list_from_urls(self, urls: List[str]) -> List[VideoInfo]:
+        """Extract video IDs from YouTube URLs and create VideoInfo objects"""
+        import re
+        videos = []
+        
+        for url in urls:
+            # Extract video ID from various YouTube URL formats
+            # https://www.youtube.com/watch?v=VIDEO_ID
+            # https://youtu.be/VIDEO_ID
+            # VIDEO_ID (direct)
+            match = re.search(r'(?:v=|youtu\.be/|^)([a-zA-Z0-9_-]{11})(?:[&?]|$)', url)
+            if match:
+                video_id = match.group(1)
+                # Create minimal VideoInfo
+                video = VideoInfo(
+                    video_id=video_id,
+                    title=f"Video {video_id}",
+                    published_at=None,
+                    duration_s=None,
+                    view_count=None
+                )
+                videos.append(video)
+                logger.info(f"Added video from URL: {video_id}")
+            else:
+                logger.warning(f"Could not extract video ID from URL: {url}")
+        
+        logger.info(f"Extracted {len(videos)} video(s) from URL(s)")
         return videos
     
     def _list_local_files(self) -> List[VideoInfo]:
@@ -1932,6 +1965,8 @@ Examples:
     # Source configuration
     parser.add_argument('--source', choices=['api', 'yt-dlp', 'local'], default='api',
                        help='Data source: api for YouTube Data API (default), yt-dlp for scraping fallback, local for files')
+    parser.add_argument('--from-url', nargs='+',
+                       help='Process specific YouTube URL(s) - e.g. https://www.youtube.com/watch?v=VIDEO_ID')
     parser.add_argument('--from-json', type=Path,
                        help='Process videos from JSON file instead of fetching (yt-dlp only)')
     parser.add_argument('--from-files', type=Path,
@@ -2103,6 +2138,7 @@ Examples:
     config = IngestionConfig(
         source=args.source,  # Allow any source with setup-chaffee
         channel_url=args.channel_url,
+        from_url=args.from_url,
         from_json=args.from_json,
         from_files=args.from_files,
         file_patterns=args.file_patterns,
