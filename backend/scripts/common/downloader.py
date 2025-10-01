@@ -17,8 +17,9 @@ from yt_dlp.utils import DownloadError
 
 logger = logging.getLogger(__name__)
 
-# Thread lock to limit concurrent downloads per process
-_download_lock = threading.Lock()
+# Semaphore to limit concurrent downloads (allow 3-5 simultaneous downloads to avoid rate limiting)
+# Using semaphore instead of lock to allow controlled concurrency
+_download_semaphore = threading.Semaphore(5)  # Allow up to 5 concurrent downloads
 
 @dataclass
 class AudioPreprocessingConfig:
@@ -92,11 +93,11 @@ class AudioDownloader:
             'writesubtitles': False,
             'writeautomaticsub': False,
             'ignoreerrors': False,  # Don't ignore errors - we need to see them to fix them properly
-            # GPT-5's anti-blocking recommendations 
+            # Anti-blocking recommendations (reduced for better throughput with semaphore limiting)
             'source_address': '0.0.0.0',  # Force IPv4 
-            'sleep_requests': 5,
-            'min_sleep_interval': 2,  # Required with max_sleep_interval
-            'max_sleep_interval': 15,
+            'sleep_requests': 1,  # Reduced from 5 - semaphore already limits concurrency
+            'min_sleep_interval': 0.5,  # Reduced from 2
+            'max_sleep_interval': 3,  # Reduced from 15
             # REMOVED: cookiesfrombrowser causes UTF-8 encoding errors on Windows
             # 'cookiesfrombrowser': ('firefox', None, None, None),
             'http_headers': {
@@ -149,8 +150,8 @@ class AudioDownloader:
         """
         preprocessing_config = preprocessing_config or AudioPreprocessingConfig()
         
-        # Use thread lock to limit concurrent downloads
-        with _download_lock:
+        # Use semaphore to limit concurrent downloads (allows 5 simultaneous)
+        with _download_semaphore:
             return self._download_and_process(video_id, preprocessing_config)
     
     def _download_and_process(self, video_id: str, preprocessing_config: AudioPreprocessingConfig) -> str:
