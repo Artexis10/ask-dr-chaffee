@@ -310,6 +310,11 @@ class IngestionConfig:
             if not self.db_url:
                 raise ValueError("DATABASE_URL environment variable required")
         
+        # Auto-switch to yt-dlp if using --from-url without specifying source
+        if self.from_url and self.source == 'api':
+            self.source = 'yt-dlp'
+            logger.info("Auto-switched to yt-dlp source for --from-url")
+        
         if self.source == 'api':
             if self.youtube_api_key is None:
                 self.youtube_api_key = os.getenv('YOUTUBE_API_KEY')
