@@ -35,23 +35,27 @@ class SegmentOptimizer:
     """Optimizes segments for better semantic search while preserving speaker attribution"""
     
     def __init__(self, 
-                 target_min_chars: int = 120,
-                 target_max_chars: int = 300,
-                 max_gap_seconds: float = 2.0,
-                 max_merge_duration: float = 30.0):
+                 target_min_chars: int = None,
+                 target_max_chars: int = None,
+                 max_gap_seconds: float = None,
+                 max_merge_duration: float = None):
         """
         Initialize segment optimizer
         
         Args:
-            target_min_chars: Minimum characters for optimal segments
-            target_max_chars: Maximum characters before splitting consideration
-            max_gap_seconds: Maximum gap between segments to merge
-            max_merge_duration: Maximum total duration of merged segment
+            target_min_chars: Minimum characters for optimal segments (default: 400 from env)
+            target_max_chars: Maximum characters before splitting consideration (default: 1200 from env)
+            max_gap_seconds: Maximum gap between segments to merge (default: 3.0 from env)
+            max_merge_duration: Maximum total duration of merged segment (default: 60.0 from env)
         """
-        self.target_min_chars = target_min_chars
-        self.target_max_chars = target_max_chars
-        self.max_gap_seconds = max_gap_seconds
-        self.max_merge_duration = max_merge_duration
+        import os
+        self.target_min_chars = target_min_chars or int(os.getenv('SEGMENT_MIN_CHARS', '400'))
+        self.target_max_chars = target_max_chars or int(os.getenv('SEGMENT_MAX_CHARS', '1200'))
+        self.max_gap_seconds = max_gap_seconds or float(os.getenv('SEGMENT_MAX_GAP_SECONDS', '3.0'))
+        self.max_merge_duration = max_merge_duration or float(os.getenv('SEGMENT_MAX_MERGE_DURATION', '60.0'))
+        
+        logger.info(f"SegmentOptimizer initialized: min={self.target_min_chars}, max={self.target_max_chars}, "
+                   f"gap={self.max_gap_seconds}s, max_duration={self.max_merge_duration}s")
         
     def optimize_segments(self, segments: List[Any]) -> List[OptimizedSegment]:
         """
@@ -71,11 +75,17 @@ class SegmentOptimizer:
         # Convert to OptimizedSegment objects
         optimized = []
         for segment in segments:
+            # CRITICAL: Ensure speaker_label is never NULL
+            speaker_label = segment.speaker_label
+            if not speaker_label:
+                speaker_label = 'Chaffee'  # Default to Chaffee (not GUEST)
+                logger.warning(f"Segment missing speaker_label, defaulting to 'Chaffee'")
+            
             opt_segment = OptimizedSegment(
                 start=segment.start,
                 end=segment.end,
                 text=segment.text,
-                speaker_label=segment.speaker_label or 'GUEST',
+                speaker_label=speaker_label,
                 speaker_confidence=segment.speaker_confidence or 0.0,
                 avg_logprob=segment.avg_logprob or 0.0,
                 compression_ratio=segment.compression_ratio or 0.0,
@@ -91,6 +101,13 @@ class SegmentOptimizer:
         # Apply optimization strategies
         optimized = self._merge_short_segments(optimized)
         optimized = self._split_very_long_segments(optimized)
+        
+        # Final pass: merge extremely short segments (< 50 chars) even with larger gaps
+        optimized = self._merge_very_short_segments(optimized)
+        
+        # CRITICAL: Remove duplicate segments (same text)
+        optimized = self._remove_duplicate_segments(optimized)
+        
         optimized = self._clean_text(optimized)
         
         logger.info(f"Optimization complete: {len(segments)} → {len(optimized)} segments")
@@ -123,6 +140,80 @@ class SegmentOptimizer:
         merged.append(current)
         
         return merged
+    
+    def _merge_very_short_segments(self, segments: List[OptimizedSegment]) -> List[OptimizedSegment]:
+        """Final pass: merge extremely short segments (< 50 chars) with neighbors
+        This handles cases like 'Yeah.' that are isolated by large gaps"""
+        if len(segments) <= 1:
+            return segments
+        
+        merged = []
+        i = 0
+        
+        while i < len(segments):
+            current = segments[i]
+            
+            # If segment is very short (< 50 chars), try to merge with next
+            if len(current.text) < 50 and i < len(segments) - 1:
+                next_seg = segments[i + 1]
+                
+                # Check if we can merge (same speaker, reasonable duration)
+                if (current.speaker_label == next_seg.speaker_label and
+                    (next_seg.end - current.start) <= self.max_merge_duration):
+                    # Merge and skip next
+                    merged_seg = self._merge_two_segments(current, next_seg)
+                    merged.append(merged_seg)
+                    i += 2  # Skip both segments
+                    continue
+            
+            # If still very short and has a previous segment, merge backward
+            if len(current.text) < 50 and merged:
+                prev_seg = merged[-1]
+                
+                # Check if we can merge with previous (same speaker, reasonable duration)
+                if (current.speaker_label == prev_seg.speaker_label and
+                    (current.end - prev_seg.start) <= self.max_merge_duration):
+                    # Remove previous and merge
+                    merged.pop()
+                    merged_seg = self._merge_two_segments(prev_seg, current)
+                    merged.append(merged_seg)
+                    i += 1
+                    continue
+            
+            # Keep as is
+            merged.append(current)
+            i += 1
+        
+        return merged
+    
+    def _remove_duplicate_segments(self, segments: List[OptimizedSegment]) -> List[OptimizedSegment]:
+        """Remove segments with duplicate text (Whisper often creates duplicates)"""
+        if not segments:
+            return []
+            
+        # Track seen text to avoid duplicates
+        seen_text = set()
+        unique_segments = []
+        duplicates_removed = 0
+        
+        for segment in segments:
+            # Normalize text for comparison (lowercase, strip whitespace)
+            normalized_text = segment.text.lower().strip()
+            
+            # Skip if we've seen this exact text before
+            if normalized_text in seen_text:
+                duplicates_removed += 1
+                logger.debug(f"Removing duplicate segment: '{segment.text[:50]}...'")
+                continue
+                
+            # Add to unique segments and track text
+            seen_text.add(normalized_text)
+            unique_segments.append(segment)
+        
+        if duplicates_removed > 0:
+            logger.info(f"Removed {duplicates_removed} duplicate segments")
+        
+        return unique_segments
     
     def _should_merge_segments(self, seg1: OptimizedSegment, seg2: OptimizedSegment) -> bool:
         """Determine if two segments should be merged"""
