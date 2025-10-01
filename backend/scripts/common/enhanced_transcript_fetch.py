@@ -68,13 +68,9 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         
         # Audio storage is handled by parent class now
         
-        # Initialize segment optimizer for better semantic search quality
-        self.segment_optimizer = SegmentOptimizer(
-            target_min_chars=120,   # Minimum chars for good search
-            target_max_chars=300,   # Maximum for focused context  
-            max_gap_seconds=2.0,    # Max gap to merge across
-            max_merge_duration=30.0 # Max duration of merged segment
-        )
+        # Initialize segment optimizer for better semantic search quality (uses env vars)
+        self.enable_segment_optimization = os.getenv('ENABLE_SEGMENT_OPTIMIZATION', 'true').lower() == 'true'
+        self.segment_optimizer = SegmentOptimizer()  # Uses environment variables for configuration
         
         # Add alias for compatibility
         self.downloader = self.audio_downloader
@@ -217,18 +213,19 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
             
         except Exception as e:
             logger.error(f"Failed to convert Enhanced ASR result: {e}")
-            # Fallback to basic segments without speaker info
+            # Fallback to basic segments WITH speaker labels (prevent NULL labels)
             segments = []
             for segment_data in enhanced_result.segments:
                 segment = TranscriptSegment(
                     start=segment_data['start'],
                     end=segment_data['end'],
                     text=segment_data['text'].strip(),
-                    speaker_label='GUEST'  # Default fallback
+                    speaker_label='Chaffee'  # Default to Chaffee (not GUEST)
                 )
                 segments.append(segment)
             
-            return segments, {'enhanced_asr_used': True, 'conversion_error': str(e)}
+            logger.warning(f"Enhanced ASR conversion failed, using {len(segments)} segments with default speaker labels")
+            return segments, {'enhanced_asr_used': True, 'conversion_error': str(e), 'fallback_speaker_label': 'Chaffee'}
     
     def fetch_transcript_with_speaker_id(
         self, 
@@ -237,41 +234,65 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         force_enhanced_asr: bool = False,
         cleanup_audio: bool = True,
         enable_silence_removal: bool = False,
-        is_local_file: bool = False
+        is_local_file: bool = False,
+        allow_youtube_captions: bool = False
     ) -> Tuple[Optional[List[TranscriptSegment]], str, Dict[str, Any]]:
         """
-        Fetch transcript with optional speaker identification
+        Fetch transcript with MANDATORY speaker identification
+        
+        CRITICAL: This pipeline requires speaker identification for accurate attribution.
+        YouTube captions are DISABLED by default because they:
+        - Bypass speaker diarization
+        - Bypass Chaffee voice profile matching
+        - Cannot distinguish between Chaffee and guests
+        - Risk misattributing guest statements to Dr. Chaffee
         
         Args:
             video_id_or_path: YouTube video ID or local audio/video file path
             max_duration_s: Maximum duration for processing
-            force_enhanced_asr: Skip YouTube transcripts and use Enhanced ASR
+            force_enhanced_asr: Force Enhanced ASR even if speaker profiles unavailable
             cleanup_audio: Clean up temporary audio files
             enable_silence_removal: Enable audio preprocessing
             is_local_file: True if video_id_or_path is a local file path
+            allow_youtube_captions: EXPLICITLY allow YouTube captions (NOT RECOMMENDED)
+                                   Only use if speaker ID is not required
             
         Returns:
             (segments, method, metadata) where method indicates processing used
         """
         metadata = {"video_id": video_id_or_path, "preprocessing_flags": {}, "is_local_file": is_local_file}
         
+        # MANDATORY: Speaker identification is required for this pipeline
+        # YouTube captions bypass our sophisticated Chaffee identification system
+        if self.enable_speaker_id:
+            logger.info(f"🎯 Speaker ID enabled - Enhanced ASR REQUIRED for {video_id_or_path}")
+            force_enhanced_asr = True  # Override to force Enhanced ASR
+        
         # Check if Enhanced ASR is available and should be used
         use_enhanced_asr = (
-            self.enable_speaker_id and 
-            (force_enhanced_asr or self._check_speaker_profiles_available())
+            force_enhanced_asr or 
+            (self.enable_speaker_id and self._check_speaker_profiles_available())
         )
         
         if use_enhanced_asr:
             enhanced_asr = self._get_enhanced_asr()
             if not enhanced_asr:
+                logger.error("❌ Enhanced ASR required but not available - speaker ID cannot be performed")
+                if self.enable_speaker_id:
+                    # FAIL HARD - do not fall back to YouTube captions when speaker ID is required
+                    metadata['error'] = 'Enhanced ASR unavailable - speaker identification required'
+                    return None, 'failed', metadata
                 logger.warning("Enhanced ASR requested but not available, falling back to standard method")
                 use_enhanced_asr = False
         
-        # Try YouTube transcript first (unless forced to use Enhanced ASR or local file)
-        if not force_enhanced_asr and not use_enhanced_asr and not is_local_file:
+        # YouTube captions are OPT-IN only, and NEVER used when speaker ID is enabled
+        # This prevents misattribution of guest statements to Dr. Chaffee
+        if allow_youtube_captions and not self.enable_speaker_id and not is_local_file and not force_enhanced_asr:
+            logger.warning("⚠️  YouTube captions allowed - NO SPEAKER IDENTIFICATION will be performed")
             youtube_segments = self.fetch_youtube_transcript(video_id_or_path)
             if youtube_segments:
-                metadata.update({"source": "youtube", "segment_count": len(youtube_segments)})
+                metadata.update({"source": "youtube", "segment_count": len(youtube_segments), "speaker_id_bypassed": True})
+                logger.warning(f"Using YouTube captions for {video_id_or_path} - segments will have NO speaker labels")
                 return youtube_segments, 'youtube', metadata
         
         # If we have speaker profiles and Enhanced ASR available, use it
