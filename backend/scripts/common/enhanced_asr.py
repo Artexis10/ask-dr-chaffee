@@ -664,28 +664,36 @@ class EnhancedASR:
                 diarization_params['max_speakers'] = int(max_speakers)
                 logger.info(f"Setting maximum speakers to {max_speakers}")
             
-            # Run pyannote diarization with optimal parameters
-            logger.info(f"Running pyannote diarization with params: {diarization_params}")
+            # Run diarization (either pyannote or fallback)
+            logger.info(f"Running diarization with params: {diarization_params}")
             diarization = diarization_pipeline(diarization_audio_path, **diarization_params)
             
-            # Get the number of speakers detected
-            try:
-                num_speakers = len(set(s for _, _, s in diarization.itertracks(yield_label=True)))
-                logger.info(f"Pyannote detected {num_speakers} speakers")
-            except Exception as e:
-                logger.warning(f"Could not determine number of speakers: {e}")
-                num_speakers = 'unknown'
-            
-            # Convert pyannote format to our format
-            segments = []
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
-                # Extract speaker ID from pyannote format (e.g., 'SPEAKER_0' -> 0)
+            # Check if this is fallback (returns list) or pyannote (returns Annotation object)
+            if isinstance(diarization, list):
+                # Fallback diarization already returns list of tuples
+                logger.info("Using fallback diarization (single speaker)")
+                segments = diarization
+                num_speakers = len(set(s[2] for s in segments))
+            else:
+                # Pyannote diarization - convert format
+                # Get the number of speakers detected
                 try:
-                    speaker_id = int(speaker.split('_')[1])
-                    segments.append((turn.start, turn.end, speaker_id))
-                except (ValueError, IndexError):
-                    logger.warning(f"Couldn't parse speaker ID from {speaker}, using 0")
-                    segments.append((turn.start, turn.end, 0))
+                    num_speakers = len(set(s for _, _, s in diarization.itertracks(yield_label=True)))
+                    logger.info(f"Pyannote detected {num_speakers} speakers")
+                except Exception as e:
+                    logger.warning(f"Could not determine number of speakers: {e}")
+                    num_speakers = 'unknown'
+                
+                # Convert pyannote format to our format
+                segments = []
+                for turn, _, speaker in diarization.itertracks(yield_label=True):
+                    # Extract speaker ID from pyannote format (e.g., 'SPEAKER_0' -> 0)
+                    try:
+                        speaker_id = int(speaker.split('_')[1])
+                        segments.append((turn.start, turn.end, speaker_id))
+                    except (ValueError, IndexError):
+                        logger.warning(f"Couldn't parse speaker ID from {speaker}, using 0")
+                        segments.append((turn.start, turn.end, 0))
             
             # Sort by start time
             segments.sort(key=lambda x: x[0])
