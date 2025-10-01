@@ -215,26 +215,28 @@ class IngestionConfig:
     file_patterns: List[str] = None  # File patterns to match (e.g., ['*.mp4', '*.wav'])
     
     # RTX 5080 optimized concurrency controls for 1200h in 24h target - FROM .ENV
-    io_concurrency: int = int(os.getenv('IO_WORKERS', 12))   # I/O threads from .env
-    asr_concurrency: int = int(os.getenv('ASR_WORKERS', 2))  # ASR workers from .env
-    db_concurrency: int = int(os.getenv('DB_WORKERS', 12))   # DB/embedding threads from .env
+    # Note: Defaults will be overridden in __post_init__ after .env is loaded
+    io_concurrency: int = 24   # I/O threads (will read from .env)
+    asr_concurrency: int = 4   # ASR workers (will read from .env)
+    db_concurrency: int = 12   # DB/embedding threads (will read from .env)
     
     # Legacy concurrency (for backward compatibility)
     concurrency: int = 4
     
-    skip_shorts: bool = os.getenv('SKIP_SHORTS', 'false').lower() == 'true'
-    newest_first: bool = os.getenv('NEWEST_FIRST', 'true').lower() == 'true'
+    skip_shorts: bool = False  # Will read from .env
+    newest_first: bool = True  # Will read from .env
     limit: Optional[int] = None
     dry_run: bool = False
-    whisper_model: str = os.getenv('WHISPER_MODEL', 'distil-large-v3')  # RTX 5080 from .env
-    max_duration: Optional[int] = int(os.getenv('MAX_AUDIO_DURATION', 0)) or None
+    whisper_model: str = 'distil-large-v3'  # Will read from .env
+    max_duration: Optional[int] = None  # Will read from .env
     force_whisper: bool = False
+    allow_youtube_captions: bool = False  # CRITICAL: YouTube captions bypass speaker ID
     cleanup_audio: bool = True
     since_published: Optional[str] = None  # ISO8601 or YYYY-MM-DD format
     
     # RTX 5080 optimized embedding options for maximum throughput - FROM .ENV
     embed_later: bool = False  # Enqueue IDs for separate embedding worker
-    embedding_batch_size: int = int(os.getenv('BATCH_SIZE', 256))  # Batch size from .env
+    embedding_batch_size: int = 1024  # Batch size (will read from .env in __post_init__)
     
     # Audio storage configuration
     store_audio_locally: bool = True   # Store downloaded audio files locally
@@ -277,6 +279,28 @@ class IngestionConfig:
     
     def __post_init__(self):
         """Set defaults from environment"""
+        # CRITICAL: Read ALL settings from .env (override class defaults)
+        # Concurrency settings
+        if os.getenv('IO_WORKERS'):
+            self.io_concurrency = int(os.getenv('IO_WORKERS'))
+        if os.getenv('ASR_WORKERS'):
+            self.asr_concurrency = int(os.getenv('ASR_WORKERS'))
+        if os.getenv('DB_WORKERS'):
+            self.db_concurrency = int(os.getenv('DB_WORKERS'))
+        if os.getenv('BATCH_SIZE'):
+            self.embedding_batch_size = int(os.getenv('BATCH_SIZE'))
+        
+        # Processing settings
+        if os.getenv('SKIP_SHORTS'):
+            self.skip_shorts = os.getenv('SKIP_SHORTS').lower() == 'true'
+        if os.getenv('NEWEST_FIRST'):
+            self.newest_first = os.getenv('NEWEST_FIRST').lower() == 'true'
+        if os.getenv('WHISPER_MODEL'):
+            self.whisper_model = os.getenv('WHISPER_MODEL')
+        if os.getenv('MAX_AUDIO_DURATION'):
+            duration = int(os.getenv('MAX_AUDIO_DURATION', 0))
+            self.max_duration = duration if duration > 0 else None
+        
         if self.channel_url is None:
             self.channel_url = os.getenv('YOUTUBE_CHANNEL_URL', 'https://www.youtube.com/@anthonychaffeemd')
         
@@ -714,7 +738,8 @@ class EnhancedYouTubeIngester:
                     force_enhanced_asr=self.config.force_whisper,
                     cleanup_audio=self.config.cleanup_audio,
                     enable_silence_removal=False,  # Conservative default
-                    is_local_file=is_local_file
+                    is_local_file=is_local_file,
+                    allow_youtube_captions=self.config.allow_youtube_captions
                 )
             else:
                 # Fallback to standard transcript fetcher
@@ -1598,7 +1623,18 @@ class EnhancedYouTubeIngester:
                                     method: str, metadata: Dict, stats_lock: threading.Lock) -> None:
         """Insert video segments using optimized batch operations"""
         try:
-            # Use the enhanced batch insert from segments database
+            # First, ensure the source exists in the database
+            self.segments_db.upsert_source(
+                video_id=video.video_id,
+                title=video.title,
+                source_type='youtube',
+                metadata=metadata,
+                published_at=getattr(video, 'published_at', None),
+                duration_s=getattr(video, 'duration', None),
+                view_count=getattr(video, 'view_count', None)
+            )
+            
+            # Then insert segments
             segment_count = self.segments_db.batch_insert_segments(
                 segments,
                 video.video_id,
@@ -1791,7 +1827,7 @@ class EnhancedYouTubeIngester:
                             enrollment = VoiceEnrollment(voices_dir=self.config.voices_dir)
                             if enrollment.load_profile('chaffee'):
                                 # Profile exists, so we'll download the audio and update manually
-                                audio_path = self.transcript_fetcher._download_audio(video_id)
+                                audio_path = self.transcript_fetcher._download_audio_for_enhanced_asr(video_id)
                                 if audio_path:
                                     profile = enrollment.enroll_speaker(
                                         name='Chaffee',
@@ -1944,7 +1980,12 @@ Examples:
     parser.add_argument('--max-duration', type=int,
                        help='Skip videos longer than N seconds for Whisper fallback')
     parser.add_argument('--force-whisper', action='store_true',
-                       help='Use Whisper even when YouTube transcript available')
+                       help='Force Enhanced ASR with speaker ID (automatically enabled when speaker ID is on)')
+    parser.add_argument('--allow-youtube-captions', action='store_true',
+                       help='⚠️  DEPRECATED: Allow YouTube captions (STRONGLY NOT RECOMMENDED)\n'
+                            '    Bypasses speaker identification, segment optimization, and embeddings.\n'
+                            '    Results in NULL speaker labels and unusable data for RAG.\n'
+                            '    Only use for testing YouTube caption quality.')
     parser.add_argument('--ffmpeg-path',
                        help='Path to ffmpeg binary (default: auto-detect)')
     
@@ -2022,6 +2063,42 @@ Examples:
     # Check if we're in setup-chaffee mode before creating config
     setup_chaffee_mode = hasattr(args, 'setup_chaffee') and args.setup_chaffee
     
+    # CRITICAL WARNING: YouTube captions bypass speaker ID
+    if args.allow_youtube_captions:
+        logger.error("=" * 80)
+        logger.error("⚠️  CRITICAL WARNING: --allow-youtube-captions is DEPRECATED")
+        logger.error("=" * 80)
+        logger.error("YouTube captions will bypass:")
+        logger.error("  ❌ Speaker identification (Chaffee vs Guest)")
+        logger.error("  ❌ Segment optimization (1100-1400 char targets)")
+        logger.error("  ❌ Embedding generation (no semantic search)")
+        logger.error("  ❌ Voice profile matching")
+        logger.error("")
+        logger.error("This will result in:")
+        logger.error("  ❌ NULL speaker labels (99%+ of segments)")
+        logger.error("  ❌ Tiny segments (50-100 chars vs 1100+)")
+        logger.error("  ❌ No embeddings (unusable for RAG)")
+        logger.error("  ❌ Risk of misattributing guest statements to Dr. Chaffee")
+        logger.error("")
+        logger.error("This flag should ONLY be used for testing YouTube caption quality.")
+        logger.error("For production ingestion, remove --allow-youtube-captions flag.")
+        logger.error("=" * 80)
+        
+        # Require explicit confirmation
+        import time
+        logger.warning("Waiting 5 seconds before proceeding...")
+        logger.warning("Press Ctrl+C to cancel if this was a mistake.")
+        time.sleep(5)
+        logger.warning("Proceeding with YouTube captions (NOT RECOMMENDED)...")
+    
+    # Also warn if speaker ID is disabled
+    if not args.enable_speaker_id:
+        logger.warning("=" * 80)
+        logger.warning("⚠️  WARNING: Speaker identification is DISABLED")
+        logger.warning("This is NOT RECOMMENDED for Dr. Chaffee content.")
+        logger.warning("Segments will have NULL speaker labels.")
+        logger.warning("=" * 80)
+    
     # Create config
     config = IngestionConfig(
         source=args.source,  # Allow any source with setup-chaffee
@@ -2037,6 +2114,7 @@ Examples:
         whisper_model=args.whisper_model,
         max_duration=args.max_duration,
         force_whisper=args.force_whisper,
+        allow_youtube_captions=args.allow_youtube_captions,
         db_url=args.db_url,
         youtube_api_key=args.youtube_api_key,
         ffmpeg_path=args.ffmpeg_path,
