@@ -19,9 +19,9 @@ class EmbeddingGenerator:
             self.embedding_dimensions = int(os.getenv('EMBEDDING_DIMENSIONS', '384'))  # Reduced for pgvector compatibility
             self.openai_client = None
         else:
-            # Local sentence-transformers fallback
+            # Local sentence-transformers - read dimensions from environment
             self.model_name = model_name or os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
-            self.embedding_dimensions = 384
+            self.embedding_dimensions = int(os.getenv('EMBEDDING_DIMENSIONS', '384'))  # Read from .env
             self.model = None
         
         logger.info(f"Embedding provider: {self.provider}, model: {self.model_name}, dimensions: {self.embedding_dimensions}")
