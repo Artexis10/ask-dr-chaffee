@@ -227,10 +227,16 @@ class YtDlpVideoLister:
         # Apply members-only filter if requested
         if skip_members_only:
             original_count = len(videos)
-            videos = [v for v in videos if not self._is_members_only_video(v)]
+            filtered_videos = []
+            for v in videos:
+                if self._is_members_only_video(v):
+                    logger.info(f"🚫 Skipping restricted video: {v.video_id} (availability={v.availability}) - {v.title[:60]}")
+                else:
+                    filtered_videos.append(v)
+            videos = filtered_videos
             filtered_count = original_count - len(videos)
             if filtered_count > 0:
-                logger.info(f"Filtered out {filtered_count} members-only videos, {len(videos)} remaining")
+                logger.info(f"✅ Filtered out {filtered_count} members-only videos, {len(videos)} remaining")
         
         return videos
     
@@ -243,7 +249,6 @@ class YtDlpVideoLister:
         if video.availability:
             restricted_types = ['subscriber_only', 'premium_only', 'needs_auth', 'unlisted']
             if video.availability in restricted_types:
-                logger.debug(f"Detected restricted video (availability={video.availability}): {video.video_id}")
                 return True
         
         # Fallback: check title for members-only indicators
@@ -261,7 +266,6 @@ class YtDlpVideoLister:
         
         for indicator in members_indicators:
             if indicator in title:
-                logger.debug(f"Detected members-only video (title): {video.video_id} - {video.title[:50]}...")
                 return True
         
         return False
