@@ -229,7 +229,6 @@ class IngestionConfig:
     limit: Optional[int] = None
     dry_run: bool = False
     whisper_model: str = 'distil-large-v3'  # Will read from .env
-    max_duration: Optional[int] = None  # Will read from .env
     force_whisper: bool = False
     allow_youtube_captions: bool = False  # CRITICAL: YouTube captions bypass speaker ID
     cleanup_audio: bool = True
@@ -748,12 +747,6 @@ class EnhancedYouTubeIngester:
         source_id, segment_count = self.segments_db.check_video_exists(video.video_id)
         if source_id and segment_count > 0:
             return True, f"already processed ({segment_count} segments)"
-        
-        # Check duration limit for Whisper fallback
-        if (self.config.max_duration and 
-            video.duration_s and 
-            video.duration_s > self.config.max_duration):
-            return True, f"duration {video.duration_s}s exceeds limit {self.config.max_duration}s"
         
         return False, ""
     
@@ -2050,8 +2043,6 @@ Examples:
     parser.add_argument('--whisper-model', default='distil-large-v3',
                        choices=['tiny.en', 'base.en', 'small.en', 'medium.en', 'large-v3', 'distil-large-v3'],
                        help='Whisper model size (RTX 5080 optimized: distil-large-v3)')
-    parser.add_argument('--max-duration', type=int,
-                       help='Skip videos longer than N seconds for Whisper fallback')
     parser.add_argument('--force-whisper', action='store_true',
                        help='Force Enhanced ASR with speaker ID (automatically enabled when speaker ID is on)')
     parser.add_argument('--allow-youtube-captions', action='store_true',
@@ -2186,7 +2177,6 @@ Examples:
         limit=args.limit,
         dry_run=args.dry_run,
         whisper_model=args.whisper_model,
-        max_duration=args.max_duration,
         force_whisper=args.force_whisper,
         allow_youtube_captions=args.allow_youtube_captions,
         db_url=args.db_url,
