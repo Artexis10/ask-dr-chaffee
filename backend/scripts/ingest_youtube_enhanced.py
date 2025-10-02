@@ -769,10 +769,10 @@ class EnhancedYouTubeIngester:
                 self.stats.skipped += 1
                 return False
             
-            # Check if should skip
+            # Check if should skip (redundant check, but kept for safety)
             should_skip, reason = self.should_skip_video(video)
             if should_skip:
-                logger.debug(f"Skipping {video_id}: {reason}")
+                logger.info(f"⏭️  Skipping {video_id}: {reason}")
                 self.stats.skipped += 1
                 return True
             
@@ -804,7 +804,7 @@ class EnhancedYouTubeIngester:
             
             if not segments:
                 error_msg = metadata.get('error', 'Failed to fetch transcript')
-                logger.error(f"Failed to get transcript for {video_id}: {error_msg}")
+                logger.error(f"❌ Failed to get transcript for {video_id} ({video.title[:50]}): {error_msg}")
                 self.stats.errors += 1
                 return False
             
@@ -1028,9 +1028,11 @@ class EnhancedYouTubeIngester:
                 for future in concurrent.futures.as_completed(future_to_video):
                     video = future_to_video[future]
                     try:
-                        future.result()
+                        success = future.result()
+                        if not success:
+                            logger.debug(f"Video {video.video_id} returned False (skipped or failed)")
                     except Exception as e:
-                        logger.error(f"Unexpected error for {video.video_id}: {e}")
+                        logger.error(f"❌ Unexpected error processing {video.video_id} ({video.title[:50]}): {e}", exc_info=True)
                         self.stats.errors += 1
                     
                     pbar.update(1)
