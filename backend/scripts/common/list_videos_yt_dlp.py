@@ -57,13 +57,18 @@ class VideoInfo:
         elif data.get('thumbnails') and len(data['thumbnails']) > 0:
             thumbnail_url = data['thumbnails'][-1].get('url')  # Last is usually highest quality
         
+        # Safely handle description (can be None)
+        description = data.get('description')
+        if description:
+            description = description.strip() or None
+        
         return cls(
             video_id=data['id'],
             title=data.get('title', f"Video {data['id']}"),
             published_at=published_at,
             duration_s=duration_s,
             view_count=data.get('view_count'),
-            description=data.get('description', '').strip() or None,
+            description=description,
             channel_name=data.get('channel') or data.get('uploader'),
             channel_url=data.get('channel_url') or data.get('uploader_url'),
             thumbnail_url=thumbnail_url,
