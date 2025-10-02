@@ -128,14 +128,15 @@ class MultiModelWhisperManager:
                 
                 # Convert to transcript segments (compatible with existing code)
                 from .transcript_common import TranscriptSegment
-                transcript_segments = []
                 
-                # Process segments efficiently
+                # Process segments efficiently with progress logging
+                # Note: segments is a generator - transcription happens during iteration
                 try:
+                    transcript_segments = []
                     total_processed = 0
                     
                     for segment in segments:
-                        # Filter very short segments (faster-whisper returns strings, not bytes)
+                        # Filter very short segments
                         text_value = segment.text.strip()
                         if len(text_value) > 3:
                             transcript_segments.append(TranscriptSegment(
@@ -146,7 +147,7 @@ class MultiModelWhisperManager:
                         
                         total_processed += 1
                         
-                        # Progress logging every 100 segments
+                        # Progress logging every 100 segments (actual GPU inference happening here)
                         if total_processed % 100 == 0:
                             logger.info(f"🎯 Model {model_id}: Processed {total_processed} segments, {len(transcript_segments)} valid")
                     
