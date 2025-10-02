@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 class SegmentsDatabase:
     """Enhanced segments database with speaker attribution and pgvector support"""
     
+    @staticmethod
+    def _get_segment_value(segment, key, default=None):
+        """Helper to get value from either dict or object (handles both TranscriptSegment and dict)"""
+        if isinstance(segment, dict):
+            return segment.get(key, default)
+        else:
+            return getattr(segment, key, default)
+    
     def __init__(self, db_url: str):
         self.db_url = db_url
         self.connection = None
@@ -101,7 +109,7 @@ class SegmentsDatabase:
         
         # Filter segments if chaffee_only_storage is enabled
         if chaffee_only_storage:
-            segments = [seg for seg in segments if seg.get('speaker_label') == 'Chaffee']
+            segments = [seg for seg in segments if self._get_segment_value(seg, 'speaker_label') == 'Chaffee']
             logger.info(f"Chaffee-only storage: filtered to {len(segments)} Chaffee segments")
         
         if not segments:
@@ -128,26 +136,26 @@ class SegmentsDatabase:
                 for segment in segments:
                     # Determine if this segment should get an embedding
                     embedding = None
-                    if segment.get('embedding'):
-                        speaker_label = segment.get('speaker_label', 'GUEST')
+                    if self._get_segment_value(segment, 'embedding'):
+                        speaker_label = self._get_segment_value(segment, 'speaker_label', 'GUEST')
                         # Only embed Chaffee segments if embed_chaffee_only is enabled
                         if not embed_chaffee_only or speaker_label == 'Chaffee':
-                            embedding = segment['embedding']
+                            embedding = self._get_segment_value(segment, 'embedding')
                     
                     values.append((
                         video_id,
-                        segment.get('start', 0.0),
-                        segment.get('end', 0.0),
-                        segment.get('speaker_label', 'GUEST'),
-                        segment.get('speaker_confidence', None),
-                        segment.get('text', ''),
-                        segment.get('avg_logprob', None),
-                        segment.get('compression_ratio', None),
-                        segment.get('no_speech_prob', None),
-                        segment.get('temperature_used', 0.0),
-                        segment.get('re_asr', False),
-                        segment.get('is_overlap', False),
-                        segment.get('needs_refinement', False),
+                        self._get_segment_value(segment, 'start', 0.0),
+                        self._get_segment_value(segment, 'end', 0.0),
+                        self._get_segment_value(segment, 'speaker_label', 'GUEST'),
+                        self._get_segment_value(segment, 'speaker_confidence', None),
+                        self._get_segment_value(segment, 'text', ''),
+                        self._get_segment_value(segment, 'avg_logprob', None),
+                        self._get_segment_value(segment, 'compression_ratio', None),
+                        self._get_segment_value(segment, 'no_speech_prob', None),
+                        self._get_segment_value(segment, 'temperature_used', 0.0),
+                        self._get_segment_value(segment, 're_asr', False),
+                        self._get_segment_value(segment, 'is_overlap', False),
+                        self._get_segment_value(segment, 'needs_refinement', False),
                         embedding
                     ))
                 

@@ -1431,14 +1431,16 @@ class EnhancedYouTubeIngester:
             zcr_mean = np.mean(zcr)
             zcr_ratio = zcr_variance / (zcr_mean + 1e-8)
             
-            # Combined heuristic - adjusted thresholds for better accuracy
-            is_interview = (variance_ratio > 0.4 or centroid_ratio > 0.2 or zcr_ratio > 0.3)
+            # Combined heuristic - relaxed thresholds to favor fast-path (speaker ID filters later)
+            # Allow fast-path even with brief guest appearances - full diarization only for true interviews
+            is_interview = (variance_ratio > 0.8 or centroid_ratio > 0.5 or zcr_ratio > 0.6)
             
             if is_interview:
                 logger.info(f"🎙️ Multi-speaker content detected: {video.video_id} "
                           f"(energy_var={variance_ratio:.3f}, centroid_var={centroid_ratio:.3f}, zcr_var={zcr_ratio:.3f})")
             else:
-                logger.info(f"🔇 Monologue detected: {video.video_id} - fast-path eligible")
+                logger.info(f"🔇 Monologue detected: {video.video_id} - fast-path eligible "
+                          f"(energy_var={variance_ratio:.3f}, centroid_var={centroid_ratio:.3f}, zcr_var={zcr_ratio:.3f})")
                 
             return is_interview
             
