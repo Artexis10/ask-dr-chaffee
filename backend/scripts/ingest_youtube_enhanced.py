@@ -644,9 +644,10 @@ class EnhancedYouTubeIngester:
                 )
             else:
                 # yt-dlp lister supports members-only filtering
+                # Cache disabled by default to avoid stale availability data
                 videos = self.video_lister.list_channel_videos(
                     self.config.channel_url,
-                    use_cache=True,
+                    use_cache=False,  # Always fetch fresh to detect availability changes
                     skip_members_only=self.config.skip_members_only
                 )
         

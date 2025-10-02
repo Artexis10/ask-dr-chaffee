@@ -6,10 +6,10 @@ YouTube video listing using yt-dlp (no API key required)
 import json
 import logging
 import subprocess
-import tempfile
-from datetime import datetime
+import time
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ class VideoInfo:
     comment_count: Optional[int] = None
     tags: Optional[List[str]] = None
     url: Optional[str] = None
+    availability: Optional[str] = None  # e.g., 'public', 'subscriber_only', 'unlisted'
     
     @classmethod
     def from_yt_dlp(cls, data: Dict[str, Any]) -> 'VideoInfo':
@@ -75,7 +76,8 @@ class VideoInfo:
             like_count=data.get('like_count'),
             comment_count=data.get('comment_count'),
             tags=data.get('tags'),
-            url=data.get('webpage_url') or data.get('original_url') or f"https://www.youtube.com/watch?v={data['id']}"
+            url=data.get('webpage_url') or data.get('original_url') or f"https://www.youtube.com/watch?v={data['id']}",
+            availability=data.get('availability')  # Capture availability status
         )
 
 class YtDlpVideoLister:
@@ -188,8 +190,14 @@ class YtDlpVideoLister:
             logger.error(f"Failed to dump channel JSON: {e}")
             raise
     
-    def list_channel_videos(self, channel_url: str, use_cache: bool = True, skip_members_only: bool = True) -> List[VideoInfo]:
-        """List all videos from a YouTube channel"""
+    def list_channel_videos(self, channel_url: str, use_cache: bool = False, skip_members_only: bool = True) -> List[VideoInfo]:
+        """List all videos from a YouTube channel
+        
+        Args:
+            channel_url: YouTube channel URL
+            use_cache: If True, use cached data (WARNING: may be stale - availability can change!)
+            skip_members_only: Filter out subscriber-only/members-only content
+        """
         # Create cache file path
         cache_dir = Path("backend/data")
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -198,24 +206,23 @@ class YtDlpVideoLister:
         channel_name = channel_url.split('@')[-1] if '@' in channel_url else 'unknown'
         cache_file = cache_dir / f"videos_{channel_name}.json"
         
-        # Use cache if available and requested
+        # Check cache age if using cache
+        use_existing_cache = False
         if use_cache and cache_file.exists():
-            logger.info(f"Using cached video list: {cache_file}")
-            videos = self.list_from_json(cache_file)
-            
-            # Apply members-only filter to cached data too
-            if skip_members_only:
-                original_count = len(videos)
-                videos = [v for v in videos if not self._is_members_only_video(v)]
-                filtered_count = original_count - len(videos)
-                if filtered_count > 0:
-                    logger.info(f"Filtered out {filtered_count} members-only videos from cache, {len(videos)} remaining")
-            
-            return videos
+            cache_age_hours = (time.time() - cache_file.stat().st_mtime) / 3600
+            if cache_age_hours < 24:  # Cache valid for 24 hours
+                logger.info(f"Using cached video list ({cache_age_hours:.1f}h old): {cache_file}")
+                use_existing_cache = True
+            else:
+                logger.warning(f"Cache is {cache_age_hours:.1f}h old (stale) - refreshing")
         
-        # Dump fresh data
-        self.dump_channel_json(channel_url, cache_file)
-        videos = self.list_from_json(cache_file)
+        if use_existing_cache:
+            videos = self.list_from_json(cache_file)
+        else:
+            # Dump fresh data
+            logger.info(f"Fetching fresh video list from YouTube")
+            self.dump_channel_json(channel_url, cache_file)
+            videos = self.list_from_json(cache_file)
         
         # Apply members-only filter if requested
         if skip_members_only:
@@ -228,10 +235,19 @@ class YtDlpVideoLister:
         return videos
     
     def _is_members_only_video(self, video: VideoInfo) -> bool:
-        """Check if video is members-only content based on title"""
-        title = video.title.lower()
+        """Check if video is members-only/subscriber-only content
         
-        # Check for common members-only indicators in title
+        Checks both the availability metadata field (most reliable) and title indicators.
+        """
+        # First check availability field from yt-dlp metadata (most reliable)
+        if video.availability:
+            restricted_types = ['subscriber_only', 'premium_only', 'needs_auth', 'unlisted']
+            if video.availability in restricted_types:
+                logger.debug(f"Detected restricted video (availability={video.availability}): {video.video_id}")
+                return True
+        
+        # Fallback: check title for members-only indicators
+        title = video.title.lower()
         members_indicators = [
             'members only',
             'members exclusive',
@@ -245,7 +261,7 @@ class YtDlpVideoLister:
         
         for indicator in members_indicators:
             if indicator in title:
-                logger.debug(f"Detected members-only video: {video.video_id} - {video.title[:50]}...")
+                logger.debug(f"Detected members-only video (title): {video.video_id} - {video.title[:50]}...")
                 return True
         
         return False
