@@ -130,33 +130,27 @@ class MultiModelWhisperManager:
                 from .transcript_common import TranscriptSegment
                 transcript_segments = []
                 
-                # FIX: Process segments with timeout and chunked processing
+                # Process segments efficiently
                 try:
-                    segment_count = 0
-                    max_segments = 3000  # Reasonable limit to prevent infinite processing
+                    total_processed = 0
                     
-                    for i, segment in enumerate(segments):
-                        if i >= max_segments:
-                            logger.warning(f"🎯 Model {model_id}: Reached segment limit ({max_segments}), stopping")
-                            break
-                            
-                        # Ensure text is a proper string (avoid bytes on Windows)
-                        text_value = segment.text.decode('utf-8', errors='replace') if isinstance(segment.text, bytes) else str(segment.text)
-                        text_value = text_value.strip()
-                        if len(text_value) > 3:  # Filter very short segments
-                            ts = TranscriptSegment(
+                    for segment in segments:
+                        # Filter very short segments (faster-whisper returns strings, not bytes)
+                        text_value = segment.text.strip()
+                        if len(text_value) > 3:
+                            transcript_segments.append(TranscriptSegment(
                                 start=segment.start,
                                 end=segment.end,
                                 text=text_value
-                            )
-                            transcript_segments.append(ts)
-                            segment_count += 1
-                            
+                            ))
+                        
+                        total_processed += 1
+                        
                         # Progress logging every 100 segments
-                        if (i + 1) % 100 == 0:
-                            logger.info(f"🎯 Model {model_id}: Processed {i + 1} segments, {segment_count} valid")
+                        if total_processed % 100 == 0:
+                            logger.info(f"🎯 Model {model_id}: Processed {total_processed} segments, {len(transcript_segments)} valid")
                     
-                    logger.info(f"🎯 Model {model_id}: Completed with {segment_count} valid segments from {i + 1 if 'i' in locals() else 0} total")
+                    logger.info(f"🎯 Model {model_id}: Completed with {len(transcript_segments)} valid segments from {total_processed} total")
                     
                 except Exception as e:
                     logger.error(f"❌ Model {model_id}: Segment processing failed: {e}")
