@@ -2156,7 +2156,7 @@ Examples:
         logger.warning("Proceeding with YouTube captions (NOT RECOMMENDED)...")
     
     # Also warn if speaker ID is disabled
-    if not args.enable_speaker_id:
+    if args.disable_speaker_id:
         logger.warning("=" * 80)
         logger.warning("⚠️  WARNING: Speaker identification is DISABLED")
         logger.warning("This is NOT RECOMMENDED for Dr. Chaffee content.")
