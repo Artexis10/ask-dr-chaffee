@@ -1575,18 +1575,18 @@ class EnhancedYouTubeIngester:
                         })
                         return segments, method, metadata
             
-            # Fallback to Whisper with routing
-            if hasattr(self.transcript_fetcher, 'fetch_transcript_with_routing'):
-                return self.transcript_fetcher.fetch_transcript_with_routing(
-                    video.video_id, 
-                    audio_path=audio_path,
-                    whisper_preset=whisper_preset,
+            # Use Enhanced ASR with speaker ID (pipelined mode)
+            if hasattr(self.transcript_fetcher, 'fetch_transcript_with_speaker_id'):
+                return self.transcript_fetcher.fetch_transcript_with_speaker_id(
+                    video.video_id,
                     max_duration_s=self.config.max_duration,
                     force_enhanced_asr=True,  # Always use enhanced ASR in pipeline
-                    cleanup_audio=False  # Don't cleanup yet, handled by DB worker
+                    cleanup_audio=False,  # Don't cleanup yet, handled by DB worker
+                    allow_youtube_captions=False  # Never use YT captions in pipeline
                 )
             else:
-                # Fallback to standard method
+                # Fallback to standard method (should never happen)
+                logger.warning(f"Enhanced ASR not available for {video.video_id}, using standard Whisper")
                 return self.transcript_fetcher.fetch_transcript(
                     video.video_id,
                     max_duration_s=self.config.max_duration,
