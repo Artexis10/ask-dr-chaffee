@@ -1,0 +1,108 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better diff
+      
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Check PR title format
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          
+          # Check for conventional commit format
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|test|chore|perf)(\(.+\))?: ]]; then
+            echo "❌ PR title should follow conventional commits format"
+            echo "Examples: feat: add new feature, fix: resolve bug, test: add unit tests"
+            exit 1
+          fi
+          
+          echo "✅ PR title format is valid"
+      
+      - name: Check for test coverage
+        run: |
+          # Check if Python files were modified
+          PYTHON_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '\.py$' | grep -v 'test_' || true)
+          
+          if [ -n "$PYTHON_FILES" ]; then
+            echo "Python files modified:"
+            echo "$PYTHON_FILES"
+            
+            # Check if corresponding tests exist or were modified
+            TEST_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep 'test_.*\.py$' || true)
+            
+            if [ -z "$TEST_FILES" ]; then
+              echo "⚠️ Warning: Python files modified but no test files changed"
+              echo "Consider adding tests for your changes"
+            else
+              echo "✅ Test files modified:"
+              echo "$TEST_FILES"
+            fi
+          fi
+      
+      - name: Check file size
+        run: |
+          # Check for large files (>1MB)
+          LARGE_FILES=$(find . -type f -size +1M -not -path "./.git/*" -not -path "./backend/venv/*" || true)
+          
+          if [ -n "$LARGE_FILES" ]; then
+            echo "⚠️ Large files detected (>1MB):"
+            echo "$LARGE_FILES"
+            echo "Consider using Git LFS for large files"
+          fi
+      
+      - name: Generate PR summary
+        run: |
+          echo "## PR Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Title:** ${{ github.event.pull_request.title }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Author:** @${{ github.event.pull_request.user.login }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Base:** ${{ github.base_ref }} ← **Head:** ${{ github.head_ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Files Changed" >> $GITHUB_STEP_SUMMARY
+          git diff --stat origin/${{ github.base_ref }}...HEAD >> $GITHUB_STEP_SUMMARY
+
+  test-coverage-diff:
+    name: Coverage Diff
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-cov pytest-mock pytest-asyncio pytest-timeout freezegun hypothesis
+          pip install isodate python-dotenv tqdm
+      
+      - name: Run tests with coverage
+        run: |
+          pytest tests/unit/test_ingest_*.py -m unit --cov=backend/scripts/ingest_youtube_enhanced.py --cov-branch --cov-report=json -q
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/backend
+      
+      - name: Comment coverage on PR
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINIMUM_GREEN: 90
+          MINIMUM_ORANGE: 85
