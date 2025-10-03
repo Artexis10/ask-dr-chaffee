@@ -142,20 +142,29 @@ class SegmentsDatabase:
                         if not embed_chaffee_only or speaker_label == 'Chaffee':
                             embedding = self._get_segment_value(segment, 'embedding')
                     
+                    # Convert numpy types to Python native types to avoid "schema np does not exist" error
+                    def to_native(val):
+                        """Convert numpy types to Python native types"""
+                        if val is None:
+                            return None
+                        if hasattr(val, 'item'):  # numpy scalar
+                            return val.item()
+                        return val
+                    
                     values.append((
                         video_id,
-                        self._get_segment_value(segment, 'start', 0.0),
-                        self._get_segment_value(segment, 'end', 0.0),
+                        float(to_native(self._get_segment_value(segment, 'start', 0.0))),
+                        float(to_native(self._get_segment_value(segment, 'end', 0.0))),
                         self._get_segment_value(segment, 'speaker_label', 'GUEST'),
-                        self._get_segment_value(segment, 'speaker_confidence', None),
+                        to_native(self._get_segment_value(segment, 'speaker_confidence', None)),
                         self._get_segment_value(segment, 'text', ''),
-                        self._get_segment_value(segment, 'avg_logprob', None),
-                        self._get_segment_value(segment, 'compression_ratio', None),
-                        self._get_segment_value(segment, 'no_speech_prob', None),
-                        self._get_segment_value(segment, 'temperature_used', 0.0),
-                        self._get_segment_value(segment, 're_asr', False),
-                        self._get_segment_value(segment, 'is_overlap', False),
-                        self._get_segment_value(segment, 'needs_refinement', False),
+                        to_native(self._get_segment_value(segment, 'avg_logprob', None)),
+                        to_native(self._get_segment_value(segment, 'compression_ratio', None)),
+                        to_native(self._get_segment_value(segment, 'no_speech_prob', None)),
+                        float(to_native(self._get_segment_value(segment, 'temperature_used', 0.0))),
+                        bool(self._get_segment_value(segment, 're_asr', False)),
+                        bool(self._get_segment_value(segment, 'is_overlap', False)),
+                        bool(self._get_segment_value(segment, 'needs_refinement', False)),
                         embedding
                     ))
                 
