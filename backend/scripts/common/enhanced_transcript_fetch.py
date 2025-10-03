@@ -267,6 +267,8 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
         if self.enable_speaker_id:
             logger.info(f"🎯 Speaker ID enabled - Enhanced ASR REQUIRED for {video_id_or_path}")
             force_enhanced_asr = True  # Override to force Enhanced ASR
+        else:
+            logger.warning(f"⚠️ Speaker ID DISABLED for {video_id_or_path} - will use standard Whisper")
         
         # Check if Enhanced ASR is available and should be used
         use_enhanced_asr = (
@@ -274,8 +276,11 @@ class EnhancedTranscriptFetcher(BaseTranscriptFetcher):
             (self.enable_speaker_id and self._check_speaker_profiles_available())
         )
         
+        logger.info(f"DEBUG: enable_speaker_id={self.enable_speaker_id}, force_enhanced_asr={force_enhanced_asr}, use_enhanced_asr={use_enhanced_asr}")
+        
         if use_enhanced_asr:
             enhanced_asr = self._get_enhanced_asr()
+            logger.info(f"DEBUG: enhanced_asr object = {enhanced_asr}")
             if not enhanced_asr:
                 logger.error("❌ Enhanced ASR required but not available - speaker ID cannot be performed")
                 if self.enable_speaker_id:
