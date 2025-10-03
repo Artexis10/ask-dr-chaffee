@@ -151,12 +151,17 @@ class SegmentsDatabase:
                             return val.item()
                         return val
                     
+                    # Clamp speaker confidence to [0.0, 1.0] range
+                    speaker_conf = to_native(self._get_segment_value(segment, 'speaker_confidence', None))
+                    if speaker_conf is not None:
+                        speaker_conf = min(1.0, max(0.0, float(speaker_conf)))
+                    
                     values.append((
                         video_id,
                         float(to_native(self._get_segment_value(segment, 'start', 0.0))),
                         float(to_native(self._get_segment_value(segment, 'end', 0.0))),
                         self._get_segment_value(segment, 'speaker_label', 'GUEST'),
-                        to_native(self._get_segment_value(segment, 'speaker_confidence', None)),
+                        speaker_conf,
                         self._get_segment_value(segment, 'text', ''),
                         to_native(self._get_segment_value(segment, 'avg_logprob', None)),
                         to_native(self._get_segment_value(segment, 'compression_ratio', None)),
