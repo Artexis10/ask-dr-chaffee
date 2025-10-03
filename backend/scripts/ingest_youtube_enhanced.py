@@ -1049,8 +1049,8 @@ class EnhancedYouTubeIngester:
         
         # Create queues for pipeline stages
         video_queue = queue.Queue()  # Input queue for videos (fixes duplicate work bug)
-        io_queue = queue.Queue(maxsize=50)  # Tier A output -> Tier B input
-        asr_queue = queue.Queue(maxsize=20)  # Tier B output -> Tier C input
+        io_queue = queue.Queue(maxsize=24)  # Tier A output -> Tier B input (reduced from 50)
+        asr_queue = queue.Queue(maxsize=12)  # Tier B output -> Tier C input (reduced from 20)
         
         # Populate video queue once (critical fix!)
         for video in videos:
