@@ -2082,8 +2082,8 @@ Examples:
                        help='YouTube Data API key (default: env YOUTUBE_API_KEY)')
     
     # Speaker identification (MANDATORY for Dr. Chaffee content)
-    parser.add_argument('--enable-speaker-id', action='store_true', default=True,
-                       help='Enable speaker identification (MANDATORY - always enabled for accuracy)')
+    parser.add_argument('--disable-speaker-id', action='store_true', default=False,
+                       help='Disable speaker identification (NOT RECOMMENDED - reduces accuracy)')
     parser.add_argument('--voices-dir', default=os.getenv('VOICES_DIR', 'voices'),
                        help='Voice profiles directory')
     parser.add_argument('--chaffee-min-sim', type=float, 
@@ -2191,7 +2191,7 @@ Examples:
         skip_upcoming=args.skip_upcoming,
         skip_members_only=args.skip_members_only,
         # Speaker identification options
-        enable_speaker_id=args.enable_speaker_id if not setup_chaffee_mode else False,
+        enable_speaker_id=not args.disable_speaker_id if not setup_chaffee_mode else False,
         voices_dir=args.voices_dir,
         chaffee_min_sim=args.chaffee_min_sim,
         chaffee_only_storage=args.chaffee_only_storage,
