@@ -94,12 +94,14 @@ def get_thread_temp_dir() -> str:
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir
 
-def _telemetry_hook(stats) -> None:
+def _telemetry_hook(stats, subprocess_runner=None) -> None:
     """Enhanced GPU telemetry for RTX 5080 performance monitoring - target >90% SM utilization"""
     try:
         import subprocess
+        if subprocess_runner is None:
+            subprocess_runner = subprocess.check_output
         # Enhanced GPU monitoring with temperature and power draw
-        out = subprocess.check_output(
+        out = subprocess_runner(
             ["nvidia-smi","--query-gpu=utilization.gpu,memory.used,memory.free,temperature.gpu,power.draw",
              "--format=csv,noheader,nounits"], text=True, timeout=5)
         values = out.strip().split(", ")
@@ -125,7 +127,7 @@ def _telemetry_hook(stats) -> None:
     except Exception as e:
         logger.debug(f"GPU telemetry failed: {e}")  # More detailed error for debugging
 
-def _fast_duration_seconds(path: str) -> float:
+def _fast_duration_seconds(path: str, subprocess_runner=None) -> float:
     """Fast duration check using soundfile (avoid librosa in hot paths)"""
     try:
         import soundfile as sf
@@ -135,7 +137,9 @@ def _fast_duration_seconds(path: str) -> float:
         # ffprobe fallback
         try:
             import subprocess, json
-            r = subprocess.run(
+            if subprocess_runner is None:
+                subprocess_runner = subprocess.run
+            r = subprocess_runner(
                 ["ffprobe","-v","quiet","-print_format","json","-show_format", path],
                 capture_output=True, text=True, check=True, timeout=10
             )
