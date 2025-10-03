@@ -52,3 +52,11 @@ repos:
         entry: python .pre-commit-hooks/detect-secrets.py
         language: system
         pass_filenames: false
+      
+      # Fast unit tests (subset)
+      - id: unit-tests-fast
+        name: Run fast unit tests
+        entry: python -m pytest tests/unit/test_ingest_subprocess.py tests/unit/test_ingest_config.py -m unit -q
+        language: system
+        pass_filenames: false
+        stages: [commit]
