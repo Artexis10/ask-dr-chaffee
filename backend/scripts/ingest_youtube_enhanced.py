@@ -234,6 +234,7 @@ class IngestionConfig:
     dry_run: bool = False
     whisper_model: str = 'distil-large-v3'  # Will read from .env
     force_whisper: bool = False
+    force_reprocess: bool = False  # Reprocess videos even if they already exist in DB
     allow_youtube_captions: bool = False  # CRITICAL: YouTube captions bypass speaker ID
     cleanup_audio: bool = True
     since_published: Optional[str] = None  # ISO8601 or YYYY-MM-DD format
@@ -543,6 +544,12 @@ class ProcessingStats:
         if self.total > 0:
             success_rate = (self.processed / self.total) * 100
             logger.info(f"\n📈 Success rate: {success_rate:.1f}%")
+            
+            # Helpful message if everything was skipped
+            if self.processed == 0 and self.skipped > 0:
+                logger.info(f"\n💡 All {self.skipped} videos were skipped (already in database)")
+                logger.info(f"   Use --force to reprocess existing videos")
+                logger.info(f"   Or use --limit with --newest-first to process recent videos")
 
 class EnhancedYouTubeIngester:
     """Enhanced YouTube ingestion pipeline with dual data sources"""
@@ -747,6 +754,10 @@ class EnhancedYouTubeIngester:
     
     def should_skip_video(self, video: VideoInfo) -> Tuple[bool, str]:
         """Check if video should be skipped"""
+        # Skip check if force_reprocess is enabled
+        if self.config.force_reprocess:
+            return False, ""
+        
         # Check existing processing state from merged sources table
         source_id, segment_count = self.segments_db.check_video_exists(video.video_id)
         if source_id and segment_count > 0:
@@ -759,12 +770,13 @@ class EnhancedYouTubeIngester:
         video_id = video.video_id
         
         try:
-            # Check if video already exists in segments database
-            source_id, segment_count = self.segments_db.check_video_exists(video_id)
-            if source_id and segment_count > 0:
-                logger.info(f"⚡ Skipping {video_id}: already processed ({segment_count} segments)")
-                self.stats.skipped += 1
-                return False
+            # Check if video already exists in segments database (unless force_reprocess)
+            if not self.config.force_reprocess:
+                source_id, segment_count = self.segments_db.check_video_exists(video_id)
+                if source_id and segment_count > 0:
+                    logger.info(f"⚡ Skipping {video_id}: already processed ({segment_count} segments)")
+                    self.stats.skipped += 1
+                    return False
             
             # Check if should skip (redundant check, but kept for safety)
             should_skip, reason = self.should_skip_video(video)
@@ -1050,6 +1062,9 @@ class EnhancedYouTubeIngester:
         logger.info("🚀 Starting three-tier pipelined processing")
         logger.info(f"📊 Pipeline config: I/O={self.config.io_concurrency}, ASR={self.config.asr_concurrency}, DB={self.config.db_concurrency}")
         
+        if self.config.force_reprocess:
+            logger.info("🔄 Force reprocess enabled - will reprocess videos even if they exist in database")
+        
         self.stats.total = len(videos)
         
         if self.config.dry_run:
@@ -1195,8 +1210,11 @@ class EnhancedYouTubeIngester:
                 # Check if should skip
                 should_skip, reason = self.should_skip_video(video)
                 if should_skip:
+                    logger.debug(f"⏭️  Skipping {video.video_id}: {reason}")
                     with stats_lock:
                         self.stats.skipped += 1
+                    update_progress_func()
+                    video_queue.task_done()
                     continue
                 
                 # Download audio-only and convert to 16kHz mono WAV
@@ -2046,6 +2064,8 @@ Examples:
                        help='Maximum number of videos to process')
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be processed without writing to DB')
+    parser.add_argument('--force', '--force-reprocess', action='store_true', dest='force_reprocess',
+                       help='Reprocess videos even if they already exist in database')
     
     # Content filtering options
     parser.add_argument('--include-live', action='store_false', dest='skip_live',
