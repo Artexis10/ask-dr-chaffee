@@ -151,6 +151,15 @@ class SegmentsDatabase:
                             return val.item()
                         return val
                     
+                    def safe_float(val, default=0.0):
+                        """Safely convert to float, handling None"""
+                        if val is None:
+                            return default
+                        try:
+                            return float(to_native(val))
+                        except (ValueError, TypeError):
+                            return default
+                    
                     # Clamp speaker confidence to [0.0, 1.0] range
                     speaker_conf = to_native(self._get_segment_value(segment, 'speaker_confidence', None))
                     if speaker_conf is not None:
@@ -158,15 +167,15 @@ class SegmentsDatabase:
                     
                     values.append((
                         video_id,
-                        float(to_native(self._get_segment_value(segment, 'start', 0.0))),
-                        float(to_native(self._get_segment_value(segment, 'end', 0.0))),
+                        safe_float(self._get_segment_value(segment, 'start', 0.0)),
+                        safe_float(self._get_segment_value(segment, 'end', 0.0)),
                         self._get_segment_value(segment, 'speaker_label', 'GUEST'),
                         speaker_conf,
                         self._get_segment_value(segment, 'text', ''),
                         to_native(self._get_segment_value(segment, 'avg_logprob', None)),
                         to_native(self._get_segment_value(segment, 'compression_ratio', None)),
                         to_native(self._get_segment_value(segment, 'no_speech_prob', None)),
-                        float(to_native(self._get_segment_value(segment, 'temperature_used', 0.0))),
+                        safe_float(self._get_segment_value(segment, 'temperature_used', 0.0)),
                         bool(self._get_segment_value(segment, 're_asr', False)),
                         bool(self._get_segment_value(segment, 'is_overlap', False)),
                         bool(self._get_segment_value(segment, 'needs_refinement', False)),

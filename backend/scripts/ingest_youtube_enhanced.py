@@ -943,9 +943,15 @@ class EnhancedYouTubeIngester:
             self.stats.processed += 1
             self.stats.segments_created += segment_count
             
-            # Update speaker-specific stats
+            # Update speaker-specific stats - ONLY count segments that were actually inserted
+            # If chaffee_only_storage is enabled, only Chaffee segments are inserted
             for segment in segment_dicts:
                 speaker = segment.get('speaker_label', 'GUEST')
+                
+                # Skip counting if chaffee_only_storage is enabled and this isn't a Chaffee segment
+                if self.config.chaffee_only_storage and speaker not in ['CH', 'CHAFFEE', 'Chaffee']:
+                    continue
+                
                 # Enhanced ASR uses multiple formats: 'CH', 'Chaffee', 'CHAFFEE'
                 if speaker in ['CH', 'CHAFFEE', 'Chaffee']:  # Support all formats
                     self.stats.chaffee_segments += 1
@@ -1713,9 +1719,15 @@ class EnhancedYouTubeIngester:
             with stats_lock:
                 self.stats.segments_created += segment_count
                 
-                # Update speaker stats
+                # Update speaker stats - ONLY count segments that were actually inserted
+                # If chaffee_only_storage is enabled, only Chaffee segments are inserted
                 for segment in segments:
                     speaker = segment.get('speaker_label', 'GUEST') if isinstance(segment, dict) else getattr(segment, 'speaker_label', 'GUEST')
+                    
+                    # Skip counting if chaffee_only_storage is enabled and this isn't a Chaffee segment
+                    if self.config.chaffee_only_storage and speaker not in ['CH', 'CHAFFEE', 'Chaffee']:
+                        continue
+                    
                     if speaker in ['CH', 'CHAFFEE', 'Chaffee']:
                         self.stats.chaffee_segments += 1
                     elif speaker == 'GUEST':
