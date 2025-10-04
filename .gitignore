@@ -151,6 +151,10 @@ frontend/src/pages/api/test-answer.ts
 debug_*.py
 check_*.py
 fix_*.py
+analyze_*.py
+verify_*.py
+recreate_*.py
+run_migration*.py
 # Ignore test_*.py ONLY in backend/ and root, NOT in tests/
 backend/**/test_*.py
 /test_*.py
