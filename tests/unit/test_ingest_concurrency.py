@@ -18,7 +18,7 @@ class TestConcurrencyConfiguration:
         
         monkeypatch.setenv('DATABASE_URL', 'postgresql://test:test@localhost/test')
         
-        config = IngestionConfig(enable_speaker_id=False, dry_run=True)
+        config = IngestionConfig(source='yt-dlp', enable_speaker_id=False, dry_run=True)
         
         # Default should be set
         assert config.io_concurrency > 0
@@ -29,7 +29,7 @@ class TestConcurrencyConfiguration:
         
         monkeypatch.setenv('DATABASE_URL', 'postgresql://test:test@localhost/test')
         
-        config = IngestionConfig(enable_speaker_id=False, dry_run=True)
+        config = IngestionConfig(source='yt-dlp', enable_speaker_id=False, dry_run=True)
         
         # Default should be set
         assert config.asr_concurrency > 0
@@ -40,7 +40,7 @@ class TestConcurrencyConfiguration:
         
         monkeypatch.setenv('DATABASE_URL', 'postgresql://test:test@localhost/test')
         
-        config = IngestionConfig(enable_speaker_id=False, dry_run=True)
+        config = IngestionConfig(source='yt-dlp', enable_speaker_id=False, dry_run=True)
         
         # Default should be set
         assert config.db_concurrency > 0
@@ -54,7 +54,7 @@ class TestConcurrencyConfiguration:
         monkeypatch.setenv('ASR_WORKERS', '2')
         monkeypatch.setenv('DB_WORKERS', '6')
         
-        config = IngestionConfig(enable_speaker_id=False, dry_run=True)
+        config = IngestionConfig(source='yt-dlp', enable_speaker_id=False, dry_run=True)
         
         assert config.io_concurrency == 8
         assert config.asr_concurrency == 2
@@ -67,6 +67,7 @@ class TestConcurrencyConfiguration:
         monkeypatch.setenv('DATABASE_URL', 'postgresql://test:test@localhost/test')
         
         config = IngestionConfig(
+            source='yt-dlp',
             concurrency=8,
             enable_speaker_id=False,
             dry_run=True

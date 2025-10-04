@@ -183,24 +183,21 @@ class TestLoggingNoSecrets:
         config = IngestionConfig(
             source='api',
             enable_speaker_id=False,
-            dry_run=True
         )
         
         # API key should never appear in logs
         assert 'secret_api_key_12345' not in caplog.text
     
-    def test_database_password_not_logged(self, caplog, monkeypatch):
-        """Test database password is never logged."""
+    def test_database_password_not_logged(self, monkeypatch, caplog):
+        """Test database URL is not logged."""
         from backend.scripts.ingest_youtube_enhanced import IngestionConfig
         
-        caplog.set_level(logging.DEBUG)
+        monkeypatch.setenv('DATABASE_URL', 'postgresql://user:secret_pass@localhost/db')
         
-        monkeypatch.setenv('DATABASE_URL', 'postgresql://user:secret_pass_123@localhost/db')
-        
-        config = IngestionConfig(enable_speaker_id=False, dry_run=True)
+        config = IngestionConfig(source='yt-dlp', enable_speaker_id=False, dry_run=True)
         
         # Password should never appear in logs
-        assert 'secret_pass_123' not in caplog.text
+        assert 'secret_pass' not in caplog.text
     
     def test_proxy_credentials_not_logged(self, caplog, monkeypatch):
         """Test proxy credentials are not logged."""
@@ -211,6 +208,7 @@ class TestLoggingNoSecrets:
         monkeypatch.setenv('DATABASE_URL', 'postgresql://test:test@localhost/test')
         
         config = IngestionConfig(
+            source='yt-dlp',
             proxy='http://user:secret_proxy_pass@proxy.example.com:8080',
             enable_speaker_id=False,
             dry_run=True

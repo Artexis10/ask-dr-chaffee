@@ -285,19 +285,19 @@ class TestCleanupConfiguration:
         
         monkeypatch.setenv('DATABASE_URL', 'postgresql://test:test@localhost/test')
         
-        storage_dir = tmp_path / "audio_storage"
+        # Don't pass audio_storage_dir - let config create default
+        monkeypatch.setenv('AUDIO_STORAGE_DIR', str(tmp_path / "audio_storage"))
         
         config = IngestionConfig(
             source='yt-dlp',
             store_audio_locally=True,
-            audio_storage_dir=storage_dir,
             enable_speaker_id=False,
             dry_run=True
         )
         
-        # Directory should be created
-        assert storage_dir.exists()
-        assert config.audio_storage_dir == storage_dir
+        # Directory should be created by config
+        assert config.audio_storage_dir.exists()
+        assert config.audio_storage_dir == tmp_path / "audio_storage"
     
     def test_production_mode_disables_storage(self, monkeypatch):
         """Test production mode disables audio storage."""
