@@ -1,0 +1,25 @@
+{
+  "name": "ask-dr-chaffee",
+  "version": "1.0.0",
+  "description": "Dr. Chaffee AI Assistant - Single Instance Deployment",
+  "scripts": {
+    "start:all": "concurrently \"npm run start:frontend\" \"npm run start:backend\"",
+    "start:frontend": "cd frontend && npm start",
+    "start:backend": "cd backend && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python -m uvicorn main:app --reload",
+    "build": "cd frontend && npm run build",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm test",
+    "test:backend": "pytest tests/unit/"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
