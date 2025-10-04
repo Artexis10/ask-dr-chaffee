@@ -147,12 +147,13 @@ test-json-parsing.js
 frontend/src/pages/api/milk-answer.ts
 frontend/src/pages/api/test-answer.ts
 
-# Debug and test files (but NOT tests/ directory!)
+# Debug and temporary files (but NOT tests/ directory!)
 debug_*.py
 check_*.py
 fix_*.py
-test_*.py
-!tests/**/*.py
+# Ignore test_*.py ONLY in backend/ and root, NOT in tests/
+backend/**/test_*.py
+/test_*.py
 test_results/
 test_results_summary/
 
