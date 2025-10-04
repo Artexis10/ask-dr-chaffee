@@ -235,6 +235,7 @@ class IngestionConfig:
     whisper_model: str = 'distil-large-v3'  # Will read from .env
     force_whisper: bool = False
     force_reprocess: bool = False  # Reprocess videos even if they already exist in DB
+    skip_existing: bool = True     # Skip videos that already exist in DB (default behavior)
     allow_youtube_captions: bool = False  # CRITICAL: YouTube captions bypass speaker ID
     cleanup_audio: bool = True
     since_published: Optional[str] = None  # ISO8601 or YYYY-MM-DD format
@@ -548,8 +549,16 @@ class ProcessingStats:
             # Helpful message if everything was skipped
             if self.processed == 0 and self.skipped > 0:
                 logger.info(f"\n💡 All {self.skipped} videos were skipped (already in database)")
-                logger.info(f"   Use --force to reprocess existing videos")
-                logger.info(f"   Or use --limit with --newest-first to process recent videos")
+                logger.info(f"   📝 This is NORMAL behavior - we skip videos that are already processed")
+                logger.info(f"   ")
+                logger.info(f"   To process UNPROCESSED videos:")
+                logger.info(f"   • Increase --limit to check more videos (e.g., --limit 200)")
+                logger.info(f"   • Use --newest-first to prioritize recent uploads")
+                logger.info(f"   • Check database to see how many videos you have")
+                logger.info(f"   ")
+                logger.info(f"   To REPROCESS existing videos:")
+                logger.info(f"   • Use --force to reprocess all videos in the batch")
+                logger.info(f"   • Use --no-skip-existing to process without checking DB (dangerous!)")
 
 class EnhancedYouTubeIngester:
     """Enhanced YouTube ingestion pipeline with dual data sources"""
@@ -758,10 +767,11 @@ class EnhancedYouTubeIngester:
         if self.config.force_reprocess:
             return False, ""
         
-        # Check existing processing state from merged sources table
-        source_id, segment_count = self.segments_db.check_video_exists(video.video_id)
-        if source_id and segment_count > 0:
-            return True, f"already processed ({segment_count} segments)"
+        # Check existing processing state if skip_existing is enabled (default)
+        if self.config.skip_existing:
+            source_id, segment_count = self.segments_db.check_video_exists(video.video_id)
+            if source_id and segment_count > 0:
+                return True, f"already processed ({segment_count} segments)"
         
         return False, ""
     
@@ -770,8 +780,8 @@ class EnhancedYouTubeIngester:
         video_id = video.video_id
         
         try:
-            # Check if video already exists in segments database (unless force_reprocess)
-            if not self.config.force_reprocess:
+            # Check if video already exists in segments database (unless force_reprocess or skip_existing=False)
+            if not self.config.force_reprocess and self.config.skip_existing:
                 source_id, segment_count = self.segments_db.check_video_exists(video_id)
                 if source_id and segment_count > 0:
                     logger.info(f"⚡ Skipping {video_id}: already processed ({segment_count} segments)")
@@ -2066,6 +2076,8 @@ Examples:
                        help='Show what would be processed without writing to DB')
     parser.add_argument('--force', '--force-reprocess', action='store_true', dest='force_reprocess',
                        help='Reprocess videos even if they already exist in database')
+    parser.add_argument('--no-skip-existing', action='store_false', dest='skip_existing',
+                       help='Process all videos without checking if they exist (use with caution)')
     
     # Content filtering options
     parser.add_argument('--include-live', action='store_false', dest='skip_live',
