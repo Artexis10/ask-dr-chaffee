@@ -231,6 +231,7 @@ class IngestionConfig:
     skip_shorts: bool = False  # Will read from .env
     newest_first: bool = True  # Will read from .env
     limit: Optional[int] = None
+    limit_unprocessed: bool = False  # If True, limit applies to unprocessed videos only
     dry_run: bool = False
     whisper_model: str = 'distil-large-v3'  # Will read from .env
     force_whisper: bool = False
@@ -681,8 +682,27 @@ class EnhancedYouTubeIngester:
                 videos.sort(key=lambda v: v.published_at or datetime.min, reverse=True)
             
             # Apply limit
-            if self.config.limit:
+            if self.config.limit and not self.config.limit_unprocessed:
+                # Standard limit: take first N videos from list
                 videos = videos[:self.config.limit]
+            elif self.config.limit and self.config.limit_unprocessed:
+                # Smart limit: find N unprocessed videos
+                logger.info(f"🔍 Filtering to find {self.config.limit} unprocessed videos...")
+                unprocessed_videos = []
+                checked_count = 0
+                
+                for video in videos:
+                    checked_count += 1
+                    # Check if video is already processed
+                    source_id, segment_count = self.segments_db.check_video_exists(video.video_id)
+                    if not source_id or segment_count == 0:
+                        # This video is unprocessed
+                        unprocessed_videos.append(video)
+                        if len(unprocessed_videos) >= self.config.limit:
+                            break
+                
+                logger.info(f"   Checked {checked_count} videos, found {len(unprocessed_videos)} unprocessed")
+                videos = unprocessed_videos
         
         logger.info(f"Found {len(videos)} videos to process")
         return videos
@@ -1996,8 +2016,11 @@ def parse_args() -> IngestionConfig:
         epilog="""
 Examples:
 
-  # Basic yt-dlp ingestion
+  # Basic yt-dlp ingestion (checks first 20 videos)
   python ingest_youtube_enhanced.py --source yt-dlp --limit 20
+
+  # Process 50 UNPROCESSED videos (smart limit)
+  python ingest_youtube_enhanced.py --source yt-dlp --limit 50 --limit-unprocessed
 
   # Use YouTube Data API
   python ingest_youtube_enhanced.py --source api --limit 50 --newest-first
@@ -2072,6 +2095,8 @@ Examples:
                        help='Process newest videos first (default: true)')
     parser.add_argument('--limit', type=int,
                        help='Maximum number of videos to process')
+    parser.add_argument('--limit-unprocessed', action='store_true',
+                       help='Apply limit to unprocessed videos only (finds N new videos to process)')
     parser.add_argument('--dry-run', action='store_true',
                        help='Show what would be processed without writing to DB')
     parser.add_argument('--force', '--force-reprocess', action='store_true', dest='force_reprocess',
